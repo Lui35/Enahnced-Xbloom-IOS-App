@@ -45,6 +45,38 @@ import Testing
     #expect(updated.remainingWeightGrams == 0)
 }
 
+@Test func grindingNeverConsumesTheFirstPourOrItsWaitTime() {
+    let recipe = Recipe(
+        name: "Sequenced brew",
+        dose: 18,
+        useGrinder: true,
+        pours: [
+            PourStep(volume: 45, temperature: 93, flowRate: 3, pauseBefore: 5, pauseAfter: 30),
+            PourStep(volume: 105, temperature: 92, flowRate: 3)
+        ]
+    )
+
+    let duringGrinding = Brewing.estimateProgram(
+        recipe: recipe,
+        elapsed: 21,
+        grindingDuration: 22,
+        heatingDuration: 10
+    )
+    #expect(duringGrinding.phase == .grinding)
+    #expect(duringGrinding.water == 0)
+    #expect(duringGrinding.extractionElapsed == 0)
+
+    let firstPourWait = Brewing.estimateProgram(
+        recipe: recipe,
+        elapsed: 22 + 10 + 5 + 15,
+        grindingDuration: 22,
+        heatingDuration: 10
+    )
+    #expect(firstPourWait.phase == .resting)
+    #expect(firstPourWait.water == 45)
+    #expect(firstPourWait.extractionElapsed == 20)
+}
+
 @Test func defaultRecipesRemainMachineSafe() {
     for recipe in RecipeLibrary.defaults {
         #expect(RecipeValidator.validate(recipe).allSatisfy { $0.severity != .error })

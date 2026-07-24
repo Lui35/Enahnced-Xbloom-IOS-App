@@ -8,6 +8,26 @@ public struct BrewEstimate: Equatable, Sendable {
     public var totalTime: TimeInterval
 }
 
+public enum BrewProgramPhase: String, Codable, Equatable, Sendable {
+    case preparing
+    case grinding
+    case heating
+    case blooming
+    case pouring
+    case resting
+    case complete
+    case error
+}
+
+public struct BrewProgramEstimate: Equatable, Sendable {
+    public var water: Double
+    public var stepIndex: Int
+    public var phase: BrewProgramPhase
+    public var complete: Bool
+    public var totalTime: TimeInterval
+    public var extractionElapsed: TimeInterval
+}
+
 public enum Brewing {
     public static func estimate(recipe: Recipe, elapsed: TimeInterval) -> BrewEstimate {
         let totalTime = recipe.pours.reduce(0.0) {
@@ -54,6 +74,99 @@ public enum Brewing {
         var result = bean
         result.remainingWeightGrams = max(0, bean.remainingWeightGrams - max(0, dose))
         return result
+    }
+
+    /// Estimates the complete machine workflow while keeping preparation time
+    /// separate from extraction time. In particular, grinder time can never
+    /// consume the bloom or first-pour rest.
+    public static func estimateProgram(
+        recipe: Recipe,
+        elapsed: TimeInterval,
+        grindingDuration: TimeInterval = 22,
+        heatingDuration: TimeInterval = 10
+    ) -> BrewProgramEstimate {
+        let grinderTime = recipe.useGrinder ? max(0, grindingDuration) : 0
+        let heatTime = max(0, heatingDuration)
+        let extractionTime = recipe.pours.reduce(0.0) {
+            $0 + Double($1.pauseBefore + $1.pauseAfter) + Double($1.volume) / max(0.1, $1.flowRate)
+        }
+        let totalTime = grinderTime + heatTime + extractionTime
+        var cursor = max(0, elapsed)
+
+        if cursor < grinderTime {
+            return BrewProgramEstimate(
+                water: 0,
+                stepIndex: 0,
+                phase: .grinding,
+                complete: false,
+                totalTime: totalTime,
+                extractionElapsed: 0
+            )
+        }
+        cursor -= grinderTime
+
+        if cursor < heatTime {
+            return BrewProgramEstimate(
+                water: 0,
+                stepIndex: 0,
+                phase: .heating,
+                complete: false,
+                totalTime: totalTime,
+                extractionElapsed: 0
+            )
+        }
+        cursor -= heatTime
+        let extractionElapsed = cursor
+        var water = 0.0
+
+        for (index, pour) in recipe.pours.enumerated() {
+            if cursor < Double(pour.pauseBefore) {
+                return BrewProgramEstimate(
+                    water: water,
+                    stepIndex: index,
+                    phase: .resting,
+                    complete: false,
+                    totalTime: totalTime,
+                    extractionElapsed: extractionElapsed
+                )
+            }
+            cursor -= Double(pour.pauseBefore)
+
+            let pourTime = Double(pour.volume) / max(0.1, pour.flowRate)
+            if cursor < pourTime {
+                return BrewProgramEstimate(
+                    water: water + cursor * pour.flowRate,
+                    stepIndex: index,
+                    phase: index == 0 ? .blooming : .pouring,
+                    complete: false,
+                    totalTime: totalTime,
+                    extractionElapsed: extractionElapsed
+                )
+            }
+            water += Double(pour.volume)
+            cursor -= pourTime
+
+            if cursor < Double(pour.pauseAfter) {
+                return BrewProgramEstimate(
+                    water: water,
+                    stepIndex: index,
+                    phase: .resting,
+                    complete: false,
+                    totalTime: totalTime,
+                    extractionElapsed: extractionElapsed
+                )
+            }
+            cursor -= Double(pour.pauseAfter)
+        }
+
+        return BrewProgramEstimate(
+            water: water,
+            stepIndex: max(0, recipe.pours.count - 1),
+            phase: .complete,
+            complete: true,
+            totalTime: totalTime,
+            extractionElapsed: extractionElapsed
+        )
     }
 }
 

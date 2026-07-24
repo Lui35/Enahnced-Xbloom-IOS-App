@@ -899,18 +899,22 @@ struct RecipeEditorView: View {
                         }
                         .font(.caption)
                         .foregroundStyle(StudioTheme.muted)
-                        if pour.agitationBefore || pour.agitationAfter {
-                            HStack(spacing: 6) {
-                                Text("Agitation")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(StudioTheme.mint)
-                                AgitationTimingMarks(
-                                    before: pour.agitationBefore,
-                                    after: pour.agitationAfter,
-                                    size: 20
+                        HStack(spacing: 6) {
+                            Text("Agitation")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(
+                                    (pour.agitationBefore || pour.agitationAfter)
+                                        ? StudioTheme.mint
+                                        : StudioTheme.muted
                                 )
-                            }
+                            AgitationTimingMarks(
+                                before: pour.agitationBefore,
+                                after: pour.agitationAfter,
+                                size: 20,
+                                showInactive: true
+                            )
                         }
+                        .frame(height: 28)
                     }
                     .font(.headline.monospacedDigit())
 
@@ -1016,7 +1020,6 @@ struct RecipeEditorView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .sensoryFeedback(.selection, trigger: selected)
                     }
                 }
             }

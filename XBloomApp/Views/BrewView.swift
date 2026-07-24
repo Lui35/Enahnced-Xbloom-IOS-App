@@ -305,6 +305,7 @@ struct BrewSessionView: View {
     let mode: BrewSessionMode
 
     @State private var startedAt: Date?
+    @State private var extractionStartedAt: Date?
     @State private var elapsed: TimeInterval = 0
     @State private var progress = 0.0
     @State private var stage = "Preparing"
@@ -378,7 +379,7 @@ struct BrewSessionView: View {
                     pourTimeline
                     if mode == .live && !finished {
                         Button(role: .destructive) {
-                            do { try machine.stopBrew() } catch { errorMessage = error.localizedDescription }
+                            stopLiveBrew()
                         } label: {
                             Label("Stop brewing", systemImage: "stop.fill")
                                 .font(.headline)
@@ -723,6 +724,11 @@ struct BrewSessionView: View {
         guard !hasStarted else { return }
         hasStarted = true
         startedAt = Date()
+        await BrewLiveActivityManager.shared.start(
+            recipe: recipe,
+            machineName: mode == .simulation ? "Brew preview" : machine.machineName,
+            initialState: activityState(phase: recipe.useGrinder ? .grinding : .preparing)
+        )
         if mode == .simulation {
             await runSimulation()
         } else {
@@ -735,6 +741,7 @@ struct BrewSessionView: View {
         guard machine.isConnected else {
             errorMessage = "The xBloom disconnected before the recipe could start."
             stage = "Connection lost"
+            await BrewLiveActivityManager.shared.end(with: activityState(phase: .error), success: false)
             return
         }
         stage = recipe.useGrinder ? "Sending grinder program" : "Sending brew program"
@@ -744,6 +751,7 @@ struct BrewSessionView: View {
         } catch {
             errorMessage = error.localizedDescription
             stage = "Could not start"
+            await BrewLiveActivityManager.shared.end(with: activityState(phase: .error), success: false)
         }
     }
 
@@ -752,19 +760,35 @@ struct BrewSessionView: View {
         let totalSteps = 80
         for step in 0...totalSteps {
             guard !Task.isCancelled else { return }
-            progress = Double(step) / Double(totalSteps)
-            elapsed = estimatedDuration * progress
-            water = Double(recipe.totalWater) * progress
+            elapsed = estimatedDuration * Double(step) / Double(totalSteps)
+            let estimate = Brewing.estimateProgram(
+                recipe: recipe,
+                elapsed: elapsed,
+                grindingDuration: recipe.useGrinder ? 22 : 0,
+                heatingDuration: recipe.useGrinder ? 13 : 15
+            )
+            water = estimate.water
+            progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
             weight = expectedCupYield * pow(progress, 1.12)
-            temperature = progress < 0.12 ? 72 + progress * 160 : activePour?.temperature.doubleValue
-            updateActivePour(for: water)
-            updateSimulatedStage()
+            temperature = estimate.phase == .heating
+                ? 72 + min(1, elapsed / 15) * 20
+                : activePour?.temperature.doubleValue
+            activePourIndex = estimate.stepIndex
+            stage = stageTitle(for: estimate.phase)
+            if estimate.extractionElapsed > 0, extractionStartedAt == nil {
+                extractionStartedAt = Date()
+            }
             samples.append(BrewSample(elapsed: elapsed, water: water, coffeeWeight: weight, temperature: temperature))
+            await BrewLiveActivityManager.shared.update(
+                activityState(phase: estimate.phase),
+                force: estimate.phase == .complete
+            )
             try? await Task.sleep(for: .milliseconds(95))
         }
         progress = 1
         finished = true
         stage = "Brew complete"
+        await BrewLiveActivityManager.shared.end(with: activityState(phase: .complete), success: true)
     }
 
     private func captureTelemetry() {
@@ -773,10 +797,27 @@ struct BrewSessionView: View {
         water = machine.telemetry.waterVolume ?? water
         weight = machine.telemetry.weight ?? weight
         temperature = machine.telemetry.temperature ?? temperature
-        progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
-        updateActivePour(for: water)
+        var machinePhase = liveActivityPhase
+        if machinePhase == .blooming || machinePhase == .pouring || machinePhase == .resting {
+            if extractionStartedAt == nil {
+                extractionStartedAt = Date()
+            }
+            progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
+            updateActivePour(for: water)
+            machinePhase = liveActivityPhase
+        } else if machinePhase != .complete {
+            // Grinder and heater telemetry is preparation, not pour time.
+            progress = 0
+            activePourIndex = 0
+        }
         stage = liveStageTitle
         appendLiveSampleIfNeeded(force: machine.telemetry.state == .complete)
+        Task {
+            await BrewLiveActivityManager.shared.update(
+                activityState(phase: machinePhase),
+                force: machine.telemetry.state == .complete
+            )
+        }
 
         if machine.telemetry.state == .disconnected, !finished, errorMessage == nil {
             errorMessage = "The xBloom disconnected during the brew. You can safely close this screen and reconnect."
@@ -789,6 +830,9 @@ struct BrewSessionView: View {
         finished = true
         progress = 1
         stage = "Brew complete"
+        Task {
+            await BrewLiveActivityManager.shared.end(with: activityState(phase: .complete), success: true)
+        }
         let bean = storedBeans.first { $0.id == recipe.beanID }
         do {
             try LocalLibrary.recordCompletedBrew(
@@ -828,19 +872,6 @@ struct BrewSessionView: View {
         activePourIndex = max(0, recipe.pours.count - 1)
     }
 
-    private func updateSimulatedStage() {
-        switch progress {
-        case ..<0.08:
-            stage = recipe.useGrinder ? "Grinding beans" : "Preparing brewer"
-        case ..<0.15:
-            stage = "Heating water"
-        case 1...:
-            stage = "Brew complete"
-        default:
-            stage = activePourIndex == 0 ? "Blooming" : "Pour \(activePourIndex + 1)"
-        }
-    }
-
     private var liveStageTitle: String {
         switch machine.telemetry.state {
         case .disconnected: "Disconnected"
@@ -851,6 +882,64 @@ struct BrewSessionView: View {
         case .paused: "Resting"
         case .complete: "Brew complete"
         case .error: "Machine needs attention"
+        }
+    }
+
+    private var liveActivityPhase: BrewProgramPhase {
+        switch machine.telemetry.state {
+        case .connecting, .idle: .preparing
+        case .disconnected: .error
+        case .grinding: .grinding
+        case .brewing: activePourIndex == 0 ? .blooming : .pouring
+        case .paused: .resting
+        case .complete: .complete
+        case .error: .error
+        }
+    }
+
+    private func stageTitle(for phase: BrewProgramPhase) -> String {
+        switch phase {
+        case .preparing: "Preparing brewer"
+        case .grinding: "Grinding beans"
+        case .heating: "Heating water"
+        case .blooming: "Blooming"
+        case .pouring: "Pour \(activePourIndex + 1)"
+        case .resting: activePourIndex == 0 ? "Bloom rest" : "Rest after pour \(activePourIndex + 1)"
+        case .complete: "Brew complete"
+        case .error: "Machine needs attention"
+        }
+    }
+
+    private func activityState(phase: BrewProgramPhase) -> BrewActivityAttributes.ContentState {
+        let currentPour = [.blooming, .pouring, .resting].contains(phase) ? activePourIndex + 1 : 0
+        return BrewActivityAttributes.ContentState(
+            phase: phase,
+            stageTitle: phase == liveActivityPhase && mode == .live ? liveStageTitle : stageTitle(for: phase),
+            progress: progress,
+            currentPour: currentPour,
+            totalPours: recipe.pours.count,
+            waterML: water,
+            targetWaterML: recipe.totalWater,
+            coffeeWeight: weight,
+            temperature: temperature,
+            elapsedSeconds: Int(elapsed.rounded()),
+            remainingSeconds: max(0, Int((estimatedDuration - elapsed).rounded()))
+        )
+    }
+
+    private func stopLiveBrew() {
+        do {
+            try machine.stopBrew()
+            stage = "Brew stopped"
+            finished = true
+            Task {
+                await BrewLiveActivityManager.shared.end(
+                    with: activityState(phase: .error),
+                    success: false
+                )
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

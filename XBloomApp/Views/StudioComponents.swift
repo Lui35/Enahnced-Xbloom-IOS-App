@@ -199,9 +199,17 @@ struct StudioDialBox: View {
         .gesture(
             DragGesture(minimumDistance: 3)
                 .onChanged { gesture in
-                    guard abs(gesture.translation.width) > abs(gesture.translation.height) else { return }
-                    let start = dragStart ?? value
-                    if dragStart == nil { dragStart = value }
+                    // Decide the axis only when the scrub begins. Once a user
+                    // has intentionally moved sideways, keep tracking the
+                    // horizontal component until touch-up even if their finger
+                    // naturally drifts above or below the control.
+                    if dragStart == nil {
+                        guard abs(gesture.translation.width) > abs(gesture.translation.height) else {
+                            return
+                        }
+                        dragStart = value
+                    }
+                    guard let start = dragStart else { return }
                     // A full-width drag covers the complete value range. Using the
                     // gesture's relative translation prevents the value jumping to
                     // the touch location when a scrub begins.
@@ -210,7 +218,9 @@ struct StudioDialBox: View {
                     let raw = start + (Double(gesture.translation.width) / usableWidth) * span
                     setValue(raw)
                 }
-                .onEnded { _ in dragStart = nil }
+                .onEnded { _ in
+                    dragStart = nil
+                }
         )
         .sensoryFeedback(.selection, trigger: hapticTick)
         .accessibilityElement(children: .combine)
