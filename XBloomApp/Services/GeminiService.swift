@@ -10,35 +10,58 @@ final class GeminiService {
     private static let professionalV60Brief = """
     Work as a competition-aware specialty-coffee barista dialing in a V60-style
     percolation recipe, not as a generic recipe generator. There is no universally
-    correct pour count. Treat pour architecture as an extraction decision.
+    correct pour count. Treat pour architecture as an extraction decision, never
+    as a template to fill.
 
     First infer an extraction strategy from the supplied bean: roast development,
     process, likely density/solubility, origin/elevation when present, tasting notes,
-    acidity, and the requested cup goals. Internally compare at least three plausible
-    architectures with different pour counts, then output only the best conclusion
-    in the requested JSON. Choose the simplest structure that can achieve it:
-    - bloom plus one continuous main pour can produce an even, clean extraction;
-    - bloom plus two staged pours is a dependable balanced structure;
-    - several pulses can add controlled agitation, strength, or clarity;
-    - a five-pour 4:6-inspired structure is appropriate only when its coarse-grind,
-      sweetness/clarity logic genuinely fits.
+    acidity, and the requested cup goals. If any of these are missing, infer a
+    conservative default from typical practice for the stated origin, process, or
+    roast level, and briefly flag the assumption in rationale rather than treating
+    the gap as license to invent specifics.
 
-    IMPORTANT: never default to four pours. Deliberately choose 2-6 total steps and
-    identify the chosen method in method_name. Different beans with different
-    solubility or goals should often receive different structures.
+    Design the pour sequence and brew ratio (dose, total water, resulting yield)
+    from first principles as one decision, not two. The machine supports 1-8 total
+    pour steps; every count in that range is equally valid when justified. Do not
+    aim for three, four, or any other count, and do not add or remove steps merely
+    for variety. A single continuous program, a bloom plus a main pour, several
+    staged pours, or a pulse-based method may all be correct. Choose solely from
+    what best expresses this bean and the requested cup, then identify the
+    resulting approach in method_name.
 
-    Use a first-step bloom around 2-4 times the coffee dose and normally rest it
-    25-45 seconds. Select grind, temperature, pulse size, flow, pattern, pauses,
-    and agitation as one coherent system. Prefer minimal, purposeful agitation:
-    enough to wet evenly and flatten the bed, but avoid repeated agitation for
-    highly soluble, darker, natural, anaerobic, or heavily fermented coffees when
-    it risks harshness. Use more extraction energy only when the bean and desired
-    cup justify it. Keep hot recipes broadly consistent with specialty filter-coffee
-    practice while adapting rather than blindly copying a famous recipe.
+    Use a bloom when it benefits degassing and even saturation; its volume and rest
+    should respond to freshness, roast, process, dose, and method rather than being
+    mandatory. When used, a bloom around 2-4 times the coffee dose and a 25-45 second
+    rest are reasonable starting references, not fixed rules. Select grind,
+    temperature, pulse size, flow, pattern, pauses, and agitation as one coherent
+    system. Prefer minimal, purposeful agitation: enough to wet evenly and flatten
+    the bed, but avoid repeated agitation for highly soluble, darker, natural,
+    anaerobic, or heavily fermented coffees when it risks harshness. Use more
+    extraction energy only when the bean and desired cup justify it. Keep this
+    recipe consistent with specialty hot-brew filter-coffee practice (as opposed to
+    cold brew or immersion methods) while adapting rather than blindly copying a
+    famous recipe.
 
     method_name and rationale must explain why this architecture fits this exact
-    bean and cup goal. The rationale must mention the selected pour count, bloom,
-    grind/temperature direction, and the intended sensory result.
+    bean and cup goal. In 2-4 sentences, the rationale must mention the selected
+    pour count, bloom, grind/temperature direction, and the intended sensory result.
+
+    These two cases illustrate the reasoning style expected, not templates to
+    match against incoming beans:
+
+    - A washed, high-elevation Ethiopian, light roast, floral/bergamot notes, high
+        acidity: dense, less-soluble bean with delicate, volatile aromatics favors a
+        controlled multi-stage pour (bloom plus several measured pulses) at a
+        higher-end filter temperature, minimal agitation, to extract fully without
+        dulling clarity.
+
+    - A natural Brazilian, darker roast, low elevation, chocolate/nutty notes, low
+        acidity: highly soluble, fragile-toward-bitterness bean favors a short
+        architecture (bloom plus one main pour) at a lower-end filter temperature,
+        minimal agitation, to protect sweetness and avoid harsh, over-extracted
+        notes.
+
+    Let the bean in front of you, not these examples, determine the pour count.
     """
 
     var model: String {
@@ -392,8 +415,8 @@ struct AIRecipeResult: Codable {
             "dose": ["type": "number", "minimum": 5, "maximum": 30],
             "pours": [
                 "type": "array",
-                "minItems": 2,
-                "maxItems": 6,
+                "minItems": 1,
+                "maxItems": 8,
                 "items": [
                     "type": "object",
                     "required": ["volume", "temp", "flow", "pauseAfter", "pattern", "agitationBefore", "agitationAfter"],
