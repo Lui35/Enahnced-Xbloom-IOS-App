@@ -1,0 +1,458 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */; };
+		200C478580FED52EB0A8706D /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */; };
+		27C8744AAD5E6A661DBE7C8E /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A64A00702BFAAD2884EEE6B /* XBloomCore */; };
+		37A3D1A7AF48FBECD9CBA6C5 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */; };
+		450E1ED33F3C042BB2A893AF /* XBloomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */; };
+		629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D88E4B719592471EEF5650D3 /* RecipesView.swift */; };
+		79C41BBC938C16B7AC666171 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79E013F5D81849E8BB547B3D /* SettingsView.swift */; };
+		8CAAAE1F529CF4563D4DEA20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 45C4A7D8A6676C96CC574A14 /* Assets.xcassets */; };
+		B0A60BDF676E785964240882 /* XBloomBLEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */; };
+		BD9C9803957ED9CE8D985C7D /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7210B750C8D2A62B65AE67BC /* HistoryView.swift */; };
+		C80FB84C74016044044272D1 /* StudioComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49321FCC4F76BECD12162693 /* StudioComponents.swift */; };
+		D33E678FD500A3F406E29343 /* CameraCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00067031474B071C240BD8D2 /* CameraCaptureView.swift */; };
+		D5808958217B7635A5CDB4ED /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE378BDE43EE3E266B604B87 /* HomeView.swift */; };
+		D87049683A34826E86428065 /* BeansView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71C5A662F8A8FAFF2121A83E /* BeansView.swift */; };
+		DBE663F2A2D320EFF7BDDA29 /* BrewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73B6AD0DD130E8DD29ED6908 /* BrewView.swift */; };
+		DD735855BFE08C898D0C6C69 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */; };
+		E8A04612E1F5F04A2C3C32E4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288AD2850F804ABEB0F63EC4 /* RootView.swift */; };
+		FE027D87D8FDF042E764F0CF /* Xplume-App-Icon-Concept.png in Resources */ = {isa = PBXBuildFile; fileRef = 3CECB5C169218F78F3E3C484 /* Xplume-App-Icon-Concept.png */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		00067031474B071C240BD8D2 /* CameraCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCaptureView.swift; sourceTree = "<group>"; };
+		1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
+		288AD2850F804ABEB0F63EC4 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		2CBF68C3FAEE7459EEE1B31D /* XBloom.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = XBloom.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3CECB5C169218F78F3E3C484 /* Xplume-App-Icon-Concept.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Xplume-App-Icon-Concept.png"; sourceTree = "<group>"; };
+		45C4A7D8A6676C96CC574A14 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		49321FCC4F76BECD12162693 /* StudioComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioComponents.swift; sourceTree = "<group>"; };
+		58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomApp.swift; sourceTree = "<group>"; };
+		5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		71C5A662F8A8FAFF2121A83E /* BeansView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeansView.swift; sourceTree = "<group>"; };
+		7210B750C8D2A62B65AE67BC /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		73B6AD0DD130E8DD29ED6908 /* BrewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewView.swift; sourceTree = "<group>"; };
+		79E013F5D81849E8BB547B3D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceModels.swift; sourceTree = "<group>"; };
+		D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomBLEClient.swift; sourceTree = "<group>"; };
+		D88E4B719592471EEF5650D3 /* RecipesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipesView.swift; sourceTree = "<group>"; };
+		DE378BDE43EE3E266B604B87 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		EAC5A5AAF24A5BB4B324FDA9 /* xBloom app */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "xBloom app"; path = .; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BBC1FE836185F73426126F43 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				27C8744AAD5E6A661DBE7C8E /* XBloomCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0F50E50E63F3F2FE82001AAB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				45C4A7D8A6676C96CC574A14 /* Assets.xcassets */,
+				3CECB5C169218F78F3E3C484 /* Xplume-App-Icon-Concept.png */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		1280463AE47222B1CC0313CA /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		35423A6D0DEE1F03894627C1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2CBF68C3FAEE7459EEE1B31D /* XBloom.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		62230E903A2A25267E8E09D2 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				71C5A662F8A8FAFF2121A83E /* BeansView.swift */,
+				73B6AD0DD130E8DD29ED6908 /* BrewView.swift */,
+				00067031474B071C240BD8D2 /* CameraCaptureView.swift */,
+				5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */,
+				7210B750C8D2A62B65AE67BC /* HistoryView.swift */,
+				DE378BDE43EE3E266B604B87 /* HomeView.swift */,
+				D88E4B719592471EEF5650D3 /* RecipesView.swift */,
+				288AD2850F804ABEB0F63EC4 /* RootView.swift */,
+				79E013F5D81849E8BB547B3D /* SettingsView.swift */,
+				49321FCC4F76BECD12162693 /* StudioComponents.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		6E51705A2B8D825AA7584777 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */,
+				60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */,
+				D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		7B88F7E2B3772D38438D5537 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				EAC5A5AAF24A5BB4B324FDA9 /* xBloom app */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		A1BF44D9E6BFF4B5004ABBCC = {
+			isa = PBXGroup;
+			children = (
+				7B88F7E2B3772D38438D5537 /* Packages */,
+				B0FDFAABCB5AC00EDE21D4DC /* XBloomApp */,
+				35423A6D0DEE1F03894627C1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B0FDFAABCB5AC00EDE21D4DC /* XBloomApp */ = {
+			isa = PBXGroup;
+			children = (
+				D8C4146FE9BD52001274AC34 /* App */,
+				1280463AE47222B1CC0313CA /* Models */,
+				0F50E50E63F3F2FE82001AAB /* Resources */,
+				6E51705A2B8D825AA7584777 /* Services */,
+				62230E903A2A25267E8E09D2 /* Views */,
+			);
+			path = XBloomApp;
+			sourceTree = "<group>";
+		};
+		D8C4146FE9BD52001274AC34 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		ADB05F1BB29B083101FABBC1 /* XBloom */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3ABF78326A6AED3949C89E68 /* Build configuration list for PBXNativeTarget "XBloom" */;
+			buildPhases = (
+				15D65F17470F2A103BAD938A /* Sources */,
+				65AD6AB011187BAB0F66C2B5 /* Resources */,
+				BBC1FE836185F73426126F43 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = XBloom;
+			packageProductDependencies = (
+				5A64A00702BFAAD2884EEE6B /* XBloomCore */,
+			);
+			productName = XBloom;
+			productReference = 2CBF68C3FAEE7459EEE1B31D /* XBloom.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E25D63EAEF6411A4F1E9F6FC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					ADB05F1BB29B083101FABBC1 = {
+						DevelopmentTeam = WWJ39PU569;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 2B9818B616DF87A3F351C851 /* Build configuration list for PBXProject "XBloom" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A1BF44D9E6BFF4B5004ABBCC;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				887EB48A587F0ACB80DE8B1F /* XCLocalSwiftPackageReference "." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 35423A6D0DEE1F03894627C1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				ADB05F1BB29B083101FABBC1 /* XBloom */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		65AD6AB011187BAB0F66C2B5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8CAAAE1F529CF4563D4DEA20 /* Assets.xcassets in Resources */,
+				FE027D87D8FDF042E764F0CF /* Xplume-App-Icon-Concept.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		15D65F17470F2A103BAD938A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D87049683A34826E86428065 /* BeansView.swift in Sources */,
+				DBE663F2A2D320EFF7BDDA29 /* BrewView.swift in Sources */,
+				D33E678FD500A3F406E29343 /* CameraCaptureView.swift in Sources */,
+				37A3D1A7AF48FBECD9CBA6C5 /* DesignSystem.swift in Sources */,
+				200C478580FED52EB0A8706D /* GeminiService.swift in Sources */,
+				BD9C9803957ED9CE8D985C7D /* HistoryView.swift in Sources */,
+				D5808958217B7635A5CDB4ED /* HomeView.swift in Sources */,
+				DD735855BFE08C898D0C6C69 /* KeychainStore.swift in Sources */,
+				17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */,
+				629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */,
+				E8A04612E1F5F04A2C3C32E4 /* RootView.swift in Sources */,
+				79C41BBC938C16B7AC666171 /* SettingsView.swift in Sources */,
+				C80FB84C74016044044272D1 /* StudioComponents.swift in Sources */,
+				450E1ED33F3C042BB2A893AF /* XBloomApp.swift in Sources */,
+				B0A60BDF676E785964240882 /* XBloomBLEClient.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		346BE6AE436BDA4013D75904 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WWJ39PU569;
+				INFOPLIST_FILE = XBloomApp/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = coffee.xbloom.native;
+				PRODUCT_NAME = xBloom;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		3D627B63860DD25FA9AAE7CA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BC238D563E1136CE8A65E844 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C0E6B76C759A9E2E65B660D3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WWJ39PU569;
+				INFOPLIST_FILE = XBloomApp/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = coffee.xbloom.native;
+				PRODUCT_NAME = xBloom;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2B9818B616DF87A3F351C851 /* Build configuration list for PBXProject "XBloom" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3D627B63860DD25FA9AAE7CA /* Debug */,
+				BC238D563E1136CE8A65E844 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3ABF78326A6AED3949C89E68 /* Build configuration list for PBXNativeTarget "XBloom" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				346BE6AE436BDA4013D75904 /* Debug */,
+				C0E6B76C759A9E2E65B660D3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		887EB48A587F0ACB80DE8B1F /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5A64A00702BFAAD2884EEE6B /* XBloomCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = XBloomCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E25D63EAEF6411A4F1E9F6FC /* Project object */;
+}

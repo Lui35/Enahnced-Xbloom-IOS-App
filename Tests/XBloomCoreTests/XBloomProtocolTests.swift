@@ -1,0 +1,226 @@
+import Foundation
+import Testing
+@testable import XBloomCore
+
+@Test func commandMatchesPyBloomFrameShape() {
+    let packet = XBloomProtocol.command(.recipeExecute)
+    #expect(packet.count == 12)
+    #expect(Array(packet.prefix(10)) == [0x58, 0x01, 0x01, 0x42, 0x1F, 0x0C, 0, 0, 0, 1])
+    #expect(XBloomProtocol.crc16(packet.dropLast(2)) == UInt16(packet[10]) | UInt16(packet[11]) << 8)
+}
+
+@Test func recipePayloadChunksVolumesAt127ML() throws {
+    let recipe = Recipe(
+        name: "Chunk test",
+        grindSize: 50,
+        rpm: .rpm80,
+        dose: 18,
+        pours: [
+            PourStep(volume: 200, temperature: 93, flowRate: 3.2, pauseAfter: 30),
+            PourStep(volume: 80, temperature: 92, flowRate: 3.5),
+        ]
+    )
+    let payload = try XBloomProtocol.recipePayload(for: recipe)
+    #expect(Array(payload[1...8]) == [127, 93, 2, 0, 73, 93, 2, 0])
+    #expect(payload[9] == UInt8(truncatingIfNeeded: -30))
+    #expect(payload[11] == 80)
+    #expect(payload[12] == 32)
+}
+
+@Test func validationRejectsUnsafeMachineValues() {
+    let recipe = Recipe(
+        name: "Unsafe",
+        grindSize: 50,
+        dose: 18,
+        pours: [PourStep(volume: 600, temperature: 110)]
+    )
+    let errors = RecipeValidator.validate(recipe).filter { $0.severity == .error }
+    #expect(errors.contains { $0.field == "water" })
+    #expect(errors.contains { $0.field.contains("temperature") })
+}
+
+@Test func inventoryDeductionNeverGoesNegative() {
+    let bean = BeanProfile(name: "Coffee", initialWeightGrams: 15, remainingWeightGrams: 10)
+    let updated = Brewing.deductDose(18, from: bean)
+    #expect(updated.remainingWeightGrams == 0)
+}
+
+@Test func defaultRecipesRemainMachineSafe() {
+    for recipe in RecipeLibrary.defaults {
+        #expect(RecipeValidator.validate(recipe).allSatisfy { $0.severity != .error })
+    }
+}
+
+@Test func icedRatioUsesBrewWaterAndKeepsIceSeparate() {
+    let recipe = Recipe(
+        name: "Iced concentrate",
+        dose: 22,
+        brewStyle: .iced,
+        iceGrams: 120,
+        pours: [
+            PourStep(volume: 45, temperature: 92),
+            PourStep(volume: 60, temperature: 90),
+            PourStep(volume: 60, temperature: 88),
+        ]
+    )
+    #expect(recipe.totalWater == 165)
+    #expect(recipe.ratio == 7.5)
+    #expect(!RecipeValidator.validate(recipe).contains { $0.field == "ratio" })
+}
+
+@Test func brewSequenceUsesTheMachineCommandOrder() throws {
+    let recipe = RecipeLibrary.defaults[0]
+    let packets = try XBloomProtocol.brewSequence(for: recipe)
+    let commandIDs = packets.map { UInt16($0[3]) | UInt16($0[4]) << 8 }
+    #expect(commandIDs == [8102, 8104, 8001, 8002])
+}
+
+@Test func manualBrewUsesTheNoGrinderRecipeCommand() throws {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.useGrinder = false
+    let packets = try XBloomProtocol.brewSequence(for: recipe)
+    let commandIDs = packets.map { UInt16($0[3]) | UInt16($0[4]) << 8 }
+    #expect(commandIDs == [8102, 8104, 8004, 8002])
+}
+
+@Test func machineTestUsesSafeScaleCommands() {
+    let vibrate = XBloomProtocol.command(.scaleVibrate)
+    let stop = XBloomProtocol.command(.scaleStop)
+    #expect(UInt16(vibrate[3]) | UInt16(vibrate[4]) << 8 == 2502)
+    #expect(UInt16(stop[3]) | UInt16(stop[4]) << 8 == 2505)
+}
+
+@Test func notificationFramerSurvivesFragmentedAndConcatenatedPackets() {
+    let first = XBloomProtocol.command(.scaleVibrate)
+    let second = XBloomProtocol.command(.scaleStop)
+    var framer = XBloomNotificationFramer()
+
+    #expect(framer.ingest(Data(first.prefix(7))).isEmpty)
+    let tailFromNonZeroBasedSlice = first.dropFirst(7)
+    #expect(framer.ingest(Data(tailFromNonZeroBasedSlice)) == [first])
+
+    var combined = Data([0xFF, 0xAA])
+    combined.append(second)
+    combined.append(first)
+    #expect(framer.ingest(combined) == [second, first])
+}
+
+@Test func olderSavedRecipesDecodeWithoutEnhancementLineage() throws {
+    let original = RecipeLibrary.defaults[0]
+    let encoded = try JSONEncoder().encode(original)
+    var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    object.removeValue(forKey: "parentRecipeID")
+    object.removeValue(forKey: "sourceBrewID")
+
+    let legacyData = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(Recipe.self, from: legacyData)
+
+    #expect(decoded.id == original.id)
+    #expect(decoded.parentRecipeID == nil)
+    #expect(decoded.sourceBrewID == nil)
+}
+
+@Test func brewHistoryPreservesRecipeBeanFeedbackAndEnhancementLink() throws {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.generatedByAI = true
+    let bean = BeanProfile(name: "Linked bean", roaster: "Local roaster")
+    recipe.beanID = bean.id
+    let enhancedID = UUID()
+    let entry = BrewHistoryEntry(
+        recipeID: recipe.id,
+        recipeName: recipe.name,
+        beanID: bean.id,
+        beanName: bean.name,
+        duration: 180,
+        water: 250,
+        coffeeWeight: 215,
+        steps: recipe.pours.count,
+        rating: 3,
+        notes: "Sweet, but the finish was dry.",
+        recipeSnapshot: recipe,
+        beanSnapshot: bean,
+        feedbackTags: ["Dry finish", "Needs more body"],
+        enhancementGoals: ["Higher clarity", "More sweetness", "Round & smooth"],
+        enhancedRecipeID: enhancedID
+    )
+
+    let data = try JSONEncoder().encode(entry)
+    let decoded = try JSONDecoder().decode(BrewHistoryEntry.self, from: data)
+
+    #expect(decoded.recipeSnapshot == recipe)
+    #expect(decoded.beanSnapshot == bean)
+    #expect(decoded.feedbackTags == ["Dry finish", "Needs more body"])
+    #expect(decoded.enhancementGoals == ["Higher clarity", "More sweetness", "Round & smooth"])
+    #expect(decoded.enhancedRecipeID == enhancedID)
+}
+
+@Test func olderBrewHistoryDecodesWithoutSnapshotsOrFeedbackTags() throws {
+    let entry = BrewHistoryEntry(
+        recipeID: UUID(),
+        recipeName: "Legacy brew",
+        beanID: nil,
+        beanName: nil,
+        duration: 150,
+        water: 250,
+        coffeeWeight: 210,
+        steps: 3
+    )
+    let encoded = try JSONEncoder().encode(entry)
+    var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    ["recipeSnapshot", "beanSnapshot", "feedbackTags", "enhancementGoals", "enhancedRecipeID"].forEach {
+        object.removeValue(forKey: $0)
+    }
+
+    let legacyData = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(BrewHistoryEntry.self, from: legacyData)
+
+    #expect(decoded.recipeName == "Legacy brew")
+    #expect(decoded.recipeSnapshot == nil)
+    #expect(decoded.feedbackTags == nil)
+    #expect(decoded.enhancementGoals == nil)
+}
+
+@Test func brewGraphSmoothingPreservesRawSamplesAndSoftensWeightJumps() {
+    let raw = [
+        BrewSample(elapsed: 0, water: 0, coffeeWeight: 0),
+        BrewSample(elapsed: 0.25, water: 40, coffeeWeight: 0),
+        BrewSample(elapsed: 0.5, water: 40, coffeeWeight: 32),
+        BrewSample(elapsed: 0.75, water: 80, coffeeWeight: 31.5),
+    ]
+
+    let smoothed = BrewGraphSmoother.smooth(raw)
+
+    #expect(raw[2].coffeeWeight == 32)
+    #expect(smoothed.count == raw.count)
+    #expect(smoothed[2].coffeeWeight > 0)
+    #expect(smoothed[2].coffeeWeight < raw[2].coffeeWeight)
+    #expect(smoothed[3].coffeeWeight >= smoothed[2].coffeeWeight)
+    #expect(smoothed[3].water >= smoothed[2].water)
+}
+
+@Test func flavorGoalsCombineCompatibleChoicesAndReplaceOnlyDirectOpposites() {
+    var selected: Set<RecipeFlavorGoal> = []
+    selected = RecipeFlavorGoal.toggling(.sweetness, in: selected)
+    selected = RecipeFlavorGoal.toggling(.roundness, in: selected)
+    selected = RecipeFlavorGoal.toggling(.clarity, in: selected)
+
+    #expect(selected == [.sweetness, .roundness, .clarity])
+
+    selected = RecipeFlavorGoal.toggling(.brightAcidity, in: selected)
+    selected = RecipeFlavorGoal.toggling(.lowAcidity, in: selected)
+
+    #expect(!selected.contains(.brightAcidity))
+    #expect(selected.contains(.lowAcidity))
+    #expect(selected.contains(.sweetness))
+    #expect(selected.contains(.roundness))
+    #expect(selected.contains(.clarity))
+}
+
+@Test func beanAcidityCanRemainUnknownWhenTheBagDoesNotProvideIt() throws {
+    let bean = BeanProfile(name: "Mystery acidity")
+    #expect(bean.acidityLevel == nil)
+
+    let data = try JSONEncoder().encode(bean)
+    let decoded = try JSONDecoder().decode(BeanProfile.self, from: data)
+    #expect(decoded.acidityLevel == nil)
+}
