@@ -77,6 +77,50 @@ import Testing
     #expect(firstPourWait.extractionElapsed == 20)
 }
 
+@Test func simulationPreviewRunsForAVisibleRealisticAmountOfTime() {
+    #expect(Brewing.simulationWallDuration(for: 90) == 60)
+    #expect(Brewing.simulationWallDuration(for: 180) == 90)
+    #expect(Brewing.simulationWallDuration(for: 300) == 120)
+}
+
+@Test func recipeLibraryArchivePreservesCompletePrograms() throws {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.generatedByAI = true
+    recipe.aiDescription = "Preserve every portable recipe field."
+    recipe.pours[0].pattern = .circular
+    recipe.pours[0].agitationBefore = true
+
+    let archive = RecipeLibraryArchive(
+        exportedAt: Date(timeIntervalSince1970: 1_700_000_000),
+        recipes: [recipe]
+    )
+    let data = try JSONEncoder().encode(archive)
+    let decoded = try JSONDecoder().decode(RecipeLibraryArchive.self, from: data)
+
+    #expect(decoded.schemaVersion == RecipeLibraryArchive.currentSchemaVersion)
+    #expect(decoded.recipes == [recipe])
+}
+
+@Test func extractionTimelineKeepsPreparationAndRestBoundariesSeparate() throws {
+    let recipe = Recipe(
+        name: "Timeline",
+        useGrinder: true,
+        pours: [
+            PourStep(volume: 45, temperature: 93, flowRate: 3, pauseBefore: 5, pauseAfter: 30),
+            PourStep(volume: 90, temperature: 91, flowRate: 3, pauseAfter: 0),
+        ]
+    )
+    let events = Brewing.timelineEvents(recipe: recipe, grindingDuration: 22, heatingDuration: 13)
+
+    #expect(events.count == 3)
+    #expect(events[0].title == "Bloom")
+    #expect(events[0].elapsed == 40)
+    #expect(events[1].kind == .rest)
+    #expect(events[1].elapsed == 55)
+    #expect(events[2].title == "P2")
+    #expect(events[2].elapsed == 85)
+}
+
 @Test func defaultRecipesRemainMachineSafe() {
     for recipe in RecipeLibrary.defaults {
         #expect(RecipeValidator.validate(recipe).allSatisfy { $0.severity != .error })
@@ -135,6 +179,13 @@ import Testing
     combined.append(second)
     combined.append(first)
     #expect(framer.ingest(combined) == [second, first])
+}
+
+@Test func waterTelemetryNormalizesFixedPointFirmwareValues() {
+    #expect(XBloomProtocol.normalizedWaterVolume(150) == 150)
+    #expect(XBloomProtocol.normalizedWaterVolume(1_500_000) == 150)
+    #expect(XBloomProtocol.normalizedWaterVolume(.infinity) == nil)
+    #expect(XBloomProtocol.normalizedWaterVolume(-1) == nil)
 }
 
 @Test func olderSavedRecipesDecodeWithoutEnhancementLineage() throws {

@@ -13,6 +13,14 @@ final class BrewLiveActivityManager {
 
     private init() {}
 
+    func resumeExisting() async {
+        guard let existing = Activity<BrewActivityAttributes>.activities.first else { return }
+        activity = existing
+        lastUpdateAt = .distantPast
+        lastPhase = existing.content.state.phase
+        lastPour = existing.content.state.currentPour
+    }
+
     func start(recipe: Recipe, machineName: String, initialState: BrewActivityAttributes.ContentState) async {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 

@@ -28,7 +28,43 @@ public struct BrewProgramEstimate: Equatable, Sendable {
     public var extractionElapsed: TimeInterval
 }
 
+public enum BrewTimelineEventKind: String, Equatable, Sendable {
+    case pour
+    case rest
+}
+
+public struct BrewTimelineEvent: Equatable, Identifiable, Sendable {
+    public var id: String
+    public var elapsed: TimeInterval
+    public var title: String
+    public var pourIndex: Int
+    public var kind: BrewTimelineEventKind
+
+    public init(
+        id: String,
+        elapsed: TimeInterval,
+        title: String,
+        pourIndex: Int,
+        kind: BrewTimelineEventKind
+    ) {
+        self.id = id
+        self.elapsed = elapsed
+        self.title = title
+        self.pourIndex = pourIndex
+        self.kind = kind
+    }
+}
+
 public enum Brewing {
+    /// Keeps a simulated brew short enough to preview while leaving enough
+    /// real time to understand grinding, heating, every pour, and every rest.
+    /// A normal pour-over lands around 60–120 seconds instead of a few seconds.
+    public static func simulationWallDuration(
+        for programDuration: TimeInterval
+    ) -> TimeInterval {
+        min(120, max(60, max(0, programDuration) * 0.5))
+    }
+
     public static func estimate(recipe: Recipe, elapsed: TimeInterval) -> BrewEstimate {
         let totalTime = recipe.pours.reduce(0.0) {
             $0 + Double($1.volume) / $1.flowRate + Double($1.pauseAfter)
@@ -68,6 +104,46 @@ public enum Brewing {
             complete: true,
             totalTime: totalTime
         )
+    }
+
+    /// Positions pour and rest boundaries on the same clock used by live and
+    /// simulated telemetry. Preparation is intentionally included so the
+    /// first bloom can never appear during grinding or heating.
+    public static func timelineEvents(
+        recipe: Recipe,
+        grindingDuration: TimeInterval = 22,
+        heatingDuration: TimeInterval = 13
+    ) -> [BrewTimelineEvent] {
+        var cursor = (recipe.useGrinder ? max(0, grindingDuration) : 0) + max(0, heatingDuration)
+        var events: [BrewTimelineEvent] = []
+
+        for (index, pour) in recipe.pours.enumerated() {
+            cursor += Double(max(0, pour.pauseBefore))
+            let title = index == 0 ? "Bloom" : "P\(index + 1)"
+            events.append(
+                BrewTimelineEvent(
+                    id: "pour-\(index)",
+                    elapsed: cursor,
+                    title: title,
+                    pourIndex: index,
+                    kind: .pour
+                )
+            )
+            cursor += Double(max(0, pour.volume)) / max(0.1, pour.flowRate)
+            if pour.pauseAfter > 0 {
+                events.append(
+                    BrewTimelineEvent(
+                        id: "rest-\(index)",
+                        elapsed: cursor,
+                        title: "Rest",
+                        pourIndex: index,
+                        kind: .rest
+                    )
+                )
+            }
+            cursor += Double(max(0, pour.pauseAfter))
+        }
+        return events
     }
 
     public static func deductDose(_ dose: Double, from bean: BeanProfile) -> BeanProfile {

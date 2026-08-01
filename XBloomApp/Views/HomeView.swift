@@ -3,12 +3,20 @@ import SwiftUI
 
 struct HomeView: View {
     @Binding var selectedTab: Int
+    @Environment(\.modelContext) private var modelContext
     @Environment(XBloomBLEClient.self) private var machine
-    @Query(sort: \StoredBrew.completedAt, order: .reverse) private var history: [StoredBrew]
-    @Query private var beans: [StoredBean]
-    @Query private var recipes: [StoredRecipe]
+    @Query private var history: [StoredBrew]
+    @State private var activeBeans = 0
+    @State private var recipeCount = 0
 
-    private var activeBeans: Int { beans.filter { !$0.archived }.count }
+    init(selectedTab: Binding<Int>) {
+        _selectedTab = selectedTab
+        var descriptor = FetchDescriptor<StoredBrew>(
+            sortBy: [SortDescriptor(\StoredBrew.completedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        _history = Query(descriptor)
+    }
 
     var body: some View {
         NavigationStack {
@@ -38,6 +46,7 @@ struct HomeView: View {
                     .accessibilityLabel("Settings")
                 }
             }
+            .onAppear { refreshLibraryCounts() }
         }
     }
 
@@ -170,7 +179,7 @@ struct HomeView: View {
             AppSectionHeader(title: "Your coffee", subtitle: "Everything stays on this iPhone")
             HStack(spacing: 12) {
                 libraryButton(title: "Beans", value: activeBeans, icon: "leaf.fill", tint: AppTheme.sage, tab: 3)
-                libraryButton(title: "Recipes", value: recipes.count, icon: "list.bullet.rectangle.fill", tint: AppTheme.crema, tab: 1)
+                libraryButton(title: "Recipes", value: recipeCount, icon: "list.bullet.rectangle.fill", tint: AppTheme.crema, tab: 1)
             }
             Button {
                 selectedTab = 2
@@ -179,6 +188,14 @@ struct HomeView: View {
             }
             .buttonStyle(PrimaryActionButtonStyle())
         }
+    }
+
+    private func refreshLibraryCounts() {
+        let activeDescriptor = FetchDescriptor<StoredBean>(
+            predicate: #Predicate { !$0.archived }
+        )
+        activeBeans = (try? modelContext.fetchCount(activeDescriptor)) ?? activeBeans
+        recipeCount = (try? modelContext.fetchCount(FetchDescriptor<StoredRecipe>())) ?? recipeCount
     }
 
     private var recentBrew: some View {

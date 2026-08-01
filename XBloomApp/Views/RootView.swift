@@ -3,6 +3,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(BrewSessionCoordinator.self) private var brewSession
     @State private var selectedTab = 0
     @State private var seedError: String?
     @State private var isLaunching = true
@@ -42,6 +43,7 @@ struct RootView: View {
                 try LocalLibrary.seedIfNeeded(in: modelContext)
                 #if DEBUG
                 try LocalLibrary.seedHistoryPreviewIfRequested(in: modelContext)
+                try LocalLibrary.seedBeanRelationshipPreviewIfRequested(in: modelContext)
                 #endif
             } catch {
                 seedError = error.localizedDescription
@@ -51,10 +53,43 @@ struct RootView: View {
                 isLaunching = false
             }
         }
+        .task(priority: .utility) {
+            // Let the first frame become interactive before incrementally
+            // indexing legacy JSON records in small, yielding batches.
+            try? await Task.sleep(for: .seconds(1))
+            try? await LocalLibrary.backfillIndexedMetadata(in: modelContext)
+        }
         .alert("Local database error", isPresented: .constant(seedError != nil)) {
             Button("OK") { seedError = nil }
         } message: {
             Text(seedError ?? "")
+        }
+        .fullScreenCover(
+            item: Binding(
+                get: { brewSession.presentation },
+                set: { value in
+                    if value == nil { brewSession.dismiss() }
+                }
+            )
+        ) { presentation in
+            NavigationStack {
+                BrewSessionView(
+                    recipe: presentation.recipe,
+                    mode: presentation.mode,
+                    sessionID: presentation.id,
+                    resumedAt: presentation.startedAt,
+                    restoredWeightBaseline: presentation.weightBaseline,
+                    restoredWaterBaseline: presentation.waterBaseline,
+                    restoredWater: presentation.water,
+                    restoredWeight: presentation.weight,
+                    restoredTemperature: presentation.temperature,
+                    restoredActivePourIndex: presentation.activePourIndex,
+                    restoredPhase: presentation.currentPhase,
+                    restoredSamples: presentation.samples,
+                    restoredExtractionStartedAt: presentation.extractionStartedAt,
+                    restoredExtractionElapsed: presentation.extractionElapsed
+                )
+            }
         }
     }
 }

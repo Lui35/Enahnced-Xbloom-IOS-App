@@ -135,7 +135,7 @@ struct StudioDialBox: View {
     var unit = ""
     var decimals = 0
     var tint = StudioTheme.accent
-    var height: CGFloat = 104
+    var height: CGFloat = 92
 
     @State private var dragStart: Double?
     @State private var hapticTick = 0
@@ -151,11 +151,11 @@ struct StudioDialBox: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(StudioTheme.panel)
 
             GeometryReader { proxy in
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(tint.opacity(0.17))
                     .frame(width: max(8, proxy.size.width * min(1, max(0, progress))))
                     .padding(5)
@@ -177,7 +177,7 @@ struct StudioDialBox: View {
                 HStack(alignment: .lastTextBaseline, spacing: 5) {
                     Spacer()
                     Text(prefix + formattedValue)
-                        .font(.system(size: height > 90 ? 38 : 30, weight: .semibold, design: .rounded))
+                        .font(.system(size: height > 86 ? 34 : 29, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
@@ -188,41 +188,37 @@ struct StudioDialBox: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(14)
         }
         .frame(height: height)
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(tint.opacity(0.85), lineWidth: 2)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .gesture(
-            DragGesture(minimumDistance: 3)
-                .onChanged { gesture in
-                    // Decide the axis only when the scrub begins. Once a user
-                    // has intentionally moved sideways, keep tracking the
-                    // horizontal component until touch-up even if their finger
-                    // naturally drifts above or below the control.
-                    if dragStart == nil {
-                        guard abs(gesture.translation.width) > abs(gesture.translation.height) else {
-                            return
-                        }
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            GeometryReader { proxy in
+                HorizontalPanSurface(
+                    onBegan: {
                         dragStart = value
+                    },
+                    onChanged: { translation in
+                        guard let start = dragStart else { return }
+                        let usableWidth = max(1, Double(proxy.size.width))
+                        let span = range.upperBound - range.lowerBound
+                        let raw = start + (Double(translation) / usableWidth) * span
+                        setValue(raw)
+                    },
+                    onEnded: {
+                        dragStart = nil
                     }
-                    guard let start = dragStart else { return }
-                    // A full-width drag covers the complete value range. Using the
-                    // gesture's relative translation prevents the value jumping to
-                    // the touch location when a scrub begins.
-                    let usableWidth = max(1, Double(UIScreen.main.bounds.width - 36))
-                    let span = range.upperBound - range.lowerBound
-                    let raw = start + (Double(gesture.translation.width) / usableWidth) * span
-                    setValue(raw)
-                }
-                .onEnded { _ in
-                    dragStart = nil
-                }
+                )
+            }
+        }
+        .sensoryFeedback(
+            .impact(weight: .medium, intensity: 0.9),
+            trigger: hapticTick
         )
-        .sensoryFeedback(.selection, trigger: hapticTick)
         .accessibilityElement(children: .combine)
         .accessibilityValue("\(prefix)\(formattedValue) \(unit)")
         .accessibilityAdjustableAction { direction in
@@ -245,6 +241,65 @@ struct StudioDialBox: View {
         hapticTick &+= 1
     }
 }
+
+#if canImport(UIKit)
+/// A horizontal-only pan surface that fails before recognition when the user
+/// moves vertically. Unlike a SwiftUI DragGesture that merely ignores vertical
+/// values after recognizing them, this hands the touch directly to the parent
+/// ScrollView so the page can scroll from anywhere on a dial.
+private struct HorizontalPanSurface: UIViewRepresentable {
+    var onBegan: () -> Void
+    var onChanged: (CGFloat) -> Void
+    var onEnded: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(surface: self)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isAccessibilityElement = false
+
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
+        pan.delegate = context.coordinator
+        pan.cancelsTouchesInView = false
+        view.addGestureRecognizer(pan)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.surface = self
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var surface: HorizontalPanSurface
+
+        init(surface: HorizontalPanSurface) {
+            self.surface = surface
+        }
+
+        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+            switch recognizer.state {
+            case .began:
+                surface.onBegan()
+            case .changed:
+                surface.onChanged(recognizer.translation(in: recognizer.view).x)
+            case .ended, .cancelled, .failed:
+                surface.onEnded()
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: pan.view)
+            return abs(velocity.x) > abs(velocity.y) * 1.12
+        }
+    }
+}
+#endif
 
 struct GrinderPowerControl: View {
     @Binding var isOn: Bool
@@ -327,6 +382,86 @@ struct PourPatternMark: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+    }
+}
+
+struct PourPatternSelector: View {
+    @Binding var selection: PourPattern
+
+    private let patterns: [PourPattern] = [.center, .spiral, .circular]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let outerPadding: CGFloat = 6
+            let segmentWidth = (proxy.size.width - outerPadding * 2) / CGFloat(patterns.count)
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(StudioTheme.raised)
+
+                HStack(spacing: 8) {
+                    PourPatternMark(
+                        pattern: selection,
+                        color: .black.opacity(0.78),
+                        size: 31
+                    )
+                    Text(title(for: selection))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.black.opacity(0.78))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+                    .frame(width: segmentWidth, height: proxy.size.height - outerPadding * 2)
+                    .background(
+                        StudioTheme.accent,
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    )
+                    .frame(width: segmentWidth)
+                    .offset(
+                        x: outerPadding + CGFloat(selectedIndex) * segmentWidth
+                    )
+                    .animation(.smooth(duration: 0.24), value: selectedIndex)
+                    .allowsHitTesting(false)
+
+                HStack(spacing: 0) {
+                    ForEach(patterns, id: \.self) { pattern in
+                        Button {
+                            selection = pattern
+                        } label: {
+                            PourPatternMark(
+                                pattern: pattern,
+                                color: StudioTheme.accent,
+                                size: 34
+                            )
+                            .opacity(selection == pattern ? 0 : 1)
+                            .frame(width: segmentWidth, height: proxy.size.height)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(title(for: pattern)) pour")
+                        .accessibilityValue(selection == pattern ? "Selected" : "Not selected")
+                    }
+                }
+                .padding(.horizontal, outerPadding)
+                // Every button keeps exactly the same layout regardless of the
+                // selection. Only the independent pill above is animated.
+                .animation(nil, value: selection)
+            }
+        }
+        .frame(height: 82)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var selectedIndex: Int {
+        patterns.firstIndex(of: selection) ?? 0
+    }
+
+    private func title(for pattern: PourPattern) -> String {
+        switch pattern {
+        case .center: "Center"
+        case .circular: "Circular"
+        case .spiral: "Spiral"
+        }
     }
 }
 

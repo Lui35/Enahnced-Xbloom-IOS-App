@@ -1,5 +1,8 @@
+import CoreTransferable
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
+import XBloomCore
 
 struct SettingsView: View {
     @Environment(GeminiService.self) private var gemini
@@ -125,6 +128,21 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .contentShape(Rectangle())
+
+                        Divider()
+
+                        NavigationLink {
+                            RecipeTransferView()
+                        } label: {
+                            settingsRow(
+                                icon: "square.and.arrow.up.on.square.fill",
+                                title: "Recipe transfer",
+                                subtitle: "Export or import a complete library",
+                                tint: AppTheme.crema
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                     }
                     .appCard()
 
@@ -187,6 +205,216 @@ struct SettingsView: View {
             } catch {
                 statusMessage = error.localizedDescription
             }
+        }
+    }
+}
+
+private extension UTType {
+    static let xBloomRecipeLibrary = UTType(
+        exportedAs: "coffee.xbloom.recipe-library",
+        conformingTo: .json
+    )
+}
+
+private struct RecipeLibraryTransferItem: Transferable {
+    let archive: RecipeLibraryArchive
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .xBloomRecipeLibrary) { item in
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            let data = try encoder.encode(item.archive)
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            let filename = "xBloom Recipes \(formatter.string(from: item.archive.exportedAt)).xbloomrecipes"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+            try data.write(to: url, options: .atomic)
+            return SentTransferredFile(url)
+        }
+    }
+}
+
+private struct RecipeTransferView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \StoredRecipe.updatedAt, order: .reverse) private var storedRecipes: [StoredRecipe]
+    @State private var showingImporter = false
+    @State private var resultMessage: String?
+    @State private var resultIsError = false
+
+    private var recipes: [Recipe] {
+        storedRecipes.compactMap(\.recipe)
+    }
+
+    private var transferItem: RecipeLibraryTransferItem {
+        RecipeLibraryTransferItem(archive: RecipeLibraryArchive(recipes: recipes))
+    }
+
+    var body: some View {
+        ZStack {
+            AppBackground()
+            ScrollView {
+                LazyVStack(spacing: 18) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(alignment: .top, spacing: 15) {
+                            IconBadge(systemImage: "arrow.left.arrow.right.circle.fill", tint: AppTheme.crema, size: 58)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Move your recipe library")
+                                    .font(.title2.weight(.bold))
+                                Text("One portable file preserves every saved machine setting.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+
+                        StatusPill(
+                            title: "\(recipes.count) recipe\(recipes.count == 1 ? "" : "s") ready",
+                            color: AppTheme.sage,
+                            systemImage: "checkmark.circle.fill"
+                        )
+                    }
+                    .appCard()
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        AppSectionHeader(
+                            title: "Export",
+                            subtitle: "Share with another iPhone using AirDrop, Messages, Mail, or Files"
+                        )
+
+                        ShareLink(
+                            item: transferItem,
+                            preview: SharePreview("xBloom recipe library", image: Image(systemName: "cup.and.saucer.fill"))
+                        ) {
+                            Label("Export all recipes", systemImage: "square.and.arrow.up.fill")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(PrimaryActionButtonStyle())
+                        .disabled(recipes.isEmpty)
+
+                        Text("The export includes recipe names, bean links, hot or iced style, dose, grind settings, AI details, and every pour setting. Gemini keys and brew history are never included.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .appCard()
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        AppSectionHeader(
+                            title: "Import",
+                            subtitle: "Choose an xBloom recipe-library file received from another device"
+                        )
+
+                        Button {
+                            showingImporter = true
+                        } label: {
+                            Label("Import recipe library", systemImage: "square.and.arrow.down.fill")
+                                .font(.headline)
+                                .foregroundStyle(AppTheme.crema)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(.primary.opacity(0.045), in: Capsule())
+                                .overlay {
+                                    Capsule().stroke(AppTheme.crema.opacity(0.62), lineWidth: 1.5)
+                                }
+                        }
+                        .buttonStyle(.plain)
+
+                        Label(
+                            "Matching recipe IDs are updated. New IDs are added, so importing the same file again will not create duplicates.",
+                            systemImage: "arrow.triangle.2.circlepath"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    .appCard()
+
+                    if let resultMessage {
+                        Label(
+                            resultMessage,
+                            systemImage: resultIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+                        )
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(resultIsError ? .orange : AppTheme.sage)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 30)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .navigationTitle("Recipe Transfer")
+        .navigationBarTitleDisplayMode(.inline)
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: [.xBloomRecipeLibrary, .json],
+            allowsMultipleSelection: false
+        ) { result in
+            importLibrary(result)
+        }
+    }
+
+    @MainActor
+    private func importLibrary(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessed { url.stopAccessingSecurityScopedResource() }
+            }
+            let data = try Data(contentsOf: url)
+            let archive: RecipeLibraryArchive
+            if let decoded = try? JSONDecoder().decode(RecipeLibraryArchive.self, from: data) {
+                archive = decoded
+            } else {
+                archive = RecipeLibraryArchive(recipes: try JSONDecoder().decode([Recipe].self, from: data))
+            }
+            guard archive.schemaVersion <= RecipeLibraryArchive.currentSchemaVersion else {
+                throw RecipeTransferError.newerFormat
+            }
+
+            var existingByID = Dictionary(uniqueKeysWithValues: storedRecipes.map { ($0.id, $0) })
+            var added = 0
+            var updated = 0
+            var skipped = 0
+
+            for recipe in archive.recipes {
+                let hasBlockingError = RecipeValidator.validate(recipe).contains { $0.severity == .error }
+                guard !recipe.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      !recipe.pours.isEmpty,
+                      !hasBlockingError else {
+                    skipped += 1
+                    continue
+                }
+                if let stored = existingByID[recipe.id] {
+                    stored.update(with: recipe)
+                    updated += 1
+                } else {
+                    let stored = StoredRecipe(recipe: recipe)
+                    modelContext.insert(stored)
+                    existingByID[recipe.id] = stored
+                    added += 1
+                }
+            }
+            try modelContext.save()
+            resultIsError = false
+            resultMessage = "Imported \(added) new and updated \(updated) recipe\(updated == 1 ? "" : "s")" + (skipped > 0 ? "; skipped \(skipped) unsafe or incomplete." : ".")
+        } catch {
+            resultIsError = true
+            resultMessage = error.localizedDescription
+        }
+    }
+}
+
+private enum RecipeTransferError: LocalizedError {
+    case newerFormat
+
+    var errorDescription: String? {
+        switch self {
+        case .newerFormat:
+            "This library was created by a newer xBloom app version. Update this app before importing it."
         }
     }
 }

@@ -47,6 +47,11 @@ struct RecipesView: View {
 
     private var filteredRecipes: [StoredRecipe] {
         recipes.filter { stored in
+            if selectedFilter != .all,
+               let style = stored.indexedBrewStyle,
+               (selectedFilter == .hot ? style != .hot : style != .iced) {
+                return false
+            }
             guard let recipe = stored.recipe, selectedFilter.includes(recipe) else { return false }
             return recipe.matchesLibrarySearch(searchText)
         }
@@ -97,21 +102,6 @@ struct RecipesView: View {
                                             .padding(16)
                                     }
                                     .buttonStyle(.plain)
-
-                                    NavigationLink {
-                                        RecipeDetailView(stored: stored, recipe: recipe)
-                                    } label: {
-                                        Label("Start brewing", systemImage: "play.fill")
-                                            .font(.subheadline.weight(.bold))
-                                            .foregroundStyle(.black)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 9)
-                                            .background(StudioTheme.accent, in: Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .frame(maxWidth: .infinity, alignment: .trailing)
-                                    .padding(.horizontal, 14)
-                                    .padding(.bottom, 14)
                                 }
                                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                                 .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -304,13 +294,12 @@ struct RecipeRow: View {
 struct RecipeDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(XBloomBLEClient.self) private var machine
+    @Environment(BrewSessionCoordinator.self) private var brewSession
     let stored: StoredRecipe
     @State var recipe: Recipe
     @State private var editing: Recipe?
     @State private var expandedPourID: UUID?
-    @State private var showingBrewConfirmation = false
     @State private var errorMessage: String?
-    @State private var brewSessionMode: BrewSessionMode?
 
     var body: some View {
         ZStack {
@@ -365,9 +354,6 @@ struct RecipeDetailView: View {
                 Button("Edit") { editing = recipe }
             }
         }
-        .navigationDestination(item: $brewSessionMode) { mode in
-            BrewSessionView(recipe: recipe, mode: mode)
-        }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 10) {
                 HStack(spacing: 12) {
@@ -383,7 +369,7 @@ struct RecipeDetailView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        brewSessionMode = .simulation
+                        brewSession.present(recipe: recipe, mode: .simulation)
                     } label: {
                         Label("Simulate", systemImage: "play.rectangle.on.rectangle")
                             .font(.headline)
@@ -396,7 +382,7 @@ struct RecipeDetailView: View {
 
                 Button {
                     if machine.isConnected {
-                        showingBrewConfirmation = true
+                        brewSession.present(recipe: recipe, mode: .live)
                     } else {
                         machine.connect()
                     }
@@ -415,14 +401,6 @@ struct RecipeDetailView: View {
             .padding(.bottom, 12)
             .padding(.top, 10)
             .background(.ultraThinMaterial)
-        }
-        .confirmationDialog("Start \(recipe.name)?", isPresented: $showingBrewConfirmation, titleVisibility: .visible) {
-            Button("Start brewing") {
-                brewSessionMode = .live
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Check the water tank, beans, dripper, and cup. The saved program will be sent directly to your xBloom.")
         }
         .alert("Brew error", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -632,7 +610,11 @@ struct RecipeEditorView: View {
             ZStack {
                 StudioBackground()
                 ScrollView {
-                    LazyVStack(spacing: 20) {
+                    // These cards are highly interactive and their values update
+                    // frequently. Keeping them resident avoids LazyVStack
+                    // re-anchoring the scroll position when a pattern or agitation
+                    // value changes.
+                    VStack(spacing: 20) {
                         recipeIdentity
                         coffeeSettings
                         poursEditor
@@ -888,10 +870,22 @@ struct RecipeEditorView: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Label("\(pour.volume) ml", systemImage: "drop.fill")
-                        HStack(spacing: 7) {
+                        HStack(spacing: 8) {
                             PourPatternMark(pattern: pour.pattern, size: 24)
-                            Text("\(patternTitle(pour.pattern)) · \(pour.temperature)°C")
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(patternTitle(pour.pattern))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                Text("\(pour.temperature)°C")
+                                    .font(.subheadline.monospacedDigit())
+                                    .foregroundStyle(StudioTheme.muted)
+                                    .lineLimit(1)
+                            }
                         }
+                        // Every pattern uses the same two-line footprint. This
+                        // prevents "Spiral" fitting on one line while longer
+                        // names wrap and change the card's height.
+                        .frame(height: 42, alignment: .leading)
                         HStack(spacing: 12) {
                             Text("\(String(format: "%.1f", pour.flowRate)) ml/s")
                             Text("·")
@@ -953,7 +947,7 @@ struct RecipeEditorView: View {
                     ),
                     range: 0...240,
                     unit: "ml",
-                    height: 92
+                    height: 84
                 )
                 StudioDialBox(
                     title: "Temperature",
@@ -964,7 +958,7 @@ struct RecipeEditorView: View {
                     range: 80...96,
                     unit: "°C",
                     tint: .orange,
-                    height: 92
+                    height: 84
                 )
                 StudioDialBox(
                     title: "Flow rate",
@@ -977,7 +971,7 @@ struct RecipeEditorView: View {
                     unit: "ml/s",
                     decimals: 1,
                     tint: .blue,
-                    height: 92
+                    height: 84
                 )
                 StudioDialBox(
                     title: "Pause after",
@@ -988,7 +982,7 @@ struct RecipeEditorView: View {
                     range: 0...120,
                     unit: "s",
                     tint: .purple,
-                    height: 92
+                    height: 84
                 )
             }
 
@@ -996,32 +990,12 @@ struct RecipeEditorView: View {
                 Text("Pour pattern")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(StudioTheme.muted)
-                HStack(spacing: 8) {
-                    ForEach(PourPattern.allCases, id: \.self) { pattern in
-                        let selected = recipe.pours[index].pattern == pattern
-                        Button {
-                            recipe.pours[index].pattern = pattern
-                        } label: {
-                            VStack(spacing: 8) {
-                                PourPatternMark(
-                                    pattern: pattern,
-                                    color: selected ? .black : StudioTheme.accent,
-                                    size: 38
-                                )
-                                Text(patternTitle(pattern))
-                                    .font(.caption.weight(.bold))
-                            }
-                            .foregroundStyle(selected ? .black : .white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                selected ? StudioTheme.accent : StudioTheme.raised,
-                                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                PourPatternSelector(
+                    selection: Binding(
+                        get: { recipe.pours[index].pattern },
+                        set: { recipe.pours[index].pattern = $0 }
+                    )
+                )
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -1033,13 +1007,21 @@ struct RecipeEditorView: View {
                         phase: .before,
                         isOn: recipe.pours[index].agitationBefore
                     ) {
-                        recipe.pours[index].agitationBefore.toggle()
+                        setAgitation(
+                            !recipe.pours[index].agitationBefore,
+                            phase: .before,
+                            at: index
+                        )
                     }
                     agitationButton(
                         phase: .after,
                         isOn: recipe.pours[index].agitationAfter
                     ) {
-                        recipe.pours[index].agitationAfter.toggle()
+                        setAgitation(
+                            !recipe.pours[index].agitationAfter,
+                            phase: .after,
+                            at: index
+                        )
                     }
                 }
             }
@@ -1098,6 +1080,19 @@ struct RecipeEditorView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func setAgitation(_ enabled: Bool, phase: AgitationPhase, at index: Int) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            switch phase {
+            case .before:
+                recipe.pours[index].agitationBefore = enabled
+            case .after:
+                recipe.pours[index].agitationAfter = enabled
+            }
+        }
     }
 
     @ViewBuilder

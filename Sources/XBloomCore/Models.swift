@@ -123,6 +123,27 @@ public struct Recipe: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// A portable, versioned snapshot of a complete recipe library. Keeping the
+/// envelope in XBloomCore lets future app versions migrate older exports
+/// without changing the on-device SwiftData model.
+public struct RecipeLibraryArchive: Codable, Equatable, Sendable {
+    public static let currentSchemaVersion = 1
+
+    public var schemaVersion: Int
+    public var exportedAt: Date
+    public var recipes: [Recipe]
+
+    public init(
+        schemaVersion: Int = Self.currentSchemaVersion,
+        exportedAt: Date = Date(),
+        recipes: [Recipe]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.exportedAt = exportedAt
+        self.recipes = recipes
+    }
+}
+
 public struct BeanProfile: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var name: String
@@ -261,6 +282,8 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
     public var feedbackTags: [String]?
     public var enhancementGoals: [String]?
     public var enhancedRecipeID: UUID?
+    /// `nil` for history created before simulation records were introduced.
+    public var wasSimulated: Bool?
 
     public init(
         id: UUID = UUID(),
@@ -280,7 +303,8 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
         beanSnapshot: BeanProfile? = nil,
         feedbackTags: [String]? = nil,
         enhancementGoals: [String]? = nil,
-        enhancedRecipeID: UUID? = nil
+        enhancedRecipeID: UUID? = nil,
+        wasSimulated: Bool = false
     ) {
         self.id = id
         self.recipeID = recipeID
@@ -300,5 +324,6 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
         self.feedbackTags = feedbackTags
         self.enhancementGoals = enhancementGoals
         self.enhancedRecipeID = enhancedRecipeID
+        self.wasSimulated = wasSimulated
     }
 }

@@ -166,7 +166,9 @@ public enum XBloomProtocol {
         case 8108:
             result.temperature = Double(packet.readUInt32LE(at: 10)) / 10
         case 40523:
-            result.waterVolume = Double(packet.readFloat32LE(at: 10))
+            result.waterVolume = normalizedWaterVolume(
+                Double(packet.readFloat32LE(at: 10))
+            )
         case 9003:
             result.state = .grinding
         case 9005, 40502, 40510:
@@ -188,6 +190,20 @@ public enum XBloomProtocol {
             break
         }
         return result
+    }
+
+    /// xBloom firmware variants have emitted the cumulative water counter with
+    /// different decimal scaling. A Studio recipe cannot deliver more than
+    /// 500 ml, so progressively remove fixed-point decades while preserving
+    /// normal milliliter values. Non-finite and impossible values are ignored.
+    public static func normalizedWaterVolume(_ rawValue: Double) -> Double? {
+        guard rawValue.isFinite, rawValue >= 0 else { return nil }
+        var value = rawValue
+        while value > 750 {
+            value /= 10
+        }
+        guard value.isFinite, (0...750).contains(value) else { return nil }
+        return value
     }
 
     private static func vibrationByte(for pour: PourStep) -> UInt8 {

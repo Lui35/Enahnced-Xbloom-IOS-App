@@ -43,6 +43,7 @@ final class XBloomBLEClient: NSObject {
     @ObservationIgnored private var connectionSetupTask: Task<Void, Never>?
     @ObservationIgnored private var connectionWatchdogTask: Task<Void, Never>?
     @ObservationIgnored private var lastBrewActivityAt: Date?
+    @ObservationIgnored private var resumeConnectionRequested = false
 
     override init() {
         super.init()
@@ -61,9 +62,10 @@ final class XBloomBLEClient: NSObject {
         return Date().timeIntervalSince(lastPacketAt) < 15
     }
 
-    func connect() {
+    func connect(resumingBrew: Bool = false) {
         connectionAttemptID = UUID()
         let attemptID = connectionAttemptID
+        resumeConnectionRequested = resumingBrew
         lastError = nil
         diagnosticState = .idle
         guard central.state == .poweredOn else {
@@ -217,6 +219,7 @@ final class XBloomBLEClient: NSObject {
         receivedPacketCount = 0
         lastBrewActivityAt = nil
         diagnosticState = .idle
+        resumeConnectionRequested = false
     }
 
     private func failConnection(_ message: String) {
@@ -229,6 +232,16 @@ final class XBloomBLEClient: NSObject {
 
     private func finishConnectionSetup() async {
         do {
+            if resumeConnectionRequested {
+                // Never send stop/quit setup commands while attaching to a
+                // recipe that is already running independently on the machine.
+                connectionWatchdogTask?.cancel()
+                connectionWatchdogTask = nil
+                connectionState = .connected
+                telemetry.state = .idle
+                resumeConnectionRequested = false
+                return
+            }
             try await write(XBloomProtocol.command(.recipeStop))
             try await Task.sleep(for: .milliseconds(500))
             try await write(XBloomProtocol.command(.brewerQuit))
@@ -239,6 +252,7 @@ final class XBloomBLEClient: NSObject {
             connectionWatchdogTask = nil
             connectionState = .connected
             telemetry.state = .idle
+            resumeConnectionRequested = false
         } catch {
             failConnection("The Bluetooth link opened, but machine setup failed: \(error.localizedDescription)")
             diagnosticState = .failed(error.localizedDescription)
