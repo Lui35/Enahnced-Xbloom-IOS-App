@@ -905,3 +905,135 @@ struct StudioSaveBar: View {
         .background(.ultraThinMaterial)
     }
 }
+
+struct AIProcessingOverlay: View {
+    let title: String
+    let messages: [String]
+    var systemImage = "sparkles"
+    var tint = StudioTheme.accent
+    var onCancel: (() -> Void)?
+
+    @State private var rotates = false
+    @State private var breathes = false
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.72)
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle()
+                        .stroke(.white.opacity(0.08), lineWidth: 9)
+                        .frame(width: 112, height: 112)
+
+                    Circle()
+                        .trim(from: 0.05, to: 0.72)
+                        .stroke(
+                            AngularGradient(
+                                colors: [tint.opacity(0.18), tint, StudioTheme.mint, tint.opacity(0.18)],
+                                center: .center
+                            ),
+                            style: StrokeStyle(lineWidth: 7, lineCap: .round)
+                        )
+                        .frame(width: 112, height: 112)
+                        .rotationEffect(.degrees(rotates ? 360 : 0))
+
+                    Circle()
+                        .trim(from: 0.12, to: 0.48)
+                        .stroke(tint.opacity(0.46), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .frame(width: 86, height: 86)
+                        .rotationEffect(.degrees(rotates ? -360 : 0))
+
+                    ForEach(0..<3, id: \.self) { index in
+                        Circle()
+                            .fill(index == 1 ? StudioTheme.mint : tint)
+                            .frame(width: index == 1 ? 8 : 6, height: index == 1 ? 8 : 6)
+                            .offset(y: -56)
+                            .rotationEffect(.degrees(Double(index) * 120 + (rotates ? 360 : 0)))
+                    }
+
+                    Image(systemName: systemImage)
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundStyle(.black.opacity(0.78))
+                        .frame(width: 62, height: 62)
+                        .background(
+                            RadialGradient(
+                                colors: [Color.white.opacity(0.92), tint],
+                                center: .topLeading,
+                                startRadius: 2,
+                                endRadius: 48
+                            ),
+                            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        )
+                        .scaleEffect(breathes ? 1.04 : 0.94)
+                        .shadow(color: tint.opacity(0.38), radius: breathes ? 22 : 9)
+                }
+
+                VStack(spacing: 8) {
+                    Text(title)
+                        .font(.title3.weight(.bold))
+                        .multilineTextAlignment(.center)
+
+                    TimelineView(.periodic(from: .now, by: 1.6)) { context in
+                        let message = messages.isEmpty
+                            ? "Working with Gemini…"
+                            : messages[
+                                Int(context.date.timeIntervalSinceReferenceDate / 1.6)
+                                    % messages.count
+                            ]
+                        Text(message)
+                            .id(message)
+                            .font(.subheadline)
+                            .foregroundStyle(StudioTheme.muted)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .frame(minHeight: 40)
+                            .transition(.blurReplace)
+                    }
+                }
+
+                HStack(spacing: 7) {
+                    ForEach(0..<3, id: \.self) { index in
+                        Capsule()
+                            .fill(index == 1 ? StudioTheme.mint : tint)
+                            .frame(width: breathes == (index != 1) ? 18 : 7, height: 7)
+                            .opacity(breathes == (index == 2) ? 0.45 : 1)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: breathes)
+
+                if let onCancel {
+                    Button("Cancel request", action: onCancel)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(StudioTheme.muted)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(.white.opacity(0.06), in: Capsule())
+                        .buttonStyle(.plain)
+                }
+            }
+            .frame(maxWidth: 290)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 26)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .stroke(tint.opacity(0.28), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 4.2).repeatForever(autoreverses: false)) {
+                rotates = true
+            }
+            withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
+                breathes = true
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title). Gemini is processing your request.")
+        .transition(.opacity)
+        .zIndex(100)
+    }
+}

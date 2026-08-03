@@ -17,17 +17,14 @@ struct RootView: View {
                 RecipesView()
                     .tabItem { Label("Recipes", systemImage: "list.bullet.rectangle") }
                     .tag(1)
-                BrewView()
-                    .tabItem { Label("Brew", systemImage: "cup.and.saucer.fill") }
-                    .tag(2)
                 BeansView()
                     .tabItem { Label("Beans", systemImage: "leaf") }
-                    .tag(3)
+                    .tag(2)
                 NavigationStack {
                     HistoryView()
                 }
                     .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
-                    .tag(4)
+                    .tag(3)
             }
 
             if isLaunching {

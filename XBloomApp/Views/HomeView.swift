@@ -1,5 +1,13 @@
 import SwiftData
 import SwiftUI
+import XBloomCore
+
+private struct HomeCupRecommendation {
+    let stored: StoredRecipe
+    let recipe: Recipe
+    let beanName: String?
+    let reason: String
+}
 
 struct HomeView: View {
     @Binding var selectedTab: Int
@@ -8,13 +16,15 @@ struct HomeView: View {
     @Query private var history: [StoredBrew]
     @State private var activeBeans = 0
     @State private var recipeCount = 0
+    @State private var recentRecipeLookup: [UUID: StoredRecipe] = [:]
+    @State private var nextCup: HomeCupRecommendation?
 
     init(selectedTab: Binding<Int>) {
         _selectedTab = selectedTab
         var descriptor = FetchDescriptor<StoredBrew>(
             sortBy: [SortDescriptor(\StoredBrew.completedAt, order: .reverse)]
         )
-        descriptor.fetchLimit = 1
+        descriptor.fetchLimit = 3
         _history = Query(descriptor)
     }
 
@@ -26,8 +36,9 @@ struct HomeView: View {
                     LazyVStack(spacing: 24) {
                         welcomeHeader
                         machineHero
+                        nextCupCard
+                        recentActivity
                         libraryOverview
-                        recentBrew
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, 30)
@@ -46,7 +57,7 @@ struct HomeView: View {
                     .accessibilityLabel("Settings")
                 }
             }
-            .onAppear { refreshLibraryCounts() }
+            .onAppear { refreshDashboard() }
         }
     }
 
@@ -178,11 +189,11 @@ struct HomeView: View {
         VStack(spacing: 14) {
             AppSectionHeader(title: "Your coffee", subtitle: "Everything stays on this iPhone")
             HStack(spacing: 12) {
-                libraryButton(title: "Beans", value: activeBeans, icon: "leaf.fill", tint: AppTheme.sage, tab: 3)
+                libraryButton(title: "Beans", value: activeBeans, icon: "leaf.fill", tint: AppTheme.sage, tab: 2)
                 libraryButton(title: "Recipes", value: recipeCount, icon: "list.bullet.rectangle.fill", tint: AppTheme.crema, tab: 1)
             }
             Button {
-                selectedTab = 2
+                selectedTab = 1
             } label: {
                 Label("Choose a recipe & brew", systemImage: "cup.and.saucer.fill")
             }
@@ -190,40 +201,123 @@ struct HomeView: View {
         }
     }
 
-    private func refreshLibraryCounts() {
+    private func refreshDashboard() {
         let activeDescriptor = FetchDescriptor<StoredBean>(
             predicate: #Predicate { !$0.archived }
         )
         activeBeans = (try? modelContext.fetchCount(activeDescriptor)) ?? activeBeans
         recipeCount = (try? modelContext.fetchCount(FetchDescriptor<StoredRecipe>())) ?? recipeCount
+
+        let recipes = (try? modelContext.fetch(
+            FetchDescriptor<StoredRecipe>(
+                sortBy: [SortDescriptor(\StoredRecipe.updatedAt, order: .reverse)]
+            )
+        )) ?? []
+        recentRecipeLookup = Dictionary(uniqueKeysWithValues: recipes.map { ($0.id, $0) })
+
+        let beans = (try? modelContext.fetch(activeDescriptor)) ?? []
+        let beanProfiles = Dictionary(
+            uniqueKeysWithValues: beans.compactMap { stored in
+                stored.profile.map { (stored.id, $0) }
+            }
+        )
+
+        var historyDescriptor = FetchDescriptor<StoredBrew>(
+            sortBy: [SortDescriptor(\StoredBrew.completedAt, order: .reverse)]
+        )
+        historyDescriptor.fetchLimit = 60
+        let recentHistory = (try? modelContext.fetch(historyDescriptor)) ?? []
+        nextCup = makeNextCup(
+            recipes: recipes,
+            beans: beanProfiles,
+            history: recentHistory
+        )
     }
 
-    private var recentBrew: some View {
-        VStack(spacing: 14) {
-            AppSectionHeader(title: "Recent activity")
-            if let last = history.first {
+    @ViewBuilder
+    private var nextCupCard: some View {
+        if let nextCup {
+            VStack(spacing: 12) {
+                AppSectionHeader(title: "Your next cup", subtitle: "Chosen locally from your coffee memory")
                 NavigationLink {
-                    BrewHistoryDetailView(brew: last)
+                    RecipeDetailView(stored: nextCup.stored, recipe: nextCup.recipe)
                 } label: {
-                    HStack(spacing: 15) {
-                        IconBadge(systemImage: "waveform.path.ecg", tint: AppTheme.coffee, size: 50)
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(last.recipeName)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            Text(last.completedAt.formatted(date: .abbreviated, time: .shortened))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 15) {
+                        HStack(alignment: .top, spacing: 13) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [StudioTheme.accent, StudioTheme.mint],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                Image(systemName: "cup.and.heat.waves.fill")
+                                    .font(.title2.weight(.semibold))
+                                    .foregroundStyle(.black.opacity(0.72))
+                            }
+                            .frame(width: 54, height: 54)
+
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack(spacing: 7) {
+                                    Text(nextCup.recipe.name)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    if nextCup.recipe.generatedByAI {
+                                        Text("AI")
+                                            .font(.caption2.weight(.heavy))
+                                            .foregroundStyle(.black)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .background(StudioTheme.accent, in: Capsule())
+                                    }
+                                }
+                                Text(nextCup.beanName ?? [nextCup.recipe.roaster, nextCup.recipe.origin].filter { !$0.isEmpty }.joined(separator: " · "))
+                                    .font(.subheadline)
+                                    .foregroundStyle(StudioTheme.muted)
+                                    .lineLimit(1)
+                                Text("\(nextCup.recipe.brewStyle == .iced ? "Iced" : "Hot") · \(String(format: "%.1f", nextCup.recipe.dose)) g · 1:\(String(format: "%.1f", nextCup.recipe.ratio))")
+                                    .font(.caption.weight(.semibold).monospacedDigit())
+                                    .foregroundStyle(nextCup.recipe.brewStyle == .iced ? .cyan : AppTheme.crema)
+                            }
+                            Spacer(minLength: 0)
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.bold())
-                            .foregroundStyle(.tertiary)
+
+                        Text(nextCup.reason)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.72))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack {
+                            Label("Review & brew", systemImage: "play.fill")
+                                .font(.subheadline.weight(.bold))
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .font(.caption.weight(.bold))
+                        }
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
-                    .appCard()
+                    .padding(17)
+                    .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .stroke(StudioTheme.accent.opacity(0.28), lineWidth: 1)
+                    }
                 }
                 .buttonStyle(.plain)
-            } else {
+            }
+        }
+    }
+
+    private var recentActivity: some View {
+        VStack(spacing: 14) {
+            AppSectionHeader(title: "Coffee memory", subtitle: "Your latest cups, ready to revisit")
+            if history.isEmpty {
                 HStack(spacing: 15) {
                     IconBadge(systemImage: "clock.arrow.circlepath", tint: .secondary, size: 50)
                     VStack(alignment: .leading, spacing: 4) {
@@ -235,6 +329,81 @@ struct HomeView: View {
                     Spacer()
                 }
                 .appCard()
+            } else {
+                ForEach(history) { brew in
+                    VStack(spacing: 12) {
+                        NavigationLink {
+                            BrewHistoryDetailView(brew: brew)
+                        } label: {
+                            HStack(spacing: 13) {
+                                IconBadge(
+                                    systemImage: brew.wasSimulated == true ? "play.rectangle.fill" : "waveform.path.ecg",
+                                    tint: brew.wasSimulated == true ? .cyan : AppTheme.coffee,
+                                    size: 46
+                                )
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(brew.recipeName)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    Text(brew.completedAt.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.caption)
+                                        .foregroundStyle(StudioTheme.muted)
+                                }
+                                Spacer()
+                                if let rating = brew.rating {
+                                    Label("\(rating)", systemImage: "star.fill")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(AppTheme.crema)
+                                } else {
+                                    Text("UNRATED")
+                                        .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                        .tracking(0.6)
+                                        .foregroundStyle(.orange)
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        HStack(spacing: 9) {
+                            if let stored = recipeForBrew(brew), let recipe = stored.recipe {
+                                NavigationLink {
+                                    RecipeDetailView(stored: stored, recipe: recipe)
+                                } label: {
+                                    Label("Brew again", systemImage: "arrow.clockwise")
+                                        .font(.caption.weight(.bold))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .foregroundStyle(.black)
+                                        .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            if brew.rating == nil {
+                                NavigationLink {
+                                    BrewHistoryDetailView(brew: brew)
+                                } label: {
+                                    Label("Rate cup", systemImage: "star")
+                                        .font(.caption.weight(.bold))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(.white.opacity(0.07), lineWidth: 1)
+                    }
+                }
             }
 
             NavigationLink {
@@ -244,6 +413,67 @@ struct HomeView: View {
                     .font(.subheadline.weight(.semibold))
             }
         }
+    }
+
+    private func recipeForBrew(_ brew: StoredBrew) -> StoredRecipe? {
+        guard let id = brew.recipeID ?? brew.entry?.recipeID else { return nil }
+        return recentRecipeLookup[id]
+    }
+
+    private func makeNextCup(
+        recipes: [StoredRecipe],
+        beans: [UUID: BeanProfile],
+        history: [StoredBrew]
+    ) -> HomeCupRecommendation? {
+        let lastRecipeID = history.first?.recipeID ?? history.first?.entry?.recipeID
+        let ratings = Dictionary(grouping: history.filter { $0.rating != nil }) { brew in
+            brew.recipeID ?? brew.entry?.recipeID
+        }
+
+        var best: (score: Double, value: HomeCupRecommendation)?
+        for stored in recipes {
+            guard let recipe = stored.recipe else { continue }
+            let bean = recipe.beanID.flatMap { beans[$0] }
+            if let bean, bean.remainingWeightGrams < recipe.dose { continue }
+
+            let recipeRatings = ratings[recipe.id] ?? []
+            let averageRating = recipeRatings.isEmpty
+                ? nil
+                : Double(recipeRatings.compactMap(\.rating).reduce(0, +)) / Double(recipeRatings.count)
+            let roastAge = bean?.roastDate.map {
+                max(0, Calendar.current.dateComponents([.day], from: $0, to: Date()).day ?? 0)
+            }
+
+            var score = 0.0
+            if bean != nil { score += 24 }
+            if recipe.id != lastRecipeID { score += 9 }
+            if let averageRating { score += averageRating * 7 }
+            if let roastAge { score += Double(min(24, roastAge)) }
+            if recipe.generatedByAI { score += 2 }
+
+            let reason: String
+            if let bean, let roastAge, roastAge >= 12 {
+                let doses = Int(floor(bean.remainingWeightGrams / max(1, recipe.dose)))
+                reason = "Use \(bean.name) while it is still expressive—roasted \(roastAge) days ago with about \(doses) doses remaining."
+            } else if let averageRating, averageRating >= 4 {
+                reason = "A proven favorite from your own history, averaging \(String(format: "%.1f", averageRating)) out of 5."
+            } else if recipe.id != lastRecipeID {
+                reason = "A change of pace from your last cup, selected from beans and recipes already on this iPhone."
+            } else {
+                reason = "A dependable next cup based on what is currently available in your local coffee library."
+            }
+
+            let recommendation = HomeCupRecommendation(
+                stored: stored,
+                recipe: recipe,
+                beanName: bean?.name,
+                reason: reason
+            )
+            if best == nil || score > best!.score {
+                best = (score, recommendation)
+            }
+        }
+        return best?.value
     }
 
     private func libraryButton(title: String, value: Int, icon: String, tint: Color, tab: Int) -> some View {

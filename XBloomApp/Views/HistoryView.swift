@@ -333,6 +333,23 @@ struct BrewHistoryDetailView: View {
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .preferredColorScheme(.dark)
+        .overlay {
+            if isEnhancing {
+                AIProcessingOverlay(
+                    title: "Refining your next cup",
+                    messages: [
+                        "Reading your rating and tasting notes…",
+                        "Tracing this exact bean and recipe…",
+                        "Adjusting extraction toward your goals…",
+                        "Building a new recipe without losing the original…",
+                    ],
+                    systemImage: "star.bubble.fill",
+                    tint: StudioTheme.mint
+                ) {
+                    enhancementTask?.cancel()
+                }
+            }
+        }
         .task(id: enhancedRecipeID) {
             loadRelatedRecords()
         }
