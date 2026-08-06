@@ -530,9 +530,6 @@ struct BrewSessionView: View {
     @State private var reconnectAttempted = false
     @State private var waterTracker: BrewDeliveryTracker
     @State private var weightTracker: BrewDeliveryTracker
-    /// Highest pour the machine's own events have reached. Kept separately so a
-    /// reconnect, which clears the machine-side tracker, cannot rewind the UI.
-    @State private var machinePourIndex = 0
     @State private var liveTicker: Task<Void, Never>?
 
     init(
@@ -1281,7 +1278,6 @@ struct BrewSessionView: View {
             weightTracker.restore(delivered: weight, baseline: restoredWeightBaseline)
             temperature = restoredTemperature
             activePourIndex = restoredActivePourIndex ?? 0
-            machinePourIndex = activePourIndex
             currentPhase = restoredPhase ?? .preparing
             samples = restoredSamples ?? []
             lastSampleAt = samples.last?.elapsed ?? -.infinity
@@ -1522,19 +1518,28 @@ struct BrewSessionView: View {
         guard mode == .live, !finished else { return }
         let machineProgress = machine.brewProgress
 
-        if extractionStartedAt == nil, let machineStart = machineProgress.extractionStartedAt {
-            extractionStartedAt = machineStart
-            lastSampleAt = -.infinity
-        }
-        if machineProgress.hasObservedPourEvents {
-            machinePourIndex = max(machinePourIndex, machineProgress.pourIndex)
+        // Extraction begins at whichever the machine confirms first: a brewer
+        // start notification, the brewing state, or water that has measurably
+        // started moving. Relying on the notification alone left the session
+        // stuck in "heating" on firmware that does not send it.
+        if extractionStartedAt == nil {
+            if let machineStart = machineProgress.extractionStartedAt {
+                extractionStartedAt = machineStart
+            } else if machine.telemetry.state == .brewing || water > 0.5 {
+                extractionStartedAt = Date()
+            }
+            if extractionStartedAt != nil { lastSampleAt = -.infinity }
         }
 
         if let extractionStartedAt {
             extractionElapsed = max(0, Date().timeIntervalSince(extractionStartedAt))
+            // Delivered water decides which pour is running. The per-pour
+            // meaning of the machine's pause and resume notifications is not
+            // confirmed for this firmware, and counting them advanced the pour
+            // faster than the machine was actually pouring.
             activePourIndex = min(
                 max(0, recipe.pours.count - 1),
-                max(machinePourIndex, pourIndexFromDeliveredWater)
+                max(activePourIndex, pourIndexFromDeliveredWater)
             )
             progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
         } else {
@@ -1568,6 +1573,10 @@ struct BrewSessionView: View {
     @MainActor
     private func finishIfMachineReportsCompletion() {
         guard !finished, !recordedCompletion else { return }
+        // A completion notification before any pour has happened belongs to the
+        // machine's previous cycle, not to this brew. Honouring it ended the
+        // session seconds after it started, with every pour marked done.
+        guard extractionStartedAt != nil else { return }
         guard machine.brewProgress.completedAt != nil || machine.telemetry.state == .complete else {
             return
         }

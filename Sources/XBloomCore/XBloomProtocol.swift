@@ -140,8 +140,11 @@ public enum XBloomProtocol {
 
         // The existing desktop server passes round(total ml / 10), and PyBloom
         // writes that value multiplied by ten into the one-byte recipe footer.
+        // The field therefore tops out at 250 ml; truncating instead of
+        // clamping turned a 300 ml recipe into a declared 44 ml.
+        // 250 is the highest multiple of ten the byte can hold.
         let waterUnits = Int((Double(recipe.totalWater) / 10).rounded(.toNearestOrEven))
-        result.append(UInt8(truncatingIfNeeded: waterUnits * 10))
+        result.append(UInt8(min(250, max(0, waterUnits * 10))))
         return result
     }
 
@@ -149,7 +152,11 @@ public enum XBloomProtocol {
         let payload = try recipePayload(for: recipe)
         let cupMaximum: Float = 90
         let cupMinimum: Float = recipe.useGrinder ? 40 : 0
-        let dose = recipe.useGrinder ? UInt32(recipe.dose.rounded(.towardZero)) : 0
+        // The reference implementation always sends the bean weight here, even
+        // when it is not grinding. Sending zero looks like an invalid dose to
+        // the machine, which is the likeliest reason a grinder-off recipe was
+        // accepted but never started.
+        let dose = UInt32(max(0, recipe.dose.rounded(.towardZero)))
 
         return [
             command(.setBypass, values: [Float(0).bitPattern, Float(0).bitPattern, dose]),

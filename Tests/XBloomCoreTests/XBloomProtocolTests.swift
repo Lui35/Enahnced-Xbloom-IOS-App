@@ -157,6 +157,73 @@ import Testing
     let packets = try XBloomProtocol.brewSequence(for: recipe)
     let commandIDs = packets.map { UInt16($0[3]) | UInt16($0[4]) << 8 }
     #expect(commandIDs == [8102, 8104, 8004, 8002])
+
+    // The dose travels with the bypass command whether or not the grinder runs.
+    // Sending zero reads as an invalid dose and the recipe never starts.
+    let bypassDose = UInt32(packets[0][18])
+        | UInt32(packets[0][19]) << 8
+        | UInt32(packets[0][20]) << 16
+        | UInt32(packets[0][21]) << 24
+    #expect(bypassDose == UInt32(recipe.dose.rounded(.towardZero)))
+}
+
+@Test func recipeFooterClampsWaterInsteadOfWrappingThroughTheByte() throws {
+    let recipe = Recipe(
+        name: "Large batch",
+        dose: 20,
+        pours: [
+            PourStep(volume: 100, temperature: 93, flowRate: 3),
+            PourStep(volume: 100, temperature: 93, flowRate: 3),
+            PourStep(volume: 100, temperature: 93, flowRate: 3),
+        ]
+    )
+    #expect(recipe.totalWater == 300)
+
+    let payload = try XBloomProtocol.recipePayload(for: recipe)
+    // Truncating 300 through the one-byte footer declared 44 ml to the machine.
+    #expect(payload[payload.count - 1] == 250)
+}
+
+@Test func trafficLogSummarisesWhatTheMachineActuallySent() {
+    var log = MachineTrafficLog()
+    let start = Date(timeIntervalSince1970: 6_000)
+    log.startRecording(at: start)
+
+    log.record(direction: .received, command: 9003, detail: "", payload: Data(), at: start.addingTimeInterval(1))
+    log.record(direction: .received, command: 40523, detail: "", payload: Data(), at: start.addingTimeInterval(4))
+    log.record(direction: .received, command: 40523, detail: "", payload: Data(), at: start.addingTimeInterval(5))
+    log.record(direction: .sent, command: 8002, detail: "", payload: Data(), at: start.addingTimeInterval(6))
+    log.record(direction: .received, command: 61234, detail: "", payload: Data(), at: start.addingTimeInterval(7))
+
+    let summary = log.receivedCommandSummary()
+    #expect(summary.map(\.command) == [9003, 40523, 61234])
+    #expect(summary[1].count == 2)
+    #expect(summary[0].firstOffset == 1)
+
+    // An identifier outside the reference has to stand out rather than be
+    // silently discarded, since those are the ones worth investigating.
+    let unknown = MachineTrafficEntry(
+        timestamp: start,
+        direction: .received,
+        command: 61234,
+        detail: "",
+        payloadHex: ""
+    )
+    #expect(unknown.commandName == "unknown(61234)")
+    #expect(log.transcript().contains("unknown(61234)"))
+}
+
+@Test func trafficLogIgnoresFramesWhileNotRecording() {
+    var log = MachineTrafficLog()
+    log.record(direction: .received, command: 9003, detail: "", payload: Data())
+    #expect(log.entries.isEmpty)
+
+    log.startRecording()
+    log.record(direction: .received, command: 9003, detail: "", payload: Data())
+    log.stopRecording()
+    log.record(direction: .received, command: 9005, detail: "", payload: Data())
+
+    #expect(log.receivedCommandSummary().map(\.command) == [9003])
 }
 
 @Test func machineTestUsesSafeScaleCommands() {

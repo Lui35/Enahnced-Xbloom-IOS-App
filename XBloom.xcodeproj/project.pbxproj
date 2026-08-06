@@ -11,6 +11,7 @@
 		17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */; };
 		200C478580FED52EB0A8706D /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */; };
 		226B5E17B795C4B522D970A4 /* XBloomLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		24AE48EB3F43420D8089A5A7 /* MachineDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */; };
 		27C8744AAD5E6A661DBE7C8E /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A64A00702BFAAD2884EEE6B /* XBloomCore */; };
 		37A3D1A7AF48FBECD9CBA6C5 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */; };
 		450E1ED33F3C042BB2A893AF /* XBloomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */; };
@@ -60,6 +61,7 @@
 
 /* Begin PBXFileReference section */
 		00067031474B071C240BD8D2 /* CameraCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCaptureView.swift; sourceTree = "<group>"; };
+		0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineDiagnosticsView.swift; sourceTree = "<group>"; };
 		1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
 		1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = XBloomLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		288AD2850F804ABEB0F63EC4 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -150,6 +152,7 @@
 				5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */,
 				7210B750C8D2A62B65AE67BC /* HistoryView.swift */,
 				DE378BDE43EE3E266B604B87 /* HomeView.swift */,
+				0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */,
 				D88E4B719592471EEF5650D3 /* RecipesView.swift */,
 				288AD2850F804ABEB0F63EC4 /* RootView.swift */,
 				79E013F5D81849E8BB547B3D /* SettingsView.swift */,
@@ -322,6 +325,7 @@
 				BD9C9803957ED9CE8D985C7D /* HistoryView.swift in Sources */,
 				D5808958217B7635A5CDB4ED /* HomeView.swift in Sources */,
 				DD735855BFE08C898D0C6C69 /* KeychainStore.swift in Sources */,
+				24AE48EB3F43420D8089A5A7 /* MachineDiagnosticsView.swift in Sources */,
 				17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */,
 				629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */,
 				E8A04612E1F5F04A2C3C32E4 /* RootView.swift in Sources */,

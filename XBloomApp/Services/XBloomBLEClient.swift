@@ -34,6 +34,25 @@ final class XBloomBLEClient: NSObject {
     private(set) var lastPacketAt: Date?
     private(set) var sentPacketCount = 0
     private(set) var receivedPacketCount = 0
+    /// Ground truth for what this machine actually sends. The published
+    /// protocol reference describes another project's firmware, so the brew
+    /// lifecycle has to be built on identifiers observed here, not assumed.
+    private(set) var trafficLog = MachineTrafficLog()
+
+    func startTrafficRecording() {
+        trafficLog.startRecording()
+        trafficLog.note(
+            "Connection \(connectionState.rawValue) · \(machineName)"
+        )
+    }
+
+    func stopTrafficRecording() {
+        trafficLog.stopRecording()
+    }
+
+    func clearTrafficLog() {
+        trafficLog.clear()
+    }
 
     @ObservationIgnored private var central: CBCentralManager!
     @ObservationIgnored private var peripheral: CBPeripheral?
@@ -115,6 +134,10 @@ final class XBloomBLEClient: NSObject {
         try RecipeValidator.requireSafe(recipe)
         let packets = try XBloomProtocol.brewSequence(for: recipe)
         brewProgress.reset()
+        trafficLog.note(
+            "Brew start · \(recipe.name) · grinder \(recipe.useGrinder ? "on" : "off") · "
+                + "\(recipe.pours.count) pours · \(recipe.totalWater) ml · dose \(recipe.dose) g"
+        )
         let packetCountBeforeBrew = receivedPacketCount
         isSendingRecipe = true
         defer { isSendingRecipe = false }
@@ -126,8 +149,12 @@ final class XBloomBLEClient: NSObject {
             }
             try await write(packet)
             if index < packets.count - 1 {
-                let delay: UInt64 = recipe.useGrinder ? 1_000_000_000 : 300_000_000
-                try await Task.sleep(nanoseconds: delay)
+                // The reference implementation waits a full second between all
+                // four setup commands. The shortened 300 ms gap used for
+                // grinder-off recipes is the other likely reason they never
+                // started: the machine had not finished with one command before
+                // the next arrived.
+                try await Task.sleep(for: .seconds(1))
             }
         }
 
@@ -148,8 +175,11 @@ final class XBloomBLEClient: NSObject {
 
     func stopBrew() throws {
         guard isConnected, let peripheral, let writeCharacteristic else { throw MachineError.notConnected }
-        peripheral.writeValue(XBloomProtocol.command(.recipeStop), for: writeCharacteristic, type: .withoutResponse)
+        let packet = XBloomProtocol.command(.recipeStop)
+        peripheral.writeValue(packet, for: writeCharacteristic, type: .withoutResponse)
         sentPacketCount += 1
+        trafficLog.note("Stop requested from the app")
+        trafficLog.record(direction: .sent, command: XBloomCommand.recipeStop.rawValue, detail: "", payload: packet)
     }
 
     func testConnection() async {
@@ -283,6 +313,12 @@ final class XBloomBLEClient: NSObject {
         }
         peripheral.writeValue(packet, for: writeCharacteristic, type: .withoutResponse)
         sentPacketCount += 1
+        trafficLog.record(
+            direction: .sent,
+            command: packet.count >= 5 ? UInt16(packet[3]) | UInt16(packet[4]) << 8 : nil,
+            detail: "",
+            payload: packet
+        )
     }
 
     private func consumeNotifications(_ data: Data, from characteristicUUID: CBUUID) {
@@ -299,11 +335,35 @@ final class XBloomBLEClient: NSObject {
                 let update = try XBloomProtocol.parseNotification(packet)
                 receivedPacketCount += 1
                 lastPacketAt = Date()
+                trafficLog.record(
+                    direction: .received,
+                    command: update.lastCommand,
+                    detail: describe(update),
+                    payload: packet
+                )
                 merge(update)
             } catch {
+                // Frames the parser rejects matter most: they are the ones the
+                // reference does not describe correctly for this machine.
+                trafficLog.record(
+                    direction: .unparsed,
+                    command: packet.count >= 5 ? UInt16(packet[3]) | UInt16(packet[4]) << 8 : nil,
+                    detail: "\(error)",
+                    payload: packet
+                )
                 lastError = "Ignored an invalid Bluetooth notification."
             }
         }
+    }
+
+    private func describe(_ update: XBloomTelemetry) -> String {
+        var parts: [String] = []
+        if let value = update.weight { parts.append(String(format: "weight=%.1fg", value)) }
+        if let value = update.temperature { parts.append(String(format: "temp=%.1fC", value)) }
+        if let value = update.waterVolume { parts.append(String(format: "water=%.1fml", value)) }
+        if let value = update.tankWaterLevel { parts.append(String(format: "tank=%.0f", value)) }
+        if let value = update.waterLevelOK { parts.append("tankOK=\(value)") }
+        return parts.joined(separator: " ")
     }
 
     private func merge(_ update: XBloomTelemetry) {

@@ -177,6 +177,21 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .contentShape(Rectangle())
+
+                        Divider()
+
+                        NavigationLink {
+                            MachineDiagnosticsView()
+                        } label: {
+                            settingsRow(
+                                icon: "waveform.path.ecg",
+                                title: "Machine diagnostics",
+                                subtitle: "Record and share Bluetooth traffic",
+                                tint: .orange
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                     }
                     .appCard()
 
