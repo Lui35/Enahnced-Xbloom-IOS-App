@@ -14,10 +14,12 @@
 		27C8744AAD5E6A661DBE7C8E /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A64A00702BFAAD2884EEE6B /* XBloomCore */; };
 		37A3D1A7AF48FBECD9CBA6C5 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */; };
 		450E1ED33F3C042BB2A893AF /* XBloomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */; };
+		507AE287044BD4D4BD0CE334 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */; };
 		629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D88E4B719592471EEF5650D3 /* RecipesView.swift */; };
 		6BE814CAF21C11E434544B58 /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = C00EDAF742C0A316EE940850 /* XBloomCore */; };
 		79C41BBC938C16B7AC666171 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79E013F5D81849E8BB547B3D /* SettingsView.swift */; };
 		8CAAAE1F529CF4563D4DEA20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 45C4A7D8A6676C96CC574A14 /* Assets.xcassets */; };
+		A7A212D3ABFA89659FA8DFF1 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 4CDEAC636DE90A7943C97D61 /* Supabase */; };
 		B0A60BDF676E785964240882 /* XBloomBLEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */; };
 		BD9C9803957ED9CE8D985C7D /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7210B750C8D2A62B65AE67BC /* HistoryView.swift */; };
 		C68FE583E0B5EA6C84C64712 /* BrewLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */; };
@@ -76,6 +78,7 @@
 		79E013F5D81849E8BB547B3D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceModels.swift; sourceTree = "<group>"; };
 		A52D9466670E09651FD3349C /* XBloomBrewLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomBrewLiveActivity.swift; sourceTree = "<group>"; };
+		C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomBLEClient.swift; sourceTree = "<group>"; };
 		D88E4B719592471EEF5650D3 /* RecipesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipesView.swift; sourceTree = "<group>"; };
 		DE378BDE43EE3E266B604B87 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -96,6 +99,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				27C8744AAD5E6A661DBE7C8E /* XBloomCore in Frameworks */,
+				A7A212D3ABFA89659FA8DFF1 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -160,6 +164,7 @@
 				3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */,
 				1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */,
 				60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */,
+				C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */,
 				D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */,
 			);
 			path = Services;
@@ -242,6 +247,7 @@
 			name = XBloom;
 			packageProductDependencies = (
 				5A64A00702BFAAD2884EEE6B /* XBloomCore */,
+				4CDEAC636DE90A7943C97D61 /* Supabase */,
 			);
 			productName = XBloom;
 			productReference = 2CBF68C3FAEE7459EEE1B31D /* XBloom.app */;
@@ -276,6 +282,7 @@
 			mainGroup = A1BF44D9E6BFF4B5004ABBCC;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				46A80A83679F5C50DB28BE9D /* XCRemoteSwiftPackageReference "supabase-swift" */,
 				887EB48A587F0ACB80DE8B1F /* XCLocalSwiftPackageReference "." */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -320,6 +327,7 @@
 				E8A04612E1F5F04A2C3C32E4 /* RootView.swift in Sources */,
 				79C41BBC938C16B7AC666171 /* SettingsView.swift in Sources */,
 				C80FB84C74016044044272D1 /* StudioComponents.swift in Sources */,
+				507AE287044BD4D4BD0CE334 /* SupabaseService.swift in Sources */,
 				450E1ED33F3C042BB2A893AF /* XBloomApp.swift in Sources */,
 				B0A60BDF676E785964240882 /* XBloomBLEClient.swift in Sources */,
 			);
@@ -601,7 +609,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		46A80A83679F5C50DB28BE9D /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 2.46.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		4CDEAC636DE90A7943C97D61 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 46A80A83679F5C50DB28BE9D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
 		5A64A00702BFAAD2884EEE6B /* XBloomCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = XBloomCore;

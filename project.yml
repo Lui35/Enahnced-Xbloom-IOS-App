@@ -9,6 +9,9 @@ options:
 packages:
   XBloomCore:
     path: .
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    exactVersion: 2.46.0
 
 targets:
   XBloom:
@@ -21,6 +24,8 @@ targets:
     dependencies:
       - package: XBloomCore
         product: XBloomCore
+      - package: Supabase
+        product: Supabase
       - target: XBloomLiveActivity
         embed: true
     info:

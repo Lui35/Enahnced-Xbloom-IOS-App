@@ -63,6 +63,8 @@ struct RecipesView: View {
                 AppBackground()
                 ScrollView {
                     LazyVStack(spacing: 14) {
+                        recipeSearchField
+
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Recipe library")
@@ -124,11 +126,6 @@ struct RecipesView: View {
             }
             .navigationTitle("Recipes")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search recipes"
-            )
             .toolbarBackground(StudioTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -157,6 +154,35 @@ struct RecipesView: View {
         }
         .preferredColorScheme(.dark)
     }
+
+    private var recipeSearchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(StudioTheme.muted)
+            TextField("Search recipes", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(StudioTheme.muted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear recipe search")
+            }
+        }
+        .font(.body)
+        .padding(.horizontal, 14)
+        .frame(height: 46)
+        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+    }
 }
 
 extension Recipe {
@@ -178,88 +204,79 @@ struct RecipeRow: View {
     let recipe: Recipe
 
     var body: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(recipe.brewStyle.rawValue.uppercased())
-                    .font(.caption2.bold())
-                    .foregroundStyle(.black.opacity(0.48))
-                Spacer()
-                Text("\(recipe.pours.count)")
-                    .font(.system(size: 54, weight: .light, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.46))
-                Image(systemName: "arrow.down.to.line")
-                    .font(.caption.bold())
-                    .foregroundStyle(.black.opacity(0.4))
-            }
-            .padding(13)
-            .frame(width: 105, height: 126, alignment: .leading)
-            .background(recipeTint, in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+        HStack(spacing: 14) {
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(recipeTint)
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                Text(recipe.brewStyle == .iced ? "ICED" : "HOT")
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .tracking(0.8)
+                    .foregroundStyle(.black.opacity(0.43))
+                    .padding(12)
+
+                Text("\(recipe.pours.count)")
+                    .font(.system(size: 56, weight: .light, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.30))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, 11)
+                    .padding(.bottom, 2)
+
+                PourPatternMark(
+                    pattern: recipe.pours.first?.pattern ?? .center,
+                    color: .black.opacity(0.42),
+                    size: 21
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(12)
+            }
+            .frame(width: 92, height: 108)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
                     Text(recipe.name)
                         .font(.headline)
                         .foregroundStyle(.white)
-                        .lineLimit(2)
+                        .lineLimit(1)
                     if recipe.generatedByAI {
                         Label("AI", systemImage: "sparkles")
                             .font(.caption2.weight(.heavy))
                             .foregroundStyle(.black)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
                             .background(StudioTheme.accent, in: Capsule())
                     }
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(StudioTheme.accent)
                 }
-                Text([recipe.roaster, recipe.origin].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.subheadline)
+
+                Text(primaryStats)
+                    .font(.caption.weight(.medium).monospacedDigit())
                     .foregroundStyle(StudioTheme.muted)
                     .lineLimit(1)
-                HStack(spacing: 7) {
-                    recipeStat(styleTitle, recipe.brewStyle == .iced ? "snowflake" : "sun.max.fill")
-                    recipeStat(servingsTitle, "cup.and.saucer.fill")
-                }
-                HStack(spacing: 7) {
-                    recipeStat("\(String(format: "%.1f", recipe.dose)) g", "scalemass")
-                    recipeStat("\(recipe.totalWater) ml", "drop")
-                }
-                HStack(spacing: 7) {
-                    recipeStat("1:\(String(format: "%.1f", recipe.ratio))", "percent")
-                    recipeStat("Grind \(recipe.grindSize)", "circle.grid.cross")
-                    if recipe.brewStyle == .iced {
-                        recipeStat("\(recipe.iceGrams) g ice", "snowflake")
+                    .minimumScaleFactor(0.72)
+
+                HStack(spacing: 6) {
+                    Image(systemName: recipe.brewStyle == .iced ? "snowflake" : "sun.max.fill")
+                    Text(recipe.brewStyle == .iced ? "Iced pour-over" : "Hot pour-over")
+                    if recipe.brewStyle == .iced, recipe.iceGrams > 0 {
+                        Text("·")
+                        Text("\(recipe.iceGrams) g ice")
                     }
                 }
-                HStack(spacing: 7) {
-                    ForEach(recipe.pours.prefix(4)) { pour in
-                        VStack(spacing: 4) {
-                            PourPatternMark(pattern: pour.pattern, size: 25)
-                            if pour.agitationBefore || pour.agitationAfter {
-                                AgitationTimingMarks(
-                                    before: pour.agitationBefore,
-                                    after: pour.agitationAfter,
-                                    size: 13
-                                )
-                            }
-                        }
-                    }
-                    if recipe.pours.count > 4 {
-                        Text("+\(recipe.pours.count - 4)")
-                            .font(.caption2.bold())
-                            .foregroundStyle(StudioTheme.muted)
-                    }
-                }
-                if recipe.generatedByAI, let description = recipe.aiDescription, !description.isEmpty {
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.62))
-                        .lineLimit(2)
-                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(recipe.brewStyle == .iced ? .cyan : AppTheme.crema)
+
+                Text(sourceTitle)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.46))
+                    .lineLimit(1)
             }
+
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.white.opacity(0.35))
         }
+        .contentShape(Rectangle())
     }
 
     private var recipeTint: Color {
@@ -270,24 +287,17 @@ struct RecipeRow: View {
         }
     }
 
-    private func recipeStat(_ value: String, _ icon: String) -> some View {
-        Label(value, systemImage: icon)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(StudioTheme.muted)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(.white.opacity(0.06), in: Capsule())
+    private var primaryStats: String {
+        "1:\(compactNumber(recipe.ratio)) | \(compactNumber(recipe.dose)) g | \(recipe.totalWater) ml | \(recipe.pours.count) pours"
     }
 
-    private var styleTitle: String {
-        recipe.brewStyle == .iced ? "Iced pour-over" : "Hot pour-over"
+    private func compactNumber(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)))
     }
 
-    private var servingsTitle: String {
-        let count = recipe.servings ?? 1
-        return "\(count) cup\(count == 1 ? "" : "s")"
+    private var sourceTitle: String {
+        let source = [recipe.roaster, recipe.origin].filter { !$0.isEmpty }.joined(separator: " · ")
+        return source.isEmpty ? "Saved on this iPhone" : source
     }
 }
 
@@ -298,48 +308,17 @@ struct RecipeDetailView: View {
     let stored: StoredRecipe
     @State var recipe: Recipe
     @State private var editing: Recipe?
-    @State private var expandedPourID: UUID?
     @State private var errorMessage: String?
 
     var body: some View {
         ZStack {
             StudioBackground()
             ScrollView {
-                LazyVStack(spacing: 20) {
+                VStack(spacing: 18) {
                     detailIdentity
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        StudioSectionTitle(
-                            title: "Coffee",
-                            detail: "\(recipe.brewStyle == .iced ? "Iced" : "Hot") · \(recipe.servings ?? 1) cup\(recipe.servings == 1 ? "" : "s")",
-                            icon: "cup.and.saucer.fill"
-                        )
-                        detailMetric("Dose", "\(String(format: "%.1f", recipe.dose)) g", "scalemass.fill", StudioTheme.accent)
-                        detailMetric("Coffee : water", "1:\(String(format: "%.1f", recipe.ratio))", "drop.degreesign.fill", StudioTheme.mint)
-                        if recipe.brewStyle == .iced {
-                            detailMetric("Ice", "\(recipe.iceGrams) g", "snowflake", .cyan)
-                        }
-                        detailMetric("Grind size", recipe.useGrinder ? "\(recipe.grindSize)" : "Grinder off", "circle.grid.cross.fill", AppTheme.crema)
-                        detailMetric("Grinder speed", recipe.useGrinder ? "\(recipe.rpm.rawValue) RPM" : "—", "gauge.with.dots.needle.50percent", .indigo)
-                    }
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        StudioSectionTitle(title: "Pours", detail: "\(recipe.totalWater) ml", icon: "drop.fill")
-                        ForEach(Array(recipe.pours.enumerated()), id: \.element.id) { index, pour in
-                            detailPour(index: index, pour: pour)
-                        }
-                    }
-
-                    StudioCard(accent: StudioTheme.mint) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            StudioSectionTitle(title: "What happens next", icon: "play.circle.fill")
-                            scenarioRow(1, "Recipe is validated and sent over Bluetooth.")
-                            scenarioRow(2, recipe.useGrinder ? "The machine grinds \(String(format: "%.1f", recipe.dose)) g at \(recipe.rpm.rawValue) RPM." : "The machine skips grinding and prepares to brew.")
-                            scenarioRow(3, "Water heats and each pour runs with its saved flow, temperature, pattern, and pause.")
-                            scenarioRow(4, "Live weight, water, temperature, and progress appear in Brew Studio.")
-                            scenarioRow(5, "The completed cup is saved locally in History.")
-                        }
-                    }
+                    coffeeSummary
+                    pourOverview
+                    aiInsight
                 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, 30)
@@ -349,36 +328,17 @@ struct RecipeDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Edit") { editing = recipe }
-            }
-        }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 10) {
-                HStack(spacing: 12) {
-                    Button {
-                        editing = recipe
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 15)
-                            .background(StudioTheme.raised, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        brewSession.present(recipe: recipe, mode: .simulation)
-                    } label: {
-                        Label("Simulate", systemImage: "play.rectangle.on.rectangle")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 15)
-                            .background(StudioTheme.raised, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
+            HStack(spacing: 12) {
+                Button {
+                    editing = recipe
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.title3.weight(.bold))
+                        .frame(width: 54, height: 54)
+                        .background(StudioTheme.raised, in: Circle())
                 }
+                .buttonStyle(.plain)
 
                 Button {
                     if machine.isConnected {
@@ -387,15 +347,25 @@ struct RecipeDetailView: View {
                         machine.connect()
                     }
                 } label: {
-                    Label(machine.isConnected ? "Start brewing" : "Connect xBloom to brew", systemImage: machine.isConnected ? "play.fill" : "bolt.fill")
+                    Label(machine.isConnected ? "Start brew" : "Connect to brew", systemImage: machine.isConnected ? "play.fill" : "bolt.fill")
                         .font(.headline)
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .frame(height: 54)
                         .background(StudioTheme.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .disabled(machine.isSendingRecipe)
+
+                Button {
+                    brewSession.present(recipe: recipe, mode: .simulation)
+                } label: {
+                    Image(systemName: "play.rectangle.on.rectangle")
+                        .font(.title3.weight(.bold))
+                        .frame(width: 54, height: 54)
+                        .background(StudioTheme.raised, in: Circle())
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 12)
@@ -418,16 +388,19 @@ struct RecipeDetailView: View {
     }
 
     private var detailIdentity: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                    VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 8) {
-                        Text("RECIPE")
-                            .font(.caption2.weight(.bold))
+                        Label(
+                            recipe.brewStyle == .iced ? "ICED POUR-OVER" : "HOT POUR-OVER",
+                            systemImage: recipe.brewStyle == .iced ? "snowflake" : "sun.max.fill"
+                        )
+                            .font(.caption2.weight(.heavy))
                             .tracking(1.4)
                             .foregroundStyle(.black.opacity(0.52))
                         if recipe.generatedByAI {
-                            Label("GEMINI AI", systemImage: "sparkles")
+                            Label("AI", systemImage: "sparkles")
                                 .font(.caption2.weight(.heavy))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
@@ -435,37 +408,39 @@ struct RecipeDetailView: View {
                         }
                     }
                     Text(recipe.name)
-                        .font(.title2.weight(.bold))
+                        .font(.title3.weight(.bold))
+                        .lineLimit(2)
                     Text([recipe.roaster, recipe.origin].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.subheadline)
                         .foregroundStyle(.black.opacity(0.56))
                 }
                 Spacer()
-                Text("\(recipe.pours.count)")
-                    .font(.system(size: 68, weight: .light, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.25))
-                    .overlay(alignment: .topTrailing) {
-                        Text("POURS")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.black.opacity(0.36))
-                    }
+                VStack(alignment: .trailing, spacing: -5) {
+                    Text("POURS")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.black.opacity(0.36))
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text("\(recipe.pours.count)")
+                        .font(.system(size: 52, weight: .light, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.25))
+                }
+                .frame(minWidth: 62, alignment: .trailing)
             }
-            HStack(alignment: .lastTextBaseline, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 Text("1:\(String(format: "%.1f", recipe.ratio))")
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                Rectangle().fill(.black.opacity(0.28)).frame(width: 1, height: 34)
+                Rectangle().fill(.black.opacity(0.28)).frame(width: 1, height: 28)
                 Text("\(recipe.totalWater) ml")
-                    .font(.title.weight(.bold))
+                if recipe.brewStyle == .iced, recipe.iceGrams > 0 {
+                    Rectangle().fill(.black.opacity(0.28)).frame(width: 1, height: 28)
+                    Label("\(recipe.iceGrams) g ice", systemImage: "snowflake")
+                        .foregroundStyle(.black.opacity(0.56))
+                        .lineLimit(1)
+                }
             }
-            if recipe.generatedByAI, let description = recipe.aiDescription, !description.isEmpty {
-                Text(description)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.black.opacity(0.58))
-                    .lineLimit(3)
-            }
+            .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
         }
         .foregroundStyle(.black.opacity(0.76))
-        .padding(20)
+        .padding(16)
         .background(
             LinearGradient(colors: [StudioTheme.accent, Color(red: 0.52, green: 0.70, blue: 0.71)], startPoint: .topLeading, endPoint: .bottomTrailing),
             in: RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -473,109 +448,182 @@ struct RecipeDetailView: View {
         .padding(.top, 8)
     }
 
-    private func detailMetric(_ title: String, _ value: String, _ icon: String, _ tint: Color) -> some View {
-        HStack {
-            Label(title, systemImage: icon)
-                .font(.subheadline)
-                .foregroundStyle(StudioTheme.muted)
-            Spacer()
-            Text(value)
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+    private var coffeeSummary: some View {
+        HStack(spacing: 0) {
+            compactMetric("Dose", "\(String(format: "%.1f", recipe.dose)) g")
+            summaryDivider
+            compactMetric("Grind", recipe.useGrinder ? "\(recipe.grindSize)" : "Off")
+            summaryDivider
+            compactMetric("RPM", recipe.useGrinder ? "\(recipe.rpm.rawValue)" : "—")
         }
-        .padding(18)
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.vertical, 13)
+        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(tint.opacity(0.78), lineWidth: 2)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
         }
     }
 
-    private func detailPour(index: Int, pour: PourStep) -> some View {
-        let expanded = expandedPourID == pour.id
-        let percentage = recipe.totalWater > 0 ? Int((Double(pour.volume) / Double(recipe.totalWater) * 100).rounded()) : 0
-        return Button {
-            withAnimation(.snappy) { expandedPourID = expanded ? nil : pour.id }
-        } label: {
-            VStack(spacing: 0) {
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(index == 0 ? "Bloom" : "Pour \(index + 1)")
-                            .font(.subheadline)
-                            .foregroundStyle(StudioTheme.muted)
-                        Text("\(percentage)%")
-                            .font(.system(size: 43, weight: .light, design: .rounded))
-                    }
-                    .frame(width: 96, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("\(pour.volume) ml · \(pour.temperature)°C")
-                            .font(.headline.monospacedDigit())
-                        Text("\(String(format: "%.1f", pour.flowRate)) ml/s · \(pour.pauseAfter)s rest")
-                            .font(.caption)
-                            .foregroundStyle(StudioTheme.muted)
-                        HStack(spacing: 6) {
-                            PourFeatureBadge(
-                                title: patternTitle(pour.pattern),
-                                icon: AnyView(PourPatternMark(pattern: pour.pattern, size: 20))
-                            )
-                            if pour.agitationBefore || pour.agitationAfter {
-                                AgitationTimingMarks(
-                                    before: pour.agitationBefore,
-                                    after: pour.agitationAfter,
-                                    size: 20
-                                )
+    private var pourOverview: some View {
+        StudioCard(accent: StudioTheme.accent) {
+            VStack(alignment: .leading, spacing: 18) {
+                StudioSectionTitle(
+                    title: "Pours",
+                    detail: "\(recipe.pours.count) steps · \(recipe.totalWater) ml",
+                    icon: "drop.fill"
+                )
+
+                GeometryReader { proxy in
+                    let spacing: CGFloat = 6
+                    let count = max(1, recipe.pours.count)
+                    let availableWidth = proxy.size.width - (spacing * CGFloat(count - 1))
+                    let fittedWidth = availableWidth / CGFloat(count)
+                    let itemWidth = max(58, fittedWidth)
+
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .bottom, spacing: spacing) {
+                            ForEach(Array(recipe.pours.enumerated()), id: \.element.id) { index, pour in
+                                pourBar(index: index, pour: pour, width: itemWidth)
                             }
                         }
+                        .frame(minWidth: proxy.size.width, alignment: .center)
+                        .padding(.top, 4)
                     }
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .rotationEffect(.degrees(expanded ? 180 : 0))
-                        .foregroundStyle(StudioTheme.accent)
+                    .scrollIndicators(.hidden)
                 }
-                .padding(18)
-                if expanded {
-                    Divider().overlay(.white.opacity(0.1))
-                    VStack(spacing: 12) {
-                        detailMetric("Volume", "\(pour.volume) ml", "drop.fill", StudioTheme.accent)
-                        detailMetric("Temperature", "\(pour.temperature)°C", "thermometer.medium", .orange)
-                        detailMetric("Flow rate", "\(String(format: "%.1f", pour.flowRate)) ml/s", "water.waves", .blue)
-                        detailMetric("Pause after", "\(pour.pauseAfter) s", "pause.fill", .purple)
-                        HStack(spacing: 8) {
-                            PourFeatureBadge(
-                                title: "\(patternTitle(pour.pattern)) pour",
-                                icon: AnyView(PourPatternMark(pattern: pour.pattern, size: 24))
-                            )
-                            AgitationTimingMarks(
-                                before: pour.agitationBefore,
-                                after: pour.agitationAfter,
-                                size: 22,
-                                showInactive: true
-                            )
-                        }
+                .frame(height: 252)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var aiInsight: some View {
+        if recipe.generatedByAI, let description = recipe.aiDescription, !description.isEmpty {
+            StudioCard(accent: StudioTheme.mint) {
+                VStack(alignment: .leading, spacing: 11) {
+                    HStack {
+                        Label("AI barista insight", systemImage: "sparkles")
+                            .font(.headline)
+                        Spacer()
+                        Text("GEMINI")
+                            .font(.caption2.weight(.heavy))
+                            .tracking(1.1)
+                            .foregroundStyle(StudioTheme.mint)
                     }
-                    .padding(14)
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.76))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .buttonStyle(.plain)
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(expanded ? StudioTheme.accent : .white.opacity(0.08), lineWidth: expanded ? 2 : 1)
-        }
     }
 
-    private func scenarioRow(_ number: Int, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text("\(number)")
-                .font(.caption.bold())
-                .foregroundStyle(.black)
-                .frame(width: 25, height: 25)
-                .background(StudioTheme.accent, in: Circle())
-            Text(text)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.76))
+    private func compactMetric(_ title: String, _ value: String) -> some View {
+        VStack(spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(StudioTheme.muted)
+            Text(value)
+                .font(.title3.weight(.semibold).monospacedDigit())
+                .foregroundStyle(StudioTheme.accent)
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var summaryDivider: some View {
+        Rectangle()
+            .fill(.white.opacity(0.08))
+            .frame(width: 1, height: 45)
+    }
+
+    private func pourBar(index: Int, pour: PourStep, width: CGFloat) -> some View {
+        let maxVolume = max(1, recipe.pours.map(\.volume).max() ?? 1)
+        let fraction = CGFloat(pour.volume) / CGFloat(maxVolume)
+        let height = 82 + (78 * fraction)
+
+        return VStack(spacing: 8) {
+            Text("\(pour.volume) ml")
+                .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.82))
+                .lineLimit(1)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [pourTint(index).opacity(0.42), pourTint(index).opacity(0.18)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(pourTint(index))
+                            .frame(height: 3)
+                            .clipShape(Capsule())
+                            .padding(.horizontal, 8)
+                            .padding(.top, 8)
+                    }
+
+                VStack(spacing: 7) {
+                    PourPatternMark(pattern: pour.pattern, color: pourTint(index), size: 30)
+                    Text(patternTitle(pour.pattern))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+
+                if pour.agitationBefore {
+                    agitationMarker("B")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                }
+                if pour.agitationAfter {
+                    agitationMarker("A")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                }
+            }
+            .frame(width: max(48, width - 8), height: height)
+
+            HStack(spacing: 4) {
+                Image(systemName: "thermometer.medium")
+                Text("\(pour.temperature)°C")
+            }
+            .font(.caption.weight(.semibold).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.72))
+
+            Text(index == 0 ? "Bloom" : "Pour \(index + 1)")
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+
+            Label("\(pour.pauseAfter)s rest", systemImage: "pause.fill")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(StudioTheme.muted)
+                .lineLimit(1)
+        }
+        .frame(width: width)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(index == 0 ? "Bloom" : "Pour \(index + 1)"), \(pour.volume) milliliters, \(pour.temperature) degrees, \(patternTitle(pour.pattern)), \(pour.pauseAfter) seconds rest"
+        )
+    }
+
+    private func agitationMarker(_ timing: String) -> some View {
+        VStack(spacing: 1) {
+            Image(systemName: "water.waves")
+                .font(.system(size: 9, weight: .heavy))
+            Text(timing)
+                .font(.system(size: 7, weight: .heavy, design: .rounded))
+        }
+        .foregroundStyle(.black.opacity(0.74))
+        .frame(width: 25, height: 25)
+        .background(StudioTheme.mint, in: Circle())
+        .overlay { Circle().stroke(.black.opacity(0.18), lineWidth: 1) }
+    }
+
+    private func pourTint(_ index: Int) -> Color {
+        let colors: [Color] = [StudioTheme.accent, StudioTheme.mint, AppTheme.crema, .cyan, .indigo]
+        return colors[index % colors.count]
     }
 
     private func patternTitle(_ pattern: PourPattern) -> String {

@@ -1,20 +1,22 @@
 # xBloom Native
 
 A local-first iPhone companion for xBloom Studio. The app uses SwiftUI,
-SwiftData, Core Bluetooth, and a user-supplied Gemini API key. It does not run
-or connect to an xBloom application server.
+SwiftData, Core Bluetooth, and a private Supabase account for durable sync.
+Gemini requests run through an authenticated Supabase Edge Function so the
+provider key is never shipped in the mobile app.
 
 ## Current implementation
 
 - Native five-tab SwiftUI interface.
-- Local beans, inventory, recipes, and brew history using SwiftData.
+- Offline-first beans, inventory, recipes, and brew history using SwiftData.
+- Authenticated Supabase backup and multi-device synchronization.
+- Row Level Security that isolates every user's cloud records.
 - Recipe editor and deterministic machine-safety validation.
 - Direct Core Bluetooth discovery, connection, telemetry, recipe transmission,
   execution, and stop commands.
 - PyBloom-compatible CRC, packet framing, recipe encoding, pour chunking, and
   brew command ordering.
-- Gemini API key storage in iOS Keychain.
-- Gemini coffee-bag photo import and structured recipe generation service.
+- Server-side Gemini coffee-bag import and structured recipe generation.
 - Swift Charts brew telemetry views.
 
 ## Requirements
@@ -23,10 +25,11 @@ or connect to an xBloom application server.
 - iOS 17 or later on the target iPhone.
 - An Apple ID configured in Xcode for device signing.
 - Bluetooth enabled on the iPhone.
-- A Gemini API key for AI features only.
+- A Supabase account created from the app for cloud sync and AI features.
 
-The app continues to provide its library, history, recipe editor, and Bluetooth
-features without Gemini or an internet connection.
+The app continues to provide its on-device library, history, recipe editor, and
+Bluetooth features without an internet connection. Sync and AI resume when the
+device reconnects.
 
 ## Open and run
 

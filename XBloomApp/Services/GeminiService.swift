@@ -5,7 +5,7 @@ import XBloomCore
 @MainActor
 @Observable
 final class GeminiService {
-    static let apiKeyAccount = "gemini-api-key"
+    private let cloud: SupabaseService
 
     private static let professionalV60Brief = """
     Work as a competition-aware specialty-coffee barista dialing in a V60-style
@@ -68,20 +68,13 @@ final class GeminiService {
         didSet { UserDefaults.standard.set(model, forKey: "geminiModel") }
     }
 
-    init() {
+    init(cloud: SupabaseService) {
+        self.cloud = cloud
         model = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-3.6-flash"
     }
 
     var hasAPIKey: Bool {
-        !(KeychainStore.string(for: Self.apiKeyAccount) ?? "").isEmpty
-    }
-
-    func saveAPIKey(_ key: String) throws {
-        try KeychainStore.set(key.trimmingCharacters(in: .whitespacesAndNewlines), for: Self.apiKeyAccount)
-    }
-
-    func removeAPIKey() {
-        KeychainStore.remove(Self.apiKeyAccount)
+        cloud.isAuthenticated
     }
 
     func testConnection() async throws {
@@ -89,7 +82,7 @@ final class GeminiService {
             "contents": [["role": "user", "parts": [["text": "Reply with the single word OK."]]]],
             "generationConfig": ["temperature": 0],
         ]
-        _ = try await request(body: body)
+        _ = try await request(body: body, action: "testConnection")
     }
 
     func importBean(images: [(data: Data, mimeType: String)]) async throws -> BeanPhotoResult {
@@ -118,7 +111,10 @@ final class GeminiService {
                 "responseJsonSchema": BeanPhotoResult.schema,
             ],
         ]
-        return try decodeModelResponse(try await request(body: body), as: BeanPhotoResult.self)
+        return try decodeModelResponse(
+            try await request(body: body, action: "importBean"),
+            as: BeanPhotoResult.self
+        )
     }
 
     func generateRecipe(
@@ -164,7 +160,10 @@ final class GeminiService {
                 "responseJsonSchema": AIRecipeResult.schema,
             ],
         ]
-        return try decodeModelResponse(try await request(body: body), as: AIRecipeResult.self)
+        return try decodeModelResponse(
+            try await request(body: body, action: "generateRecipe"),
+            as: AIRecipeResult.self
+        )
     }
 
     func enhanceRecipe(
@@ -244,30 +243,17 @@ final class GeminiService {
                 "responseJsonSchema": AIRecipeResult.schema,
             ],
         ]
-        return try decodeModelResponse(try await request(body: body), as: AIRecipeResult.self)
+        return try decodeModelResponse(
+            try await request(body: body, action: "enhanceRecipe"),
+            as: AIRecipeResult.self
+        )
     }
 
-    private func request(body: [String: Any]) async throws -> Data {
-        guard let key = KeychainStore.string(for: Self.apiKeyAccount), !key.isEmpty else {
+    private func request(body: [String: Any], action: String) async throws -> Data {
+        guard cloud.isAuthenticated else {
             throw GeminiError.missingAPIKey
         }
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent") else {
-            throw GeminiError.invalidResponse
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
-        request.timeoutInterval = 75
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw GeminiError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONDecoder().decode(GeminiAPIError.self, from: data).error.message)
-            throw GeminiError.api(message ?? "Gemini returned HTTP \(http.statusCode).")
-        }
-        return data
+        return try await cloud.invokeAI(action: action, model: model, body: body)
     }
 
     private func decodeModelResponse<T: Decodable>(_ data: Data, as type: T.Type) throws -> T {
@@ -460,7 +446,7 @@ enum GeminiError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingAPIKey: "Add your Gemini API key in Settings."
+        case .missingAPIKey: "Sign in to Supabase in Settings to use Gemini."
         case .missingImages: "Add at least one clear photo of the coffee bag."
         case .imagesTooLarge: "The selected photos are too large. Choose smaller images and try again."
         case .invalidResponse: "Gemini returned an invalid response."

@@ -129,6 +129,7 @@ final class StoredBrew {
     var coffeeWeight: Double?
     var steps: Int?
     var payload: Data
+    var updatedAt: Date?
     @Transient private var cachedPayload: Data?
     @Transient private var cachedEntry: BrewHistoryEntry?
 
@@ -149,6 +150,7 @@ final class StoredBrew {
         coffeeWeight = entry.coffeeWeight
         steps = entry.steps
         payload = (try? Self.encoder.encode(entry)) ?? Data()
+        updatedAt = Date()
     }
 
     var entry: BrewHistoryEntry? {
@@ -175,6 +177,7 @@ final class StoredBrew {
         coffeeWeight = entry.coffeeWeight
         steps = entry.steps
         payload = (try? Self.encoder.encode(entry)) ?? payload
+        updatedAt = Date()
         cachedPayload = payload
         cachedEntry = entry
     }
@@ -209,14 +212,77 @@ final class StoredBrew {
     }()
 }
 
+@Model
+final class CloudSyncMetadata {
+    @Attribute(.unique) var id: String
+    var userID: String
+    var knownBeanIDs: Data
+    var knownRecipeIDs: Data
+    var knownBrewIDs: Data
+    var lastSyncedAt: Date?
+
+    init(userID: UUID) {
+        id = "cloud-sync"
+        self.userID = userID.uuidString
+        knownBeanIDs = Data()
+        knownRecipeIDs = Data()
+        knownBrewIDs = Data()
+    }
+
+    func knownIDs(for kind: CloudRecordKind) -> Set<UUID> {
+        let data: Data
+        switch kind {
+        case .bean: data = knownBeanIDs
+        case .recipe: data = knownRecipeIDs
+        case .brew: data = knownBrewIDs
+        }
+        return (try? JSONDecoder().decode(Set<UUID>.self, from: data)) ?? []
+    }
+
+    func setKnownIDs(_ ids: Set<UUID>, for kind: CloudRecordKind) {
+        let data = (try? JSONEncoder().encode(ids)) ?? Data()
+        switch kind {
+        case .bean: knownBeanIDs = data
+        case .recipe: knownRecipeIDs = data
+        case .brew: knownBrewIDs = data
+        }
+    }
+}
+
+enum CloudRecordKind {
+    case bean
+    case recipe
+    case brew
+}
+
 @MainActor
 enum LocalLibrary {
+    private static let didSeedDefaultRecipesKey = "localLibrary.didSeedDefaultRecipes"
+
     static func seedIfNeeded(in context: ModelContext) throws {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: didSeedDefaultRecipesKey) else { return }
+
         var descriptor = FetchDescriptor<StoredRecipe>()
         descriptor.fetchLimit = 1
-        guard try context.fetch(descriptor).isEmpty else { return }
+        if !(try context.fetch(descriptor)).isEmpty {
+            defaults.set(true, forKey: didSeedDefaultRecipesKey)
+            return
+        }
+
+        var metadataDescriptor = FetchDescriptor<CloudSyncMetadata>()
+        metadataDescriptor.fetchLimit = 1
+        if let metadata = try context.fetch(metadataDescriptor).first,
+           !metadata.knownIDs(for: .recipe).isEmpty {
+            // An empty library with known cloud IDs means the user deleted every
+            // recipe. Do not recreate the bundled samples on the next launch.
+            defaults.set(true, forKey: didSeedDefaultRecipesKey)
+            return
+        }
+
         RecipeLibrary.defaults.forEach { context.insert(StoredRecipe(recipe: $0)) }
         try context.save()
+        defaults.set(true, forKey: didSeedDefaultRecipesKey)
     }
 
     static func backfillIndexedMetadata(in context: ModelContext) async throws {

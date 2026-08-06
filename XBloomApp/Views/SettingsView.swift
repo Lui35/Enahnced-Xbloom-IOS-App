@@ -5,11 +5,15 @@ import UniformTypeIdentifiers
 import XBloomCore
 
 struct SettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(SupabaseService.self) private var cloud
     @Environment(GeminiService.self) private var gemini
-    @State private var apiKey = ""
+    @State private var email = ""
+    @State private var password = ""
     @State private var model = ""
     @State private var statusMessage: String?
     @State private var isTesting = false
+    @State private var isAuthenticating = false
     @State private var testTask: Task<Void, Never>?
 
     var body: some View {
@@ -32,66 +36,96 @@ struct SettingsView: View {
 
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            AppSectionHeader(title: "Gemini intelligence", subtitle: "Bean import and recipe creation")
+                            AppSectionHeader(
+                                title: "Cloud & Gemini",
+                                subtitle: "Supabase backup and server-side AI"
+                            )
                             Spacer()
                             StatusPill(
-                                title: gemini.hasAPIKey ? "Ready" : "Setup",
-                                color: gemini.hasAPIKey ? AppTheme.sage : .orange,
-                                systemImage: gemini.hasAPIKey ? "checkmark.circle.fill" : "key.fill"
+                                title: cloud.isAuthenticated ? "Connected" : "Setup",
+                                color: cloud.isAuthenticated ? AppTheme.sage : .orange,
+                                systemImage: cloud.isAuthenticated ? "checkmark.circle.fill" : "icloud.slash"
                             )
                         }
 
-                        VStack(spacing: 10) {
+                        if cloud.isAuthenticated {
+                            Label(cloud.email ?? "Supabase account", systemImage: "person.crop.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+
                             HStack {
-                                Image(systemName: "key.fill").foregroundStyle(.secondary)
-                                SecureField(gemini.hasAPIKey ? "API key saved — enter to replace" : "Gemini API key", text: $apiKey)
+                                Image(systemName: "cpu").foregroundStyle(.secondary)
+                                TextField("Gemini model", text: $model)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                            }
+                            .padding(13)
+                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
+
+                            HStack {
+                                Button("Save model") {
+                                    gemini.model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    statusMessage = "Model preference saved."
+                                }
+                                Button {
+                                    testGemini()
+                                } label: {
+                                    Label(isTesting ? "Testing…" : "Test AI", systemImage: "network")
+                                }
+                                .disabled(isTesting)
+                                Spacer()
+                                Button("Sign out", role: .destructive) {
+                                    Task { await signOut() }
+                                }
+                            }
+                            .font(.subheadline.weight(.semibold))
+
+                            Button {
+                                Task { await syncNow() }
+                            } label: {
+                                Label(
+                                    cloud.isSyncing ? "Syncing…" : "Sync now",
+                                    systemImage: "arrow.triangle.2.circlepath"
+                                )
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(PrimaryActionButtonStyle())
+                            .disabled(cloud.isSyncing)
+                        } else {
+                            VStack(spacing: 10) {
+                                TextField("Email", text: $email)
+                                    .textContentType(.emailAddress)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                SecureField("Password (8+ characters)", text: $password)
                                     .textContentType(.password)
                             }
                             .padding(13)
                             .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
 
                             HStack {
-                                Image(systemName: "cpu").foregroundStyle(.secondary)
-                                TextField("Model", text: $model)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
+                                Button("Sign in") {
+                                    Task { await authenticate(createAccount: false) }
+                                }
+                                .buttonStyle(PrimaryActionButtonStyle())
+                                Button("Create account") {
+                                    Task { await authenticate(createAccount: true) }
+                                }
+                                .disabled(isAuthenticating)
                             }
-                            .padding(13)
-                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
                         }
-
-                        Button("Save Gemini settings") {
-                            saveGeminiSettings()
-                        }
-                        .buttonStyle(PrimaryActionButtonStyle())
-
-                        HStack {
-                            Button {
-                                testGemini()
-                            } label: {
-                                Label(isTesting ? "Testing…" : "Test connection", systemImage: "network")
-                            }
-                            .disabled(!gemini.hasAPIKey || isTesting)
-
-                            Spacer()
-
-                            Button("Remove key", role: .destructive) {
-                                gemini.removeAPIKey()
-                                statusMessage = "API key removed."
-                            }
-                            .disabled(!gemini.hasAPIKey)
-                        }
-                        .font(.subheadline.weight(.semibold))
 
                         if isTesting { ProgressView().frame(maxWidth: .infinity) }
-                        if let statusMessage {
-                            Text(statusMessage)
+                        if isAuthenticating || cloud.isSyncing {
+                            ProgressView().frame(maxWidth: .infinity)
+                        }
+                        if let message = statusMessage ?? cloud.statusMessage {
+                            Text(message)
                                 .font(.footnote)
-                                .foregroundStyle(statusMessage.contains("succeeded") || statusMessage.contains("securely") ? AppTheme.sage : .secondary)
+                                .foregroundStyle(message.contains("failed") ? .orange : .secondary)
                         }
 
                         Label(
-                            "Your key stays in iOS Keychain. Requests go from this iPhone directly to Gemini.",
+                            "Your library stays on this iPhone and syncs to your private Supabase account. Gemini requests run through an authenticated Edge Function; its API key is never stored in the app.",
                             systemImage: "lock.shield.fill"
                         )
                         .font(.caption)
@@ -180,12 +214,45 @@ struct SettingsView: View {
         .contentShape(Rectangle())
     }
 
-    private func saveGeminiSettings() {
+    private func authenticate(createAccount: Bool) async {
+        guard password.count >= 8 else {
+            statusMessage = "Use a password with at least 8 characters."
+            return
+        }
+        isAuthenticating = true
+        defer { isAuthenticating = false }
         do {
-            if !apiKey.isEmpty { try gemini.saveAPIKey(apiKey) }
-            gemini.model = model.trimmingCharacters(in: .whitespacesAndNewlines)
-            apiKey = ""
-            statusMessage = "Saved securely in Keychain."
+            if createAccount {
+                try await cloud.signUp(
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                    password: password
+                )
+            } else {
+                try await cloud.signIn(
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                    password: password
+                )
+            }
+            password = ""
+            statusMessage = cloud.statusMessage
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    private func signOut() async {
+        do {
+            try await cloud.signOut()
+            statusMessage = cloud.statusMessage
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    private func syncNow() async {
+        do {
+            let summary = try await cloud.sync(in: modelContext)
+            statusMessage = "Synced \(summary.beans) beans, \(summary.recipes) recipes, and \(summary.brews) brews."
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -528,8 +595,8 @@ private struct OnDeviceStorageView: View {
                     .appCard()
 
                     Label(
-                        "Your Gemini key is kept separately in iOS Keychain and is never included in the database size above.",
-                        systemImage: "key.fill"
+                        "Cloud sync keeps a private copy in Supabase while this on-device database remains available offline.",
+                        systemImage: "icloud.and.arrow.up.fill"
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)

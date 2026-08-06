@@ -21,6 +21,17 @@ final class BrewLiveActivityManager {
         lastPour = existing.content.state.currentPour
     }
 
+    func endSimulationActivities() async {
+        for existing in Activity<BrewActivityAttributes>.activities
+        where existing.attributes.machineName == "Brew preview" {
+            await existing.end(nil, dismissalPolicy: .immediate)
+        }
+        if activity?.attributes.machineName == "Brew preview" {
+            activity = nil
+            resetUpdateTracking()
+        }
+    }
+
     func start(recipe: Recipe, machineName: String, initialState: BrewActivityAttributes.ContentState) async {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
@@ -67,5 +78,12 @@ final class BrewLiveActivityManager {
             dismissalPolicy: success ? .after(Date().addingTimeInterval(90)) : .default
         )
         self.activity = nil
+        resetUpdateTracking()
+    }
+
+    private func resetUpdateTracking() {
+        lastUpdateAt = .distantPast
+        lastPhase = nil
+        lastPour = -1
     }
 }

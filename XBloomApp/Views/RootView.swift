@@ -36,6 +36,7 @@ struct RootView: View {
         .tint(AppTheme.coffee)
         .preferredColorScheme(.dark)
         .task {
+            await BrewLiveActivityManager.shared.endSimulationActivities()
             do {
                 try LocalLibrary.seedIfNeeded(in: modelContext)
                 #if DEBUG

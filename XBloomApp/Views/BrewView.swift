@@ -138,11 +138,15 @@ final class BrewSessionCoordinator {
     }
 
     func dismiss() {
+        let dismissedMode = presentation?.mode
         presentation = nil
         persistenceRevision += 1
         defaults.removeObject(forKey: persistenceKey)
         let revision = persistenceRevision
         Task { await persistenceStore.clear(revision: revision) }
+        if dismissedMode == .simulation {
+            Task { await BrewLiveActivityManager.shared.endSimulationActivities() }
+        }
     }
 
     private func persist(_ presentation: Presentation) {
