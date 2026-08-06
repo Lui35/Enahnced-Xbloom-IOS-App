@@ -181,11 +181,168 @@ import Testing
     #expect(framer.ingest(combined) == [second, first])
 }
 
-@Test func waterTelemetryNormalizesFixedPointFirmwareValues() {
+@Test func waterTelemetryIgnoresImpossibleReadingsInsteadOfRescalingThem() {
     #expect(XBloomProtocol.normalizedWaterVolume(150) == 150)
-    #expect(XBloomProtocol.normalizedWaterVolume(1_500_000) == 150)
+    #expect(XBloomProtocol.normalizedWaterVolume(0) == 0)
+    #expect(XBloomProtocol.normalizedWaterVolume(750) == 750)
+    // Rescaling used to turn 760 into 76 mid-brew, which collapsed the live
+    // figures and latched the display on the pre-collapse value.
+    #expect(XBloomProtocol.normalizedWaterVolume(760) == nil)
+    #expect(XBloomProtocol.normalizedWaterVolume(1_500_000) == nil)
     #expect(XBloomProtocol.normalizedWaterVolume(.infinity) == nil)
     #expect(XBloomProtocol.normalizedWaterVolume(-1) == nil)
+}
+
+@Test func machineInfoReportsTankLevelSeparatelyFromPouredWater() throws {
+    var payload = Data(repeating: 0, count: 40)
+    payload[33] = 1
+    payload[36] = 200
+
+    let frame = XBloomProtocol.rawCommand(.recipeStop, payload: payload)
+    var machineInfo = frame
+    machineInfo[3] = 0x49
+    machineInfo[4] = 0x9E
+    let crc = XBloomProtocol.crc16(machineInfo.dropLast(2))
+    machineInfo[machineInfo.count - 2] = UInt8(crc & 0xFF)
+    machineInfo[machineInfo.count - 1] = UInt8(crc >> 8)
+
+    let telemetry = try XBloomProtocol.parseNotification(machineInfo)
+    #expect(telemetry.lastCommand == 40521)
+    #expect(telemetry.waterLevelOK == true)
+    #expect(telemetry.tankWaterLevel == 200)
+    // The reservoir level must never be mistaken for water poured into the cup.
+    #expect(telemetry.waterVolume == nil)
+}
+
+@Test func extractionTimelineStartsAtTheFirstPour() {
+    let recipe = Recipe(
+        name: "Extraction zero",
+        useGrinder: true,
+        pours: [
+            PourStep(volume: 45, temperature: 93, flowRate: 3, pauseBefore: 5, pauseAfter: 30),
+            PourStep(volume: 90, temperature: 91, flowRate: 3, pauseBefore: 4, pauseAfter: 0),
+        ]
+    )
+    let events = Brewing.extractionEvents(recipe: recipe)
+
+    #expect(events.count == 3)
+    #expect(events[0].title == "Bloom")
+    #expect(events[0].elapsed == 0)
+    #expect(events[1].kind == .rest)
+    #expect(events[1].elapsed == 15)
+    #expect(events[2].title == "P2")
+    #expect(events[2].elapsed == 49)
+    // 15 s bloom + 30 s rest + 4 s lead-in + 30 s second pour.
+    #expect(Brewing.extractionDuration(recipe: recipe) == 79)
+}
+
+@Test func brewProgressStartsExtractionOnlyWhenTheMachineStartsPouring() {
+    var tracker = BrewProgressTracker()
+    let start = Date(timeIntervalSince1970: 1_000)
+
+    tracker.ingest(command: 9000, at: start)
+    tracker.ingest(command: 9003, at: start.addingTimeInterval(1))
+    #expect(tracker.phase == .grinding)
+    #expect(tracker.extractionStartedAt == nil)
+
+    tracker.ingest(command: 40507, at: start.addingTimeInterval(20))
+    tracker.ingest(command: 9001, at: start.addingTimeInterval(22))
+    #expect(tracker.phase == .heating)
+    #expect(!tracker.isExtracting)
+
+    let firstPour = start.addingTimeInterval(35)
+    tracker.ingest(command: 9005, at: firstPour)
+    tracker.ingest(command: 40510, at: firstPour.addingTimeInterval(0.2))
+    #expect(tracker.phase == .blooming)
+    #expect(tracker.extractionStartedAt == firstPour)
+    #expect(tracker.pourIndex == 0)
+}
+
+@Test func brewProgressAdvancesOnePourPerPauseAndResume() {
+    var tracker = BrewProgressTracker()
+    let start = Date(timeIntervalSince1970: 2_000)
+
+    tracker.ingest(command: 9005, at: start)
+    #expect(tracker.pourIndex == 0)
+
+    tracker.ingest(command: 9010, at: start.addingTimeInterval(15))
+    #expect(tracker.phase == .resting)
+    #expect(tracker.pourIndex == 0)
+
+    tracker.ingest(command: 9005, at: start.addingTimeInterval(45))
+    #expect(tracker.phase == .pouring)
+    #expect(tracker.pourIndex == 1)
+
+    // Repeated start notifications inside one pour must not skip ahead.
+    tracker.ingest(command: 40502, at: start.addingTimeInterval(46))
+    #expect(tracker.pourIndex == 1)
+}
+
+@Test func brewerStopOnlyCompletesTheRecipeAfterTheFinalPour() {
+    var tracker = BrewProgressTracker()
+    let start = Date(timeIntervalSince1970: 3_000)
+    tracker.ingest(command: 9005, at: start)
+    tracker.ingest(command: 40511, at: start.addingTimeInterval(15))
+
+    tracker.confirmCompletionIfSettled(
+        at: start.addingTimeInterval(60),
+        finalPourDelivered: false
+    )
+    #expect(tracker.completedAt == nil)
+
+    // A later start belongs to the next pour, not to a finished recipe.
+    tracker.ingest(command: 9005, at: start.addingTimeInterval(45))
+    #expect(tracker.pourIndex == 1)
+    #expect(tracker.completedAt == nil)
+
+    tracker.ingest(command: 40511, at: start.addingTimeInterval(80))
+    tracker.confirmCompletionIfSettled(
+        at: start.addingTimeInterval(84),
+        finalPourDelivered: true
+    )
+    #expect(tracker.completedAt == nil)
+
+    tracker.confirmCompletionIfSettled(
+        at: start.addingTimeInterval(90),
+        finalPourDelivered: true
+    )
+    #expect(tracker.completedAt == start.addingTimeInterval(90))
+    #expect(tracker.phase == .complete)
+}
+
+@Test func deliveryTrackerRejectsJumpsFasterThanTheMachineCanPour() {
+    var tracker = BrewDeliveryTracker(
+        target: 250,
+        maximumRate: 3.5,
+        allowsCounterReset: true
+    )
+    let start = Date(timeIntervalSince1970: 4_000)
+    tracker.seedBaseline(0, at: start)
+
+    #expect(tracker.ingest(rawValue: 6, at: start.addingTimeInterval(2)) == 6)
+
+    // A reservoir reading misread as poured water used to latch the display at
+    // the final pour; it can now only advance at a believable pour rate.
+    let afterBogusReading = tracker.ingest(rawValue: 200, at: start.addingTimeInterval(2.5))
+    #expect(afterBogusReading < 20)
+
+    // Real readings still catch up rather than being rejected as regressions.
+    let recovered = tracker.ingest(rawValue: 40, at: start.addingTimeInterval(14))
+    #expect(recovered == 40)
+}
+
+@Test func deliveryTrackerRebasesWhenTheMachineZeroesItsCounter() {
+    var tracker = BrewDeliveryTracker(
+        target: 250,
+        maximumRate: 4,
+        allowsCounterReset: true
+    )
+    let start = Date(timeIntervalSince1970: 5_000)
+    // The previous brew's total is still on the counter when this one starts.
+    tracker.seedBaseline(240, at: start)
+
+    #expect(tracker.ingest(rawValue: 0, at: start.addingTimeInterval(1)) == 0)
+    #expect(tracker.ingest(rawValue: 30, at: start.addingTimeInterval(12)) == 30)
 }
 
 @Test func olderSavedRecipesDecodeWithoutEnhancementLineage() throws {

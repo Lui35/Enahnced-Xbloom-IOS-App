@@ -146,6 +146,32 @@ public enum Brewing {
         return events
     }
 
+    /// The same pour and rest boundaries, but measured from the moment the
+    /// machine starts the first pour rather than from the moment the recipe was
+    /// sent. Live telemetry cannot know how long grinding and heating will take
+    /// on any given morning, so charts that mix machine readings with recipe
+    /// markers have to share this zero or the markers drift away from the data.
+    public static func extractionEvents(recipe: Recipe) -> [BrewTimelineEvent] {
+        let events = timelineEvents(recipe: recipe, grindingDuration: 0, heatingDuration: 0)
+        guard let first = events.first else { return [] }
+        return events.map { event in
+            var shifted = event
+            shifted.elapsed = max(0, event.elapsed - first.elapsed)
+            return shifted
+        }
+    }
+
+    /// How long the pours themselves should take, from the start of the first
+    /// pour to the end of the last rest. Grinding and heating are excluded.
+    public static func extractionDuration(recipe: Recipe) -> TimeInterval {
+        recipe.pours.enumerated().reduce(0.0) { total, element in
+            let (index, pour) = element
+            let leadIn = index == 0 ? 0 : Double(max(0, pour.pauseBefore))
+            let pourTime = Double(max(0, pour.volume)) / max(0.1, pour.flowRate)
+            return total + leadIn + pourTime + Double(max(0, pour.pauseAfter))
+        }
+    }
+
     public static func deductDose(_ dose: Double, from bean: BeanProfile) -> BeanProfile {
         var result = bean
         result.remainingWeightGrams = max(0, bean.remainingWeightGrams - max(0, dose))

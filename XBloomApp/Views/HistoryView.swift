@@ -229,11 +229,9 @@ struct BrewHistoryDetailView: View {
 
     private var telemetryTimelineEvents: [BrewTimelineEvent] {
         guard let recipe = originalRecipe else { return [] }
-        return Brewing.timelineEvents(
-            recipe: recipe,
-            grindingDuration: recipe.useGrinder ? 22 : 0,
-            heatingDuration: recipe.useGrinder ? 13 : 15
-        )
+        // Saved samples are timestamped from the first pour, so the markers use
+        // the same zero rather than the grinding-and-heating estimate.
+        return Brewing.extractionEvents(recipe: recipe)
     }
 
     private var telemetryPourEvents: [BrewTimelineEvent] {

@@ -28,7 +28,11 @@ public struct XBloomTelemetry: Equatable, Sendable {
     public var state: XBloomMachineState
     public var weight: Double?
     public var temperature: Double?
+    /// Water the machine reports having poured during the current program.
     public var waterVolume: Double?
+    /// How much water is left in the reservoir. This is a completely different
+    /// quantity from `waterVolume` and must never be mixed into brew progress.
+    public var tankWaterLevel: Double?
     public var waterLevelOK: Bool?
     public var lastCommand: UInt16?
 
@@ -37,6 +41,7 @@ public struct XBloomTelemetry: Equatable, Sendable {
         weight: Double? = nil,
         temperature: Double? = nil,
         waterVolume: Double? = nil,
+        tankWaterLevel: Double? = nil,
         waterLevelOK: Bool? = nil,
         lastCommand: UInt16? = nil
     ) {
@@ -44,6 +49,7 @@ public struct XBloomTelemetry: Equatable, Sendable {
         self.weight = weight
         self.temperature = temperature
         self.waterVolume = waterVolume
+        self.tankWaterLevel = tankWaterLevel
         self.waterLevelOK = waterLevelOK
         self.lastCommand = lastCommand
     }
@@ -182,9 +188,10 @@ public enum XBloomProtocol {
         case 40517, 40522, 8203, 8204:
             result.state = .error
         case 40521:
-            if packet.count > 45 {
+            if packet.count > 46 {
                 result.waterLevelOK = packet[43] == 1
-                result.waterVolume = Double(packet[46])
+                // Reservoir contents, not the amount poured into the dripper.
+                result.tankWaterLevel = Double(packet[46])
             }
         default:
             break
@@ -192,18 +199,22 @@ public enum XBloomProtocol {
         return result
     }
 
-    /// xBloom firmware variants have emitted the cumulative water counter with
-    /// different decimal scaling. A Studio recipe cannot deliver more than
-    /// 500 ml, so progressively remove fixed-point decades while preserving
-    /// normal milliliter values. Non-finite and impossible values are ignored.
+    /// The largest poured volume a Studio recipe can plausibly report.
+    public static let maximumPlausibleWaterVolume: Double = 750
+
+    /// Accepts the machine's poured-water counter only when it is a possible
+    /// milliliter figure.
+    ///
+    /// This used to divide the reading by ten until it fell under the limit, on
+    /// the theory that some firmware scales the counter. That rescaling fired
+    /// mid-brew — 740 stayed 740 while the next reading of 760 became 76 — and
+    /// the monotonic live figures then latched onto the pre-collapse value and
+    /// jumped to the final pour. An out-of-range reading is now simply ignored,
+    /// so a single odd frame costs one sample instead of the whole session.
     public static func normalizedWaterVolume(_ rawValue: Double) -> Double? {
-        guard rawValue.isFinite, rawValue >= 0 else { return nil }
-        var value = rawValue
-        while value > 750 {
-            value /= 10
-        }
-        guard value.isFinite, (0...750).contains(value) else { return nil }
-        return value
+        guard rawValue.isFinite,
+              (0...maximumPlausibleWaterVolume).contains(rawValue) else { return nil }
+        return rawValue
     }
 
     private static func vibrationByte(for pour: PourStep) -> UInt8 {

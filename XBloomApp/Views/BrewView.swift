@@ -527,8 +527,13 @@ struct BrewSessionView: View {
     @State private var lastSampleAt: TimeInterval = -.infinity
     @State private var weightBaseline: Double?
     @State private var waterBaseline: Double?
-    @State private var lastRawWater: Double?
     @State private var reconnectAttempted = false
+    @State private var waterTracker: BrewDeliveryTracker
+    @State private var weightTracker: BrewDeliveryTracker
+    /// Highest pour the machine's own events have reached. Kept separately so a
+    /// reconnect, which clears the machine-side tracker, cannot rewind the UI.
+    @State private var machinePourIndex = 0
+    @State private var liveTicker: Task<Void, Never>?
 
     init(
         recipe: Recipe,
@@ -561,6 +566,25 @@ struct BrewSessionView: View {
         self.restoredExtractionStartedAt = restoredExtractionStartedAt
         self.restoredExtractionElapsed = restoredExtractionElapsed
         _chartSamples = State(initialValue: Self.makeChartSamples(restoredSamples ?? []))
+
+        // The machine cannot pour faster than the recipe's quickest pour, so
+        // that rate is the ceiling used to reject impossible telemetry jumps.
+        let maximumFlowRate = recipe.pours.map(\.flowRate).max() ?? 3
+        _waterTracker = State(
+            initialValue: BrewDeliveryTracker(
+                target: Double(recipe.totalWater),
+                maximumRate: maximumFlowRate,
+                allowsCounterReset: true
+            )
+        )
+        _weightTracker = State(
+            initialValue: BrewDeliveryTracker(
+                target: max(1, Double(recipe.totalWater) - recipe.dose * 2),
+                maximumRate: maximumFlowRate,
+                allowsCounterReset: false,
+                headroom: 80
+            )
+        )
     }
 
     private var estimatedDuration: TimeInterval {
@@ -577,7 +601,7 @@ struct BrewSessionView: View {
     }
 
     private var estimatedExtractionDuration: TimeInterval {
-        max(0, estimatedDuration - firstPourProgramStart)
+        Brewing.extractionDuration(recipe: recipe)
     }
 
     private var simulationWallDuration: TimeInterval {
@@ -589,12 +613,11 @@ struct BrewSessionView: View {
         return estimatedDuration / simulationWallDuration
     }
 
+    /// Markers share the chart's zero: the start of the first pour. Grinding and
+    /// heating take an unpredictable amount of time, so anchoring the chart to
+    /// the moment the recipe was sent pushed every marker away from the data.
     private var chartTimelineEvents: [BrewTimelineEvent] {
-        Brewing.timelineEvents(
-            recipe: recipe,
-            grindingDuration: recipe.useGrinder ? 22 : 0,
-            heatingDuration: recipe.useGrinder ? 13 : 15
-        )
+        Brewing.extractionEvents(recipe: recipe)
     }
 
     private var chartPourEvents: [BrewTimelineEvent] {
@@ -602,7 +625,7 @@ struct BrewSessionView: View {
     }
 
     private var chartDuration: TimeInterval {
-        max(1, max(estimatedDuration, chartSamples.last?.elapsed ?? 0))
+        max(1, max(estimatedExtractionDuration, chartSamples.last?.elapsed ?? 0))
     }
 
     private var activePour: PourStep? {
@@ -655,7 +678,7 @@ struct BrewSessionView: View {
                     liveMetrics
                     if let activePour, [.blooming, .pouring, .resting].contains(currentPhase) {
                         activePourCard(activePour)
-                    } else if mode == .simulation && !finished {
+                    } else if !finished {
                         preparationCard
                     }
                     extractionChart
@@ -692,19 +715,27 @@ struct BrewSessionView: View {
         }
         .interactiveDismissDisabled(isSessionLocked)
         .task { await launchSession() }
+        .onDisappear {
+            liveTicker?.cancel()
+            liveTicker = nil
+        }
         .onChange(of: machine.telemetry) {
             guard mode == .live else { return }
             captureTelemetry()
         }
+        .onChange(of: machine.brewProgress) {
+            guard mode == .live, hasStarted, !finished else { return }
+            adoptMachineProgress()
+            appendLiveSampleIfNeeded()
+            finishIfMachineReportsCompletion()
+        }
         .onChange(of: machine.connectionState) { _, state in
             guard mode == .live, hasStarted, !finished else { return }
+            reconnectAttempted = false
             if state == .connected {
-                reconnectAttempted = false
-                stage = "Reconnected · waiting for machine"
                 captureTelemetry()
-            } else if state == .disconnected || state == .unavailable {
-                reconnectAttempted = false
-                stage = "Live brew continues · reconnect to monitor"
+            } else {
+                stage = liveStageTitle
             }
         }
         .alert("Brew error", isPresented: .constant(errorMessage != nil)) {
@@ -1004,7 +1035,11 @@ struct BrewSessionView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Extraction curve")
                             .font(.headline.weight(.bold))
-                        Text("Normalized progress · \(samples.count) readings saved")
+                        Text(
+                            extractionStartedAt == nil
+                                ? "Begins when the machine starts the first pour"
+                                : "From the first pour · \(samples.count) readings saved"
+                        )
                             .font(.caption)
                             .foregroundStyle(StudioTheme.muted)
                     }
@@ -1078,6 +1113,19 @@ struct BrewSessionView: View {
                 .frame(height: 210)
                 .chartXScale(domain: 0...chartDuration)
                 .chartYScale(domain: 0...100)
+                .overlay {
+                    if chartSamples.isEmpty {
+                        Text(
+                            mode == .live
+                                ? "Waiting for the machine to finish grinding and heating"
+                                : "Waiting for the first pour"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(StudioTheme.muted)
+                        .padding(.horizontal, 24)
+                    }
+                }
                 .chartYAxis {
                     AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
                         AxisGridLine()
@@ -1227,19 +1275,23 @@ struct BrewSessionView: View {
             elapsed = max(0, Date().timeIntervalSince(resumedAt))
             weightBaseline = restoredWeightBaseline
             waterBaseline = restoredWaterBaseline
-            lastRawWater = machine.telemetry.waterVolume
             water = restoredWater ?? 0
             weight = restoredWeight ?? 0
+            waterTracker.restore(delivered: water, baseline: restoredWaterBaseline)
+            weightTracker.restore(delivered: weight, baseline: restoredWeightBaseline)
             temperature = restoredTemperature
             activePourIndex = restoredActivePourIndex ?? 0
+            machinePourIndex = activePourIndex
             currentPhase = restoredPhase ?? .preparing
             samples = restoredSamples ?? []
+            lastSampleAt = samples.last?.elapsed ?? -.infinity
             refreshChartIfNeeded(force: true)
             extractionStartedAt = restoredExtractionStartedAt
             extractionElapsed = restoredExtractionElapsed ?? 0
             progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
             stage = machine.isConnected ? "Restoring live extraction" : "Reconnecting to active brew"
             await BrewLiveActivityManager.shared.resumeExisting()
+            startLiveTicker()
             if machine.isConnected {
                 captureTelemetry()
             } else {
@@ -1254,12 +1306,14 @@ struct BrewSessionView: View {
         if mode == .live {
             weightBaseline = machine.telemetry.weight
             waterBaseline = machine.telemetry.waterVolume
-            lastRawWater = waterBaseline
+            waterTracker.seedBaseline(waterBaseline, at: sessionStartedAt)
+            weightTracker.seedBaseline(weightBaseline, at: sessionStartedAt)
             brewSession.markStarted(
                 at: sessionStartedAt,
                 weightBaseline: weightBaseline,
                 waterBaseline: waterBaseline
             )
+            startLiveTicker()
         }
         await BrewLiveActivityManager.shared.start(
             recipe: recipe,
@@ -1284,7 +1338,7 @@ struct BrewSessionView: View {
         stage = recipe.useGrinder ? "Sending grinder program" : "Sending brew program"
         do {
             try await machine.startBrew(recipe)
-            stage = machine.telemetry.state.rawValue.capitalized
+            adoptMachineProgress()
         } catch XBloomBLEClient.MachineError.noMachineResponse {
             // The execute command may have succeeded even when the expected
             // acknowledgement was missed. Keep observing instead of abandoning
@@ -1324,11 +1378,20 @@ struct BrewSessionView: View {
             currentPhase = estimate.phase
             stage = stageTitle(for: estimate.phase)
             extractionElapsed = max(0, elapsed - firstPourProgramStart)
-            if extractionElapsed > 0, extractionStartedAt == nil {
-                extractionStartedAt = Date()
+            // The preview charts the same window a live brew does: nothing is
+            // plotted until the first pour begins.
+            if extractionElapsed > 0 {
+                if extractionStartedAt == nil { extractionStartedAt = Date() }
+                samples.append(
+                    BrewSample(
+                        elapsed: extractionElapsed,
+                        water: water,
+                        coffeeWeight: weight,
+                        temperature: temperature
+                    )
+                )
+                refreshChartIfNeeded()
             }
-            samples.append(BrewSample(elapsed: elapsed, water: water, coffeeWeight: weight, temperature: temperature))
-            refreshChartIfNeeded()
             await BrewLiveActivityManager.shared.update(
                 activityState(phase: estimate.phase),
                 force: estimate.phase == .complete
@@ -1359,50 +1422,38 @@ struct BrewSessionView: View {
         )
     }
 
-    private func captureTelemetry() {
+    /// Drives the live session on its own clock so the display keeps moving
+    /// through a long bloom rest, when the machine sends nothing at all.
+    @MainActor
+    private func startLiveTicker() {
+        liveTicker?.cancel()
+        liveTicker = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled, mode == .live, !finished else { return }
+                tickLiveSession()
+            }
+        }
+    }
+
+    @MainActor
+    private func tickLiveSession() {
         guard let startedAt else { return }
         elapsed = Date().timeIntervalSince(startedAt)
+        adoptMachineProgress()
+        appendLiveSampleIfNeeded()
+        persistSessionSnapshot()
+        Task {
+            await BrewLiveActivityManager.shared.update(activityState(phase: currentPhase))
+        }
+        machine.confirmBrewCompletionIfSettled(finalPourDelivered: finalPourDelivered)
+        finishIfMachineReportsCompletion()
+    }
 
-        if machine.telemetry.state == .disconnected, !finished {
-            stage = "Reconnecting to active brew"
-            if !reconnectAttempted {
-                reconnectAttempted = true
-                machine.connect(resumingBrew: true)
-            }
-            return
-        }
-
-        if let rawWater = machine.telemetry.waterVolume {
-            water = sanitizedWater(rawWater)
-        }
-        if let rawWeight = machine.telemetry.weight {
-            weight = sanitizedCollectedWeight(rawWeight)
-        }
-        if let rawTemperature = machine.telemetry.temperature,
-           rawTemperature.isFinite,
-           (0...110).contains(rawTemperature) {
-            temperature = rawTemperature
-        }
-        var machinePhase = liveActivityPhase
-        currentPhase = machinePhase
-        if machinePhase == .blooming || machinePhase == .pouring || machinePhase == .resting {
-            if extractionStartedAt == nil, water > 0.5 {
-                extractionStartedAt = Date()
-            }
-            if let extractionStartedAt {
-                extractionElapsed = max(0, Date().timeIntervalSince(extractionStartedAt))
-            }
-            progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
-            updateActivePour(for: water)
-            machinePhase = liveActivityPhase
-            currentPhase = machinePhase
-        } else if machinePhase != .complete {
-            // Grinder and heater telemetry is preparation, not pour time.
-            progress = 0
-            activePourIndex = 0
-        }
-        stage = liveStageTitle
-        appendLiveSampleIfNeeded(force: machine.telemetry.state == .complete)
+    /// The store throttles itself, so calling this from the ticker keeps the
+    /// restore point current through quiet stretches when the machine sends
+    /// nothing — including the moment extraction actually began.
+    private func persistSessionSnapshot() {
         brewSession.updateSnapshot(
             waterBaseline: waterBaseline,
             water: water,
@@ -1414,25 +1465,127 @@ struct BrewSessionView: View {
             extractionStartedAt: extractionStartedAt,
             extractionElapsed: extractionElapsed
         )
+    }
+
+    private func captureTelemetry() {
+        guard let startedAt, !finished else { return }
+        elapsed = Date().timeIntervalSince(startedAt)
+
+        if machine.telemetry.state == .disconnected {
+            stage = liveStageTitle
+            if !reconnectAttempted {
+                reconnectAttempted = true
+                machine.connect(resumingBrew: true)
+            }
+            return
+        }
+
+        let readingTime = Date()
+        if let rawWater = machine.telemetry.waterVolume {
+            water = waterTracker.ingest(rawValue: rawWater, at: readingTime)
+            waterBaseline = waterTracker.currentBaseline
+        }
+        if let rawWeight = machine.telemetry.weight {
+            weight = weightTracker.ingest(rawValue: rawWeight, at: readingTime)
+            weightBaseline = weightTracker.currentBaseline
+        }
+        if let rawTemperature = machine.telemetry.temperature,
+           rawTemperature.isFinite,
+           (0...110).contains(rawTemperature) {
+            temperature = rawTemperature
+        }
+
+        adoptMachineProgress()
+        appendLiveSampleIfNeeded(force: machine.brewProgress.completedAt != nil)
+        persistSessionSnapshot()
         Task {
             await BrewLiveActivityManager.shared.update(
-                activityState(phase: machinePhase),
-                force: machine.telemetry.state == .complete
+                activityState(phase: currentPhase),
+                force: currentPhase == .complete
             )
         }
 
-        if machine.telemetry.state == .error, !finished, errorMessage == nil {
+        if machine.telemetry.state == .error, errorMessage == nil {
             errorMessage = machine.lastError
                 ?? "The xBloom reported a machine error. The app kept your extraction record; check the machine display before stopping anything."
         }
 
-        guard machine.telemetry.state == .complete, !recordedCompletion else { return }
+        machine.confirmBrewCompletionIfSettled(finalPourDelivered: finalPourDelivered)
+        finishIfMachineReportsCompletion()
+    }
+
+    /// Folds the machine's reported lifecycle into the session's own state.
+    /// Everything here only ever moves forward, so a dropped connection or a
+    /// missed notification cannot rewind the pour count or the clock.
+    @MainActor
+    private func adoptMachineProgress() {
+        guard mode == .live, !finished else { return }
+        let machineProgress = machine.brewProgress
+
+        if extractionStartedAt == nil, let machineStart = machineProgress.extractionStartedAt {
+            extractionStartedAt = machineStart
+            lastSampleAt = -.infinity
+        }
+        if machineProgress.hasObservedPourEvents {
+            machinePourIndex = max(machinePourIndex, machineProgress.pourIndex)
+        }
+
+        if let extractionStartedAt {
+            extractionElapsed = max(0, Date().timeIntervalSince(extractionStartedAt))
+            activePourIndex = min(
+                max(0, recipe.pours.count - 1),
+                max(machinePourIndex, pourIndexFromDeliveredWater)
+            )
+            progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
+        } else {
+            // Grinding and heating are preparation, not pour time.
+            extractionElapsed = 0
+            activePourIndex = 0
+            progress = 0
+        }
+
+        currentPhase = resolvedLivePhase
+        // Keep the "sending the program" message until the machine answers,
+        // rather than replacing it with a phase nothing has confirmed yet.
+        if machine.brewProgress.lastEventAt != nil || !machine.isSendingRecipe {
+            stage = liveStageTitle
+        }
+    }
+
+    /// The machine reports the brewer stopping, but "enjoy" is optional and is
+    /// not always sent. Waiting for the recipe's final pour to be delivered
+    /// before honouring a settled brewer stop means a pause between pours can
+    /// never end the session early.
+    private var finalPourDelivered: Bool {
+        guard !recipe.pours.isEmpty else { return true }
+        guard activePourIndex >= recipe.pours.count - 1 else { return false }
+        let target = Double(recipe.totalWater)
+        let deliveredEnough = target <= 0 || water >= target * 0.9
+        let ranLongEnough = extractionElapsed >= estimatedExtractionDuration * 0.6
+        return deliveredEnough || ranLongEnough
+    }
+
+    @MainActor
+    private func finishIfMachineReportsCompletion() {
+        guard !finished, !recordedCompletion else { return }
+        guard machine.brewProgress.completedAt != nil || machine.telemetry.state == .complete else {
+            return
+        }
+        completeLiveSession()
+    }
+
+    @MainActor
+    private func completeLiveSession() {
+        liveTicker?.cancel()
+        liveTicker = nil
         if let extractionStartedAt {
             extractionElapsed = max(0, Date().timeIntervalSince(extractionStartedAt))
         }
         finished = true
         progress = 1
+        currentPhase = .complete
         stage = "Brew complete"
+        appendLiveSampleIfNeeded(force: true)
         brewSession.markCompleted()
         Task {
             await BrewLiveActivityManager.shared.end(with: activityState(phase: .complete), success: true)
@@ -1479,10 +1632,21 @@ struct BrewSessionView: View {
         }
     }
 
+    /// Samples are timestamped from the first pour, never from the moment the
+    /// recipe was sent, so the curve and the recipe markers describe the same
+    /// clock and nothing is plotted while the machine is still grinding.
     private func appendLiveSampleIfNeeded(force: Bool = false) {
-        guard force || elapsed - lastSampleAt >= 0.25 else { return }
-        lastSampleAt = elapsed
-        samples.append(BrewSample(elapsed: elapsed, water: water, coffeeWeight: weight, temperature: temperature))
+        guard extractionStartedAt != nil else { return }
+        guard force || extractionElapsed - lastSampleAt >= 0.25 else { return }
+        lastSampleAt = extractionElapsed
+        samples.append(
+            BrewSample(
+                elapsed: extractionElapsed,
+                water: water,
+                coffeeWeight: weight,
+                temperature: temperature
+            )
+        )
         refreshChartIfNeeded(force: force)
 
         // Four readings per second retain smooth history while the chart uses
@@ -1492,78 +1656,40 @@ struct BrewSessionView: View {
         }
     }
 
-    private func sanitizedWater(_ candidate: Double) -> Double {
-        guard candidate.isFinite, candidate >= 0 else { return water }
-        let target = Double(recipe.totalWater)
-        if waterBaseline == nil {
-            waterBaseline = candidate
-            lastRawWater = candidate
-            return water
-        }
-
-        // A newly executed program may initially report the previous brew's
-        // cumulative counter before resetting to zero. Rebase that reset so a
-        // stale value cannot jump the UI straight to the final pour.
-        if let lastRawWater, candidate + 5 < lastRawWater {
-            waterBaseline = 0
-        }
-        lastRawWater = candidate
-
-        let delivered = max(0, candidate - (waterBaseline ?? candidate))
-        let maximum = max(target + 8, target * 1.05)
-        guard delivered <= maximum else { return water }
-        guard delivered + 2 >= water else { return water }
-        return min(maximum, max(water, delivered))
-    }
-
-    private func sanitizedCollectedWeight(_ rawWeight: Double) -> Double {
-        guard rawWeight.isFinite else { return weight }
-        if weightBaseline == nil {
-            weightBaseline = rawWeight
-        }
-        let collected = max(0, rawWeight - (weightBaseline ?? 0))
-        let maximum = max(expectedCupYield + 80, Double(recipe.totalWater) + 80)
-        guard collected <= maximum else { return weight }
-        guard collected + 3 >= weight else { return weight }
-        return max(weight, collected)
-    }
-
-    private func updateActivePour(for deliveredWater: Double) {
+    private var pourIndexFromDeliveredWater: Int {
         var cumulative = 0.0
         for (index, pour) in recipe.pours.enumerated() {
             cumulative += Double(pour.volume)
-            if deliveredWater <= cumulative {
-                activePourIndex = index
-                return
-            }
+            if water <= cumulative { return index }
         }
-        activePourIndex = max(0, recipe.pours.count - 1)
+        return max(0, recipe.pours.count - 1)
+    }
+
+    private var resolvedLivePhase: BrewProgramPhase {
+        if finished { return .complete }
+        if machine.telemetry.state == .error { return .error }
+        let machinePhase = machine.brewProgress.phase
+        guard extractionStartedAt != nil else { return machinePhase }
+
+        // Extraction has already begun. A reconnect clears the machine-side
+        // tracker, so never fall back to a preparation phase the brew has left.
+        switch machinePhase {
+        case .preparing, .grinding, .heating:
+            return activePourIndex == 0 ? .blooming : .pouring
+        default:
+            return machinePhase
+        }
     }
 
     private var liveStageTitle: String {
-        switch machine.telemetry.state {
-        case .disconnected: "Disconnected"
-        case .connecting: "Connecting"
-        case .idle: "Preparing"
-        case .grinding: "Grinding beans"
-        case .brewing: activePourIndex == 0 ? "Blooming" : "Pour \(activePourIndex + 1)"
-        case .paused: "Resting"
-        case .complete: "Brew complete"
-        case .error: "Machine needs attention"
-        }
-    }
-
-    private var liveActivityPhase: BrewProgramPhase {
-        switch machine.telemetry.state {
-        case .connecting, .idle: .preparing
-        case .disconnected: .error
-        case .grinding: .grinding
-        case .brewing:
-            if water < 0.5 { .heating }
-            else { activePourIndex == 0 ? .blooming : .pouring }
-        case .paused: .resting
-        case .complete: .complete
-        case .error: .error
+        if finished { return "Brew complete" }
+        switch machine.connectionState {
+        case .disconnected, .unavailable:
+            return "Live brew continues · reconnect to monitor"
+        case .scanning, .connecting, .subscribing:
+            return "Reconnecting to active brew"
+        case .connected:
+            return stageTitle(for: currentPhase)
         }
     }
 
@@ -1611,7 +1737,10 @@ struct BrewSessionView: View {
         case .grinding: "Grinding \(Int(recipe.dose.rounded())) g at \(recipe.rpm.rawValue) RPM"
         case .heating: "Bringing the brewer to the first pour temperature"
         case .resting: "Letting the coffee bed drain before the next pour"
-        default: "Preparing the simulated machine workflow"
+        case .error: "Check the machine display before restarting"
+        default: mode == .live
+            ? "Waiting for the machine to start · pours have not begun"
+            : "Preparing the simulated machine workflow"
         }
     }
 
@@ -1619,7 +1748,7 @@ struct BrewSessionView: View {
         let currentPour = [.blooming, .pouring, .resting].contains(phase) ? activePourIndex + 1 : 0
         return BrewActivityAttributes.ContentState(
             phase: phase,
-            stageTitle: phase == liveActivityPhase && mode == .live ? liveStageTitle : stageTitle(for: phase),
+            stageTitle: mode == .live && phase == currentPhase ? liveStageTitle : stageTitle(for: phase),
             progress: progress,
             currentPour: currentPour,
             totalPours: recipe.pours.count,
@@ -1635,14 +1764,24 @@ struct BrewSessionView: View {
     private func stopLiveBrew() {
         do {
             try machine.stopBrew()
+            liveTicker?.cancel()
+            liveTicker = nil
             stage = "Brew stopped"
             finished = true
+            // A stopped brew is still a finished session: clear the restore
+            // snapshot so the next launch does not resurrect it, and keep the
+            // partial extraction in history.
+            brewSession.markCompleted()
             Task {
                 await BrewLiveActivityManager.shared.end(
                     with: activityState(phase: .error),
                     success: false
                 )
             }
+            recordCompletedSession(
+                telemetry: machine.telemetry,
+                durationOverride: extractionElapsed
+            )
         } catch {
             errorMessage = error.localizedDescription
         }

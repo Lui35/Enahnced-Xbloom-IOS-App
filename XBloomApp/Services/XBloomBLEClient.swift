@@ -24,6 +24,9 @@ final class XBloomBLEClient: NSObject {
 
     private(set) var connectionState: ConnectionState = .disconnected
     private(set) var telemetry = XBloomTelemetry(state: .disconnected)
+    /// Machine-reported brew lifecycle. This, not the telemetry values, is what
+    /// tells the app when grinding ends and extraction actually begins.
+    private(set) var brewProgress = BrewProgressTracker()
     private(set) var machineName = "xBloom Studio"
     private(set) var lastError: String?
     private(set) var isSendingRecipe = false
@@ -111,6 +114,7 @@ final class XBloomBLEClient: NSObject {
         guard isConnected else { throw MachineError.notConnected }
         try RecipeValidator.requireSafe(recipe)
         let packets = try XBloomProtocol.brewSequence(for: recipe)
+        brewProgress.reset()
         let packetCountBeforeBrew = receivedPacketCount
         isSendingRecipe = true
         defer { isSendingRecipe = false }
@@ -214,6 +218,10 @@ final class XBloomBLEClient: NSObject {
         auxiliaryNotificationFramer.reset()
         connectionState = .disconnected
         telemetry = XBloomTelemetry(state: .disconnected)
+        // A live session keeps its own copy of the phase and pour index, so
+        // clearing the tracker here only discards machine state that no longer
+        // applies; it never rewinds a brew that is still running.
+        brewProgress.reset()
         lastPacketAt = nil
         sentPacketCount = 0
         receivedPacketCount = 0
@@ -303,19 +311,31 @@ final class XBloomBLEClient: NSObject {
         if let value = update.weight { telemetry.weight = value }
         if let value = update.temperature { telemetry.temperature = value }
         if let value = update.waterVolume { telemetry.waterVolume = value }
+        if let value = update.tankWaterLevel { telemetry.tankWaterLevel = value }
         if let value = update.waterLevelOK { telemetry.waterLevelOK = value }
 
-        if let command = update.lastCommand,
-           [9000, 9001, 9003, 9005, 40502, 40510].contains(command) {
+        guard let command = update.lastCommand else { return }
+        brewProgress.ingest(command: command, at: Date())
+
+        if [9000, 9001, 9003, 9005, 40502, 40510].contains(command) {
             lastBrewActivityAt = Date()
         }
 
-        switch update.lastCommand {
+        switch command {
         case 9003, 9005, 40502, 40510, 9010, 40507, 40511, 40512, 40513, 40517, 40522, 8203, 8204:
             telemetry.state = update.state
         default:
             break
         }
+    }
+
+    /// Lets an active session close itself out when the machine stops the
+    /// brewer but never sends the optional "enjoy" notification.
+    func confirmBrewCompletionIfSettled(finalPourDelivered: Bool) {
+        brewProgress.confirmCompletionIfSettled(
+            at: Date(),
+            finalPourDelivered: finalPourDelivered
+        )
     }
 
     enum MachineError: LocalizedError {
