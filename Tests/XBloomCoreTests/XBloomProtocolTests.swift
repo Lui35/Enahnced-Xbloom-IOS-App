@@ -231,9 +231,10 @@ import Testing
     // from the official app's table, so the machine had no reason to answer the
     // one probe whose whole job was to prove the link works.
     for command in [
-        XBloomCommand.grinderQuit, .brewerQuit, .recipeSendAuto, .recipeExecute,
+        XBloomCommand.outGrinderPage, .outBrewerPage, .recipeSendAuto, .recipeExecute,
         .recipeSendManual, .setBypass, .setCup, .recipeStop, .deviceCurrentPage,
-        .deviceNoSleep,
+        .deviceNoSleep, .inScalePage, .outScalePage, .weightCleared,
+        .inGrinderPage, .grinderSize, .grinderSpeed, .grindBegin, .grindEnd,
     ] {
         #expect(XBloomNotification(rawValue: command.rawValue) != nil)
     }
@@ -621,4 +622,61 @@ import Testing
     let a = XBloomProtocol.pouredMilliliters(fromMicroliters: 1_162.5) ?? 0
     let b = XBloomProtocol.pouredMilliliters(fromMicroliters: 1_937.5) ?? 0
     #expect(((b - a) / 0.28 - 2.77).magnitude < 0.1)
+}
+
+@Test func manualPourTravelsTheVerifiedRecipeEncoding() throws {
+    let pour = ManualPour(
+        volume: 60,
+        temperature: 92,
+        flowRate: 3.2,
+        pattern: .circular,
+        agitation: true
+    )
+    #expect(pour.validate().isEmpty)
+
+    let recipe = pour.asRecipe
+    #expect(!recipe.useGrinder)
+    #expect(recipe.pours.count == 1)
+    #expect(recipe.totalWater == 60)
+    // The bypass dose must not be zero; a grinder-off program with a zero dose
+    // is suspected of being rejected outright.
+    #expect(recipe.dose > 0)
+    try RecipeValidator.requireSafe(recipe)
+
+    let packets = try XBloomProtocol.brewSequence(for: recipe)
+    let commandIDs = packets.map { UInt16($0[3]) | UInt16($0[4]) << 8 }
+    #expect(commandIDs == [8102, 8104, 8004, 8002])
+
+    let payload = try XBloomProtocol.recipePayload(for: recipe)
+    #expect(payload[0] == 8)                 // one pour, eight bytes
+    #expect(payload[1] == 60)                // volume
+    #expect(payload[2] == 92)                // temperature
+    #expect(payload[3] == UInt8(PourPattern.circular.rawValue))
+    #expect(payload[4] == 1)                 // agitate before only
+    #expect(payload[8] == 32)                // flow 3.2 ml/s
+}
+
+@Test func manualPourRejectsSettingsOutsideTheMachineLimits() {
+    #expect(ManualPour(volume: 400).validate().contains { $0.field == "volume" })
+    #expect(ManualPour(temperature: 120).validate().contains { $0.field == "temperature" })
+    #expect(ManualPour(flowRate: 9).validate().contains { $0.field == "flowRate" })
+    #expect(ManualPour().validate().isEmpty)
+}
+
+@Test func grinderProgressIsSurfacedRawAndNeverAsGrams() throws {
+    var payload = Data(count: 4)
+    payload[0] = 0x2A
+    let frame = XBloomProtocol.rawCommand(.recipeStop, payload: payload)
+    var grinderDoing = frame
+    grinderDoing[3] = 0x3A          // 40506 grinder_doing
+    grinderDoing[4] = 0x9E
+    let crc = XBloomProtocol.crc16(grinderDoing.dropLast(2))
+    grinderDoing[grinderDoing.count - 2] = UInt8(crc & 0xFF)
+    grinderDoing[grinderDoing.count - 1] = UInt8(crc >> 8)
+
+    let telemetry = try XBloomProtocol.parseNotification(grinderDoing)
+    #expect(telemetry.grinderReport == 42)
+    #expect(telemetry.state == .grinding)
+    // Nothing pretends this is a weight.
+    #expect(telemetry.weight == nil)
 }

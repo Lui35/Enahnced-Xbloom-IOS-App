@@ -99,6 +99,32 @@ real dose with `recipe_bypass` instead of zero, spacing all four setup commands
 wrap. Which of them mattered, if any, is **not established**; the failure was
 intermittent and has not been reproduced since.
 
+## Direct machine tools — what each one rests on
+
+The Scale, Brewer, and Grinder screens reach the machine by different routes,
+and they are not equally trustworthy.
+
+| Screen | Commands | Standing |
+|---|---|---|
+| Brewer (single pour) | `8102` → `8104` → `8004` → `8002`, stop `40519` | **Verified.** Identical to the captured brew, with one pour instead of three. |
+| Scale | `8003 in_scale_page`, `8500 weight_cleared`, `8014 out_scale_page` | Command IDs confirmed in the vendor table; payloads are empty, so there is little to get wrong. Live weight via `20501` is verified. |
+| Grinder | `8006`, `8105 size`, `8106 speed`, `3503 begin`, `3505 end`, `8012` | **Unverified payloads.** IDs confirmed in the vendor table; the argument encoding is a guess (single little-endian uint32, matching `recipe_bypass`). |
+
+Because of that gap, every scale and grinder control waits for the machine to
+echo the command back — the acknowledgement pattern seen throughout the capture,
+where `8102`, `8104`, `8004`, `8002`, and `40519` each came back with the same
+identifier and an empty payload. A control that is sent but never acknowledged
+says so rather than pretending to have worked.
+
+The Brewer screen deliberately does **not** use the vendor's direct brewer
+opcodes (`4506 brewer_begin`, `4510 brewer_temperature`, `4504`/`4505` pattern).
+They would open a valve on near-boiling water with a payload shape nobody has
+confirmed. The single-pour recipe carries the same four settings down a path the
+machine has already demonstrably understood.
+
+`40506 grinder_doing` and `40505 device_gears` are parsed and displayed raw. Their
+units are unknown, so neither is presented as grams.
+
 ## Still unverified
 
 - Grinder-on behaviour. Needs a capture with the grinder enabled.

@@ -36,6 +36,7 @@ struct HomeView: View {
                     LazyVStack(spacing: 24) {
                         welcomeHeader
                         machineHero
+                        machineTools
                         nextCupCard
                         recentActivity
                         libraryOverview
@@ -183,6 +184,76 @@ struct HomeView: View {
                 .allowsHitTesting(false)
         }
         .shadow(color: AppTheme.espresso.opacity(0.22), radius: 24, y: 12)
+    }
+
+    /// Direct access to the three machine subsystems, each on its own screen.
+    private var machineTools: some View {
+        VStack(spacing: 14) {
+            AppSectionHeader(
+                title: "Machine tools",
+                subtitle: machine.isConnected
+                    ? "Drive the scale, brewer, and grinder on their own"
+                    : "Connect the machine to use these"
+            )
+            HStack(spacing: 12) {
+                machineToolCard(
+                    title: "Scale",
+                    detail: machine.isConnected
+                        ? String(format: "%.1f g", machine.telemetry.weight ?? 0)
+                        : "Weigh & tare",
+                    icon: "scalemass.fill",
+                    tint: AppTheme.sage
+                ) { ScaleView() }
+
+                machineToolCard(
+                    title: "Brewer",
+                    detail: "Single pour",
+                    icon: "drop.fill",
+                    tint: AppTheme.coffee
+                ) { ManualPourView() }
+
+                machineToolCard(
+                    title: "Grinder",
+                    detail: "Size & speed",
+                    icon: "circle.grid.cross.fill",
+                    tint: AppTheme.crema
+                ) { GrinderView() }
+            }
+        }
+    }
+
+    private func machineToolCard<Destination: View>(
+        title: String,
+        detail: String,
+        icon: String,
+        tint: Color,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination()) {
+            VStack(alignment: .leading, spacing: 10) {
+                IconBadge(systemImage: icon, tint: tint, size: 42)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(tint.opacity(machine.isConnected ? 0.45 : 0.15), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!machine.isConnected)
+        .opacity(machine.isConnected ? 1 : 0.55)
     }
 
     private var libraryOverview: some View {

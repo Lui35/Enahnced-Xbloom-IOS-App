@@ -66,6 +66,7 @@ final class XBloomBLEClient: NSObject {
     @ObservationIgnored private var connectionWatchdogTask: Task<Void, Never>?
     @ObservationIgnored private var lastBrewActivityAt: Date?
     @ObservationIgnored private var resumeConnectionRequested = false
+    @ObservationIgnored private var acknowledgements: [UInt16: Date] = [:]
 
     override init() {
         super.init()
@@ -182,6 +183,89 @@ final class XBloomBLEClient: NSObject {
         trafficLog.record(direction: .sent, command: XBloomCommand.recipeStop.rawValue, detail: "", payload: packet)
     }
 
+    // MARK: - Direct machine tools
+
+    /// Sends one command and waits for the machine to echo it back.
+    ///
+    /// The echo is the only evidence available that the machine understood a
+    /// command whose payload shape has not been verified against a recording,
+    /// so every scale and grinder control reports honestly whether it landed.
+    @discardableResult
+    func send(
+        _ command: XBloomCommand,
+        values: [UInt32] = [],
+        awaitingAcknowledgement: Bool = true,
+        timeout: TimeInterval = 2
+    ) async throws -> Bool {
+        guard isConnected else { throw MachineError.notConnected }
+        let sentAt = Date()
+        try await write(XBloomProtocol.command(command, values: values))
+        guard awaitingAcknowledgement else { return true }
+
+        let deadline = sentAt.addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let acknowledged = acknowledgements[command.rawValue], acknowledged >= sentAt {
+                return true
+            }
+            try await Task.sleep(for: .milliseconds(60))
+        }
+        return false
+    }
+
+    /// Opens the machine's scale screen so its display follows the app.
+    @discardableResult
+    func openScale() async throws -> Bool {
+        trafficLog.note("Scale opened from the app")
+        return try await send(.inScalePage)
+    }
+
+    @discardableResult
+    func tareScale() async throws -> Bool {
+        trafficLog.note("Tare requested")
+        return try await send(.weightCleared)
+    }
+
+    func closeScale() async {
+        trafficLog.note("Scale closed")
+        _ = try? await send(.outScalePage, awaitingAcknowledgement: false)
+    }
+
+    /// Opens the grinder screen and applies a size and speed.
+    @discardableResult
+    func prepareGrinder(size: Int, speed: Int) async throws -> Bool {
+        trafficLog.note("Grinder prepared · size \(size) · speed \(speed)")
+        _ = try await send(.inGrinderPage)
+        let sizeAccepted = try await send(.grinderSize, values: [UInt32(max(0, size))])
+        let speedAccepted = try await send(.grinderSpeed, values: [UInt32(max(0, speed))])
+        return sizeAccepted && speedAccepted
+    }
+
+    @discardableResult
+    func startGrinding() async throws -> Bool {
+        trafficLog.note("Grind start requested")
+        return try await send(.grindBegin)
+    }
+
+    @discardableResult
+    func stopGrinding() async throws -> Bool {
+        trafficLog.note("Grind stop requested")
+        return try await send(.grindEnd)
+    }
+
+    func closeGrinder() async {
+        _ = try? await send(.outGrinderPage, awaitingAcknowledgement: false)
+    }
+
+    /// Runs a single pour with no recipe behind it. It travels the same
+    /// encoding path a normal brew does, which is the only one verified against
+    /// a recording.
+    func startManualPour(_ pour: ManualPour) async throws {
+        guard pour.validate().isEmpty else {
+            throw MachineError.unsafeManualPour(pour.validate().first?.message ?? "")
+        }
+        try await startBrew(pour.asRecipe)
+    }
+
     func testConnection() async {
         guard isConnected else {
             diagnosticState = .failed(MachineError.notConnected.localizedDescription)
@@ -285,8 +369,8 @@ final class XBloomBLEClient: NSObject {
             }
             try await write(XBloomProtocol.command(.recipeStop))
             try await Task.sleep(for: .milliseconds(500))
-            try await write(XBloomProtocol.command(.brewerQuit))
-            try await write(XBloomProtocol.command(.grinderQuit))
+            try await write(XBloomProtocol.command(.outBrewerPage))
+            try await write(XBloomProtocol.command(.outGrinderPage))
             // The machine has an explicit keep-awake command, which is a better
             // answer than telling the user to keep prodding it.
             try await write(XBloomProtocol.command(.deviceNoSleep))
@@ -383,8 +467,14 @@ final class XBloomBLEClient: NSObject {
         if let value = update.waterVolume { telemetry.waterVolume = value }
         if let value = update.tankWaterLevel { telemetry.tankWaterLevel = value }
         if let value = update.waterLevelOK { telemetry.waterLevelOK = value }
+        if let value = update.grinderReport { telemetry.grinderReport = value }
+        if let value = update.gearPosition { telemetry.gearPosition = value }
 
         guard let command = update.lastCommand else { return }
+        // The machine echoes each command back with the same identifier. That
+        // echo is the only confirmation available that it understood a command
+        // whose payload shape has not been verified.
+        acknowledgements[command] = Date()
         brewProgress.ingest(command: command, value: update.eventValue, at: Date())
 
         switch XBloomNotification(rawValue: command) {
@@ -414,6 +504,7 @@ final class XBloomBLEClient: NSObject {
         case commandChannelUnavailable
         case packetTooLarge(Int)
         case noMachineResponse
+        case unsafeManualPour(String)
 
         var errorDescription: String? {
             switch self {
@@ -425,6 +516,8 @@ final class XBloomBLEClient: NSObject {
                 "The recipe packet is \(size) bytes and exceeds the negotiated Bluetooth limit."
             case .noMachineResponse:
                 "The recipe was sent but the xBloom did not respond. Check whether it started before retrying, then disconnect and reconnect if needed."
+            case .unsafeManualPour(let reason):
+                reason
             }
         }
     }

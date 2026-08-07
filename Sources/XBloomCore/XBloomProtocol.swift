@@ -4,8 +4,6 @@ import Foundation
 /// app's own command table; the scale-vibrate pair that used to sit alongside
 /// them was not, and the machine had no reason to answer it.
 public enum XBloomCommand: UInt16, Sendable {
-    case grinderQuit = 8012
-    case brewerQuit = 8013
     case recipeSendAuto = 8001
     case recipeExecute = 8002
     case recipeSendManual = 8004
@@ -17,6 +15,25 @@ public enum XBloomCommand: UInt16, Sendable {
     case deviceCurrentPage = 8023
     /// Keeps the machine awake for the duration of a session.
     case deviceNoSleep = 8008
+
+    // MARK: Scale
+    case inScalePage = 8003
+    case outScalePage = 8014
+    /// Tare. The PyBloom reference states no tare command exists; the vendor's
+    /// own command table has one.
+    case weightCleared = 8500
+
+    // MARK: Pages
+    /// Leaving a page is how the machine's own app releases a subsystem.
+    case outGrinderPage = 8012
+    case outBrewerPage = 8013
+
+    // MARK: Grinder
+    case inGrinderPage = 8006
+    case grinderSize = 8105
+    case grinderSpeed = 8106
+    case grindBegin = 3503
+    case grindEnd = 3505
 }
 
 public enum XBloomMachineState: String, Codable, Sendable {
@@ -46,6 +63,10 @@ public struct XBloomTelemetry: Equatable, Sendable {
     /// the identifier — `wateringPhase` reports which pour is starting, and
     /// `deviceCurrentPage` reports which screen the machine is showing.
     public var eventValue: UInt32?
+    /// The machine's raw grinder-progress report. Units are not established, so
+    /// it is never presented as grams.
+    public var grinderReport: UInt32?
+    public var gearPosition: UInt32?
 
     public init(
         state: XBloomMachineState = .idle,
@@ -55,7 +76,9 @@ public struct XBloomTelemetry: Equatable, Sendable {
         tankWaterLevel: Double? = nil,
         waterLevelOK: Bool? = nil,
         lastCommand: UInt16? = nil,
-        eventValue: UInt32? = nil
+        eventValue: UInt32? = nil,
+        grinderReport: UInt32? = nil,
+        gearPosition: UInt32? = nil
     ) {
         self.state = state
         self.weight = weight
@@ -65,6 +88,8 @@ public struct XBloomTelemetry: Equatable, Sendable {
         self.waterLevelOK = waterLevelOK
         self.lastCommand = lastCommand
         self.eventValue = eventValue
+        self.grinderReport = grinderReport
+        self.gearPosition = gearPosition
     }
 }
 
@@ -198,6 +223,14 @@ public enum XBloomProtocol {
             result.waterVolume = pouredMilliliters(
                 fromMicroliters: Double(packet.readFloat32LE(at: 10))
             )
+        case .grinderDoing:
+            // The machine's own grinder-progress report. Its units are not
+            // established, so it is surfaced raw rather than dressed up as
+            // grams.
+            result.grinderReport = result.eventValue
+            result.state = .grinding
+        case .deviceGears:
+            result.gearPosition = result.eventValue
         case .deviceBeginGrinder:
             result.state = .grinding
         case .deviceBeginBrewer, .brewerStart, .wateringPhase:
