@@ -309,6 +309,7 @@ struct RecipeDetailView: View {
     @State var recipe: Recipe
     @State private var editing: Recipe?
     @State private var errorMessage: String?
+    @State private var weighingDose = false
 
     var body: some View {
         ZStack {
@@ -330,42 +331,41 @@ struct RecipeDetailView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
-                Button {
-                    editing = recipe
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.title3.weight(.bold))
-                        .frame(width: 54, height: 54)
-                        .background(StudioTheme.raised, in: Circle())
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    if machine.isConnected {
-                        brewSession.present(recipe: recipe, mode: .live)
-                    } else {
-                        machine.connect()
+                Menu {
+                    Button("Edit recipe", systemImage: "pencil") { editing = recipe }
+                    Button("Preview without the machine", systemImage: "play.rectangle.on.rectangle") {
+                        brewSession.present(recipe: recipe, mode: .simulation)
                     }
                 } label: {
-                    Label(machine.isConnected ? "Start brew" : "Connect to brew", systemImage: machine.isConnected ? "play.fill" : "bolt.fill")
-                        .font(.headline)
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(StudioTheme.accent, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(machine.isSendingRecipe)
-
-                Button {
-                    brewSession.present(recipe: recipe, mode: .simulation)
-                } label: {
-                    Image(systemName: "play.rectangle.on.rectangle")
+                    Image(systemName: "ellipsis")
                         .font(.title3.weight(.bold))
                         .frame(width: 54, height: 54)
                         .background(StudioTheme.raised, in: Circle())
                 }
                 .buttonStyle(.plain)
+
+                if machine.isConnected {
+                    // Two ways in: some beans are weighed out in advance, some
+                    // are not. Weighing first also lets the brew record the
+                    // dose that really went in, not the recipe's rounded
+                    // target.
+                    brewAction(
+                        "Weigh dose",
+                        icon: "scalemass.fill",
+                        tint: StudioTheme.mint
+                    ) {
+                        weighingDose = true
+                    }
+                    brewAction("Start brew", icon: "play.fill", tint: StudioTheme.accent) {
+                        brewSession.present(recipe: recipe, mode: .live)
+                    }
+                } else {
+                    // One action while offline: two buttons that both just
+                    // connect say nothing about the choice waiting behind them.
+                    brewAction("Connect to brew", icon: "bolt.fill", tint: StudioTheme.accent) {
+                        machine.connect()
+                    }
+                }
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 12)
@@ -384,7 +384,38 @@ struct RecipeDetailView: View {
                 try? modelContext.save()
             }
         }
+        .sheet(isPresented: $weighingDose) {
+            DoseWeighingView(recipe: recipe) { measuredDose in
+                // The weighed amount replaces the recipe's target for this brew
+                // only. It is what the machine is told, what history records,
+                // and what comes off the bean bag — the saved recipe keeps its
+                // own dose.
+                var brewed = recipe
+                brewed.dose = measuredDose
+                brewSession.present(recipe: brewed, mode: .live)
+            }
+        }
         .preferredColorScheme(.dark)
+    }
+
+    private func brewAction(
+        _ title: String,
+        icon: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.headline)
+                .foregroundStyle(.black)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(tint, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(machine.isSendingRecipe)
     }
 
     private var detailIdentity: some View {

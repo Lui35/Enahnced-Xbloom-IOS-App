@@ -365,6 +365,7 @@ final class XBloomBLEClient: NSObject {
                 connectionState = .connected
                 telemetry.state = .idle
                 resumeConnectionRequested = false
+                MachineFeedback.machineConnected()
                 return
             }
             try await write(XBloomProtocol.command(.recipeStop))
@@ -381,6 +382,7 @@ final class XBloomBLEClient: NSObject {
             connectionState = .connected
             telemetry.state = .idle
             resumeConnectionRequested = false
+            MachineFeedback.machineConnected()
         } catch {
             failConnection("The Bluetooth link opened, but machine setup failed: \(error.localizedDescription)")
             diagnosticState = .failed(error.localizedDescription)
@@ -582,7 +584,9 @@ extension XBloomBLEClient: CBCentralManagerDelegate {
     ) {
         MainActor.assumeIsolated {
             if let error { lastError = error.localizedDescription }
+            let wasConnected = connectionState == .connected
             resetConnection()
+            if wasConnected { MachineFeedback.machineDisconnected() }
         }
     }
 }

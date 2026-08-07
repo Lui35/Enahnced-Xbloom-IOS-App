@@ -180,6 +180,27 @@ struct SettingsView: View {
 
                         Divider()
 
+                        Toggle(isOn: Binding(
+                            get: { MachineFeedback.isSoundEnabled },
+                            set: { enabled in
+                                MachineFeedback.isSoundEnabled = enabled
+                                if enabled { MachineFeedback.previewConnectionSound() }
+                            }
+                        )) {
+                            HStack(spacing: 14) {
+                                IconBadge(systemImage: "speaker.wave.2.fill", tint: AppTheme.coffee, size: 44)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Connection sound").font(.headline)
+                                    Text("Chime when the machine pairs or drops")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .tint(AppTheme.sage)
+
+                        Divider()
+
                         NavigationLink {
                             MachineDiagnosticsView()
                         } label: {

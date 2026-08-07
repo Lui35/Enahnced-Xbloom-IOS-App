@@ -158,10 +158,18 @@ struct StudioDialBox: View {
                 .fill(StudioTheme.panel)
 
             GeometryReader { proxy in
+                // The fill has to be measured inside the inset, not outside it.
+                // Sizing it to the full width and then padding made the laid-out
+                // width the fill plus both insets, so a maxed-out bar hung ten
+                // points past the box it sits in.
+                let inset: CGFloat = 5
+                let available = max(0, proxy.size.width - inset * 2)
+                let clamped = min(1, max(0, progress))
+
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(tint.opacity(0.17))
-                    .frame(width: max(8, proxy.size.width * min(1, max(0, progress))))
-                    .padding(5)
+                    .frame(width: min(available, max(8, available * clamped)))
+                    .padding(inset)
                     .animation(.linear(duration: 0.06), value: value)
             }
             .allowsHitTesting(false)
@@ -203,6 +211,9 @@ struct StudioDialBox: View {
             .padding(14)
         }
         .frame(height: height)
+        // A second guarantee that nothing inside can paint past the border,
+        // whatever a future value or animation does.
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(tint.opacity(0.85), lineWidth: 2)
