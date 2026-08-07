@@ -190,9 +190,12 @@ final class XBloomBLEClient: NSObject {
         diagnosticState = .testing
         let packetCountBeforeTest = receivedPacketCount
         do {
-            try await write(XBloomProtocol.command(.scaleVibrate))
-            try await Task.sleep(for: .milliseconds(450))
-            try await write(XBloomProtocol.command(.scaleStop))
+            // Asks the machine which screen it is showing. This replaces two
+            // scale-vibrate opcodes that are absent from the vendor's command
+            // set, so a silent machine used to look like a broken link when the
+            // real problem was a command it never recognised. This one also
+            // moves nothing.
+            try await write(XBloomProtocol.command(.deviceCurrentPage))
 
             let deadline = Date().addingTimeInterval(3)
             while receivedPacketCount == packetCountBeforeTest, Date() < deadline {
@@ -202,7 +205,7 @@ final class XBloomBLEClient: NSObject {
                 diagnosticState = .passed
             } else {
                 diagnosticState = .failed(
-                    "No reply arrived. If the scale tray vibrated, commands work but telemetry is silent; otherwise close the official xBloom app and reconnect."
+                    "No reply arrived. Close the official xBloom app, keep the machine awake, and reconnect."
                 )
             }
         } catch {
@@ -284,6 +287,9 @@ final class XBloomBLEClient: NSObject {
             try await Task.sleep(for: .milliseconds(500))
             try await write(XBloomProtocol.command(.brewerQuit))
             try await write(XBloomProtocol.command(.grinderQuit))
+            // The machine has an explicit keep-awake command, which is a better
+            // answer than telling the user to keep prodding it.
+            try await write(XBloomProtocol.command(.deviceNoSleep))
             try await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             connectionWatchdogTask?.cancel()
@@ -323,8 +329,9 @@ final class XBloomBLEClient: NSObject {
 
     private func consumeNotifications(_ data: Data, from characteristicUUID: CBUUID) {
         let statusUUID = CBUUID(string: XBloomProtocol.notifyUUID)
+        let isStatusChannel = characteristicUUID == statusUUID
         let packets: [Data]
-        if characteristicUUID == statusUUID {
+        if isStatusChannel {
             packets = statusNotificationFramer.ingest(data)
         } else {
             packets = auxiliaryNotificationFramer.ingest(data)
@@ -338,9 +345,12 @@ final class XBloomBLEClient: NSObject {
                 trafficLog.record(
                     direction: .received,
                     command: update.lastCommand,
-                    detail: describe(update),
+                    detail: isStatusChannel ? describe(update) : "FFE3 · not merged",
                     payload: packet
                 )
+                // The vendor's own app filters FFE3 out of its receive path.
+                // Record it for diagnostics, but never let it drive brew state.
+                guard isStatusChannel else { continue }
                 merge(update)
             } catch {
                 // Frames the parser rejects matter most: they are the ones the
@@ -375,27 +385,28 @@ final class XBloomBLEClient: NSObject {
         if let value = update.waterLevelOK { telemetry.waterLevelOK = value }
 
         guard let command = update.lastCommand else { return }
-        brewProgress.ingest(command: command, at: Date())
+        brewProgress.ingest(command: command, value: update.eventValue, at: Date())
 
-        if [9000, 9001, 9003, 9005, 40502, 40510].contains(command) {
+        switch XBloomNotification(rawValue: command) {
+        case .deviceInGrinder, .deviceInBrewer, .deviceBeginGrinder, .deviceBeginBrewer,
+             .brewerStart, .wateringPhase, .recipeMarking:
             lastBrewActivityAt = Date()
-        }
-
-        switch command {
-        case 9003, 9005, 40502, 40510, 9010, 40507, 40511, 40512, 40513, 40517, 40522, 8203, 8204:
-            telemetry.state = update.state
         default:
             break
         }
-    }
 
-    /// Lets an active session close itself out when the machine stops the
-    /// brewer but never sends the optional "enjoy" notification.
-    func confirmBrewCompletionIfSettled(finalPourDelivered: Bool) {
-        brewProgress.confirmCompletionIfSettled(
-            at: Date(),
-            finalPourDelivered: finalPourDelivered
-        )
+        switch XBloomNotification(rawValue: command) {
+        case .deviceBeginGrinder, .deviceBeginBrewer, .brewerStart, .wateringPhase,
+             .deviceBrewerPass, .deviceWateringFinish, .deviceGrinderFinish,
+             .takeCup, .brewerFinish, .grinderEmptyAbnormal:
+            telemetry.state = update.state
+        case .waterTankVolumeLow:
+            // Only a non-zero level is a fault; the parser leaves the state
+            // untouched otherwise, and a running brew must not be interrupted.
+            if update.state == .error { telemetry.state = .error }
+        default:
+            break
+        }
     }
 
     enum MachineError: LocalizedError {

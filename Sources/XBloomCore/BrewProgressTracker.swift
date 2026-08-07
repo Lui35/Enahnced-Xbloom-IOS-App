@@ -1,61 +1,42 @@
 import Foundation
 
-/// Notification identifiers the xBloom emits while it works through a recipe.
-///
-/// Names follow the PyBloom reference in `docs/PYBLOOM_BLUETOOTH_API.md`.
-public enum XBloomNotification: UInt16, Sendable, CaseIterable {
-    case inGrinder = 9000
-    case inBrewer = 9001
-    case inScale = 9002
-    case grinderBegin = 9003
-    case outGrinder = 9004
-    case brewerBegin = 9005
-    case outBrewer = 9006
-    case outScale = 9008
-    case grinderPause = 9009
-    case brewerPause = 9010
-    case brewerCoffeeStart = 40502
-    case grinderStop = 40507
-    case bloom = 40510
-    case brewerStop = 40511
-    case enjoy = 40512
-    case enjoyAlternate = 40513
-    case errorIdling = 40517
-    case errorLackOfWater = 40522
-    case abnormalGearPosition = 8203
-    case abnormalDoseOrWater = 8204
-    case currentWeight = 20501
-    case brewerTemperature = 8108
-    case waterVolume = 40523
-    case machineInfo = 40521
-}
-
 /// Reads the machine's notification stream as brew lifecycle state.
 ///
-/// The xBloom announces what it is doing — dripper position, grinder start and
-/// stop, brewer start, bloom, pause, and stop — well before any water reaches
-/// the scale. Deriving the phase, the extraction clock, and the pour index from
-/// those events keeps the app in step with the machine instead of inferring
-/// them from telemetry values that arrive late, arrive rarely, or never arrive.
+/// Built from a recorded brew rather than from a protocol reference. On this
+/// firmware the dripper-position events the reference describes (`9003`,
+/// `9005`, `40511`, `40512`) never arrived at all. What the machine actually
+/// sends is:
+///
+/// - `brewerStart` once, when it accepts the recipe;
+/// - `wateringPhase` at the start of every pour, carrying that pour's
+///   zero-based index in its payload;
+/// - `deviceCurrentPage` when its screen changes, which is how a finished
+///   recipe announces itself when no completion event is sent;
+/// - `brewerVolume` and `weightRealTime` continuously.
+///
+/// Anything the reference describes but this machine does not send is still
+/// handled, so a different firmware degrades rather than breaks.
 public struct BrewProgressTracker: Equatable, Sendable {
     public private(set) var phase: BrewProgramPhase = .preparing
-    /// The moment the machine began the first pour. Nil until it does, so the
+    /// When the machine began the first pour. Nil until it does, so the
     /// extraction clock and chart cannot start during grinding or heating.
     public private(set) var extractionStartedAt: Date?
+    /// The pour the machine says it is on, taken from `wateringPhase`.
     public private(set) var pourIndex = 0
-    /// True once the machine has reported at least one pour boundary, which is
-    /// when event-driven pour tracking becomes more trustworthy than
-    /// integrating the water counter.
+    /// True once a `wateringPhase` has arrived, meaning the pour index comes
+    /// from the machine rather than from integrating delivered water.
     public private(set) var hasObservedPourEvents = false
-    /// Set when the brewer reports that it stopped after extraction began. The
-    /// recipe is not finished until the machine also says so or stays quiet.
-    public private(set) var brewerStoppedAt: Date?
+    public private(set) var lastPourStartedAt: Date?
     public private(set) var completedAt: Date?
     public private(set) var errorCommand: UInt16?
     public private(set) var lastEventAt: Date?
-
-    /// A pause was reported and the next brewer start belongs to the next pour.
-    private var awaitingNextPour = false
+    /// The screen the machine was showing while it brewed. A later change away
+    /// from it means the recipe is over.
+    public private(set) var brewingPage: UInt32?
+    public private(set) var currentPage: UInt32?
+    /// Set once the machine acknowledges the recipe, which is when its screen
+    /// becomes meaningful as a progress signal.
+    public private(set) var recipeAccepted = false
 
     public init() {}
 
@@ -65,89 +46,86 @@ public struct BrewProgressTracker: Equatable, Sendable {
         self = BrewProgressTracker()
     }
 
-    public mutating func ingest(command: UInt16, at date: Date = Date()) {
-        guard let notification = XBloomNotification(rawValue: command) else { return }
-        switch notification {
-        case .currentWeight, .brewerTemperature, .waterVolume, .machineInfo:
-            // Measurements, not lifecycle. Recording them here would make the
-            // tracker change on every reading and mask when the machine last
-            // actually did something.
-            return
-        default:
-            lastEventAt = date
-        }
+    public mutating func ingest(command: UInt16, value: UInt32?, at date: Date = Date()) {
+        guard let notification = XBloomNotification(rawValue: command),
+              !notification.isMeasurement else { return }
+        lastEventAt = date
 
         switch notification {
-        case .inGrinder:
-            if !isExtracting { phase = .preparing }
-        case .grinderBegin:
-            if !isExtracting { phase = .grinding }
-        case .grinderStop, .outGrinder, .inBrewer, .inScale, .outScale:
-            // The dripper is on its way to the brewer while the machine brings
-            // the water up to temperature. Nothing has been poured yet.
+        case .brewerStart, .recipeMarking:
+            // The recipe has been accepted. Nothing has been poured yet.
+            recipeAccepted = true
             if !isExtracting { phase = .heating }
-        case .brewerBegin, .brewerCoffeeStart, .bloom:
-            beginPour(at: date)
-        case .brewerPause:
-            if isExtracting {
-                phase = .resting
-                awaitingNextPour = true
-            }
-        case .brewerStop:
-            if isExtracting {
-                // Treated as a rest, not as completion: the caller decides that
-                // the recipe is over once every pour has been delivered or the
-                // machine confirms it.
-                brewerStoppedAt = date
-                phase = .resting
-                awaitingNextPour = true
-            } else {
-                phase = .preparing
-            }
-        case .enjoy, .enjoyAlternate:
+
+        case .wateringPhase:
+            beginPour(index: value.map(Int.init), at: date)
+
+        case .deviceInGrinder:
+            if !isExtracting { phase = .preparing }
+
+        case .deviceBeginGrinder, .grinderDoing, .grindBegin:
+            if !isExtracting { phase = .grinding }
+
+        case .deviceGrinderFinish, .deviceOutGrinder, .deviceInBrewer,
+             .deviceInScale, .deviceOutScale, .deviceBeginBrewer:
+            if !isExtracting { phase = .heating }
+
+        case .deviceBrewerPass, .deviceWateringFinish:
+            if isExtracting { phase = .resting }
+
+        case .takeCup, .brewerFinish:
             completedAt = date
             phase = .complete
-        case .errorIdling, .errorLackOfWater, .abnormalGearPosition, .abnormalDoseOrWater:
+
+        case .deviceCurrentPage:
+            updatePage(value, at: date)
+
+        case .grinderEmptyAbnormal:
             errorCommand = command
             phase = .error
-        case .outBrewer, .grinderPause, .currentWeight, .brewerTemperature, .waterVolume, .machineInfo:
+
+        case .waterTankVolumeLow:
+            // A zero payload arrived mid-brew while the machine kept pouring,
+            // so only a non-zero level is a real fault.
+            if (value ?? 0) != 0 {
+                errorCommand = command
+                phase = .error
+            }
+
+        default:
             break
         }
     }
 
-    /// Confirms completion without waiting for an `enjoy` notification, which
-    /// the machine does not always send. The caller supplies the settle window
-    /// and whether the recipe's final pour has actually been delivered, so a
-    /// brewer stop between pours can never end the session early.
-    public mutating func confirmCompletionIfSettled(
-        at date: Date,
-        finalPourDelivered: Bool,
-        settleInterval: TimeInterval = 8
-    ) {
-        guard completedAt == nil,
-              finalPourDelivered,
-              let brewerStoppedAt,
-              date.timeIntervalSince(brewerStoppedAt) >= settleInterval else { return }
-        completedAt = date
-        phase = .complete
-    }
-
-    private mutating func beginPour(at date: Date) {
+    private mutating func beginPour(index: Int?, at date: Date) {
         hasObservedPourEvents = true
-        brewerStoppedAt = nil
+        lastPourStartedAt = date
+        if extractionStartedAt == nil { extractionStartedAt = date }
 
-        guard isExtracting else {
-            extractionStartedAt = date
-            pourIndex = 0
-            awaitingNextPour = false
-            phase = .blooming
-            return
-        }
-
-        if awaitingNextPour {
-            pourIndex += 1
-            awaitingNextPour = false
+        // The machine names the pour it is starting. Clamp forward only, so a
+        // repeated or out-of-order frame cannot rewind the display.
+        if let index, index >= 0 {
+            pourIndex = max(pourIndex, index)
         }
         phase = pourIndex == 0 ? .blooming : .pouring
+    }
+
+    private mutating func updatePage(_ page: UInt32?, at date: Date) {
+        guard let page else { return }
+        currentPage = page
+        guard recipeAccepted else { return }
+
+        // The machine reports its screen shortly after accepting the recipe,
+        // before the first pour. That screen is the brewing screen.
+        guard let brewingPage else {
+            brewingPage = page
+            return
+        }
+        // Leaving it is the only completion signal this firmware gives when it
+        // sends no finish event at all.
+        if page != brewingPage, isExtracting, completedAt == nil {
+            completedAt = date
+            phase = .complete
+        }
     }
 }

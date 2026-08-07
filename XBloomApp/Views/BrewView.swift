@@ -531,6 +531,10 @@ struct BrewSessionView: View {
     @State private var waterTracker: BrewDeliveryTracker
     @State private var weightTracker: BrewDeliveryTracker
     @State private var liveTicker: Task<Void, Never>?
+    /// When the poured-volume counter last moved. The machine announces the
+    /// start of each pour but never its end, so a stalled counter is what marks
+    /// the change from pouring to the bed draining.
+    @State private var lastWaterIncreaseAt: Date?
 
     init(
         recipe: Recipe,
@@ -1442,7 +1446,6 @@ struct BrewSessionView: View {
         Task {
             await BrewLiveActivityManager.shared.update(activityState(phase: currentPhase))
         }
-        machine.confirmBrewCompletionIfSettled(finalPourDelivered: finalPourDelivered)
         finishIfMachineReportsCompletion()
     }
 
@@ -1478,9 +1481,11 @@ struct BrewSessionView: View {
 
         let readingTime = Date()
         if let rawWater = machine.telemetry.waterVolume {
+            let previous = water
             water = waterTracker.ingest(rawValue: rawWater, at: readingTime)
-            waterBaseline = waterTracker.currentBaseline
+            if water > previous + 0.05 { lastWaterIncreaseAt = readingTime }
         }
+        waterBaseline = waterTracker.currentBaseline
         if let rawWeight = machine.telemetry.weight {
             weight = weightTracker.ingest(rawValue: rawWeight, at: readingTime)
             weightBaseline = weightTracker.currentBaseline
@@ -1506,7 +1511,6 @@ struct BrewSessionView: View {
                 ?? "The xBloom reported a machine error. The app kept your extraction record; check the machine display before stopping anything."
         }
 
-        machine.confirmBrewCompletionIfSettled(finalPourDelivered: finalPourDelivered)
         finishIfMachineReportsCompletion()
     }
 
@@ -1518,14 +1522,14 @@ struct BrewSessionView: View {
         guard mode == .live, !finished else { return }
         let machineProgress = machine.brewProgress
 
-        // Extraction begins at whichever the machine confirms first: a brewer
-        // start notification, the brewing state, or water that has measurably
-        // started moving. Relying on the notification alone left the session
-        // stuck in "heating" on firmware that does not send it.
+        // Extraction begins when the machine reports its first watering phase.
+        // Water starting to move is kept as a fallback for firmware that does
+        // not send that event, which otherwise left the session in "heating"
+        // right through a pour.
         if extractionStartedAt == nil {
             if let machineStart = machineProgress.extractionStartedAt {
                 extractionStartedAt = machineStart
-            } else if machine.telemetry.state == .brewing || water > 0.5 {
+            } else if water > 0.5 {
                 extractionStartedAt = Date()
             }
             if extractionStartedAt != nil { lastSampleAt = -.infinity }
@@ -1533,14 +1537,22 @@ struct BrewSessionView: View {
 
         if let extractionStartedAt {
             extractionElapsed = max(0, Date().timeIntervalSince(extractionStartedAt))
-            // Delivered water decides which pour is running. The per-pour
-            // meaning of the machine's pause and resume notifications is not
-            // confirmed for this firmware, and counting them advanced the pour
-            // faster than the machine was actually pouring.
-            activePourIndex = min(
+            // The machine names the pour it is on in every watering-phase
+            // frame. Delivered water is only a fallback for firmware that
+            // does not send them.
+            let reportedIndex = machineProgress.hasObservedPourEvents
+                ? machineProgress.pourIndex
+                : pourIndexFromDeliveredWater
+            let resolvedIndex = min(
                 max(0, recipe.pours.count - 1),
-                max(activePourIndex, pourIndexFromDeliveredWater)
+                max(activePourIndex, reportedIndex)
             )
+            if resolvedIndex != activePourIndex {
+                // A new pour is starting; give the counter a moment to move
+                // before the display calls it a rest.
+                lastWaterIncreaseAt = Date()
+                activePourIndex = resolvedIndex
+            }
             progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
         } else {
             // Grinding and heating are preparation, not pour time.
@@ -1557,27 +1569,34 @@ struct BrewSessionView: View {
         }
     }
 
-    /// The machine reports the brewer stopping, but "enjoy" is optional and is
-    /// not always sent. Waiting for the recipe's final pour to be delivered
-    /// before honouring a settled brewer stop means a pause between pours can
-    /// never end the session early.
+    /// True once the machine is on the recipe's last pour and has delivered
+    /// essentially all of its water.
     private var finalPourDelivered: Bool {
         guard !recipe.pours.isEmpty else { return true }
         guard activePourIndex >= recipe.pours.count - 1 else { return false }
         let target = Double(recipe.totalWater)
-        let deliveredEnough = target <= 0 || water >= target * 0.9
-        let ranLongEnough = extractionElapsed >= estimatedExtractionDuration * 0.6
-        return deliveredEnough || ranLongEnough
+        return target <= 0 || water >= target * 0.95
+    }
+
+    /// A backstop for firmware that neither reports a finish event nor changes
+    /// its screen. Only fires after the last pour is fully delivered and the
+    /// counter has been still far longer than any rest in the recipe.
+    private var hasDrainedAfterFinalPour: Bool {
+        guard finalPourDelivered, let lastWaterIncreaseAt else { return false }
+        let longestRest = recipe.pours.map { Double($0.pauseAfter) }.max() ?? 0
+        return Date().timeIntervalSince(lastWaterIncreaseAt) > max(45, longestRest + 20)
     }
 
     @MainActor
     private func finishIfMachineReportsCompletion() {
         guard !finished, !recordedCompletion else { return }
-        // A completion notification before any pour has happened belongs to the
+        // A completion signal before any pour has happened belongs to the
         // machine's previous cycle, not to this brew. Honouring it ended the
         // session seconds after it started, with every pour marked done.
         guard extractionStartedAt != nil else { return }
-        guard machine.brewProgress.completedAt != nil || machine.telemetry.state == .complete else {
+        guard machine.brewProgress.completedAt != nil
+                || machine.telemetry.state == .complete
+                || hasDrainedAfterFinalPour else {
             return
         }
         completeLiveSession()
@@ -1685,9 +1704,18 @@ struct BrewSessionView: View {
         switch machinePhase {
         case .preparing, .grinding, .heating:
             return activePourIndex == 0 ? .blooming : .pouring
+        case .blooming, .pouring:
+            // The machine says when a pour starts but not when it ends. Once
+            // the poured-volume counter stops climbing, the bed is draining.
+            return isWaterFlowing ? machinePhase : .resting
         default:
             return machinePhase
         }
+    }
+
+    private var isWaterFlowing: Bool {
+        guard let lastWaterIncreaseAt else { return true }
+        return Date().timeIntervalSince(lastWaterIncreaseAt) < 2.5
     }
 
     private var liveStageTitle: String {

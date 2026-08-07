@@ -1,5 +1,8 @@
 import Foundation
 
+/// Commands the app sends. Every identifier here is present in the official
+/// app's own command table; the scale-vibrate pair that used to sit alongside
+/// them was not, and the machine had no reason to answer it.
 public enum XBloomCommand: UInt16, Sendable {
     case grinderQuit = 8012
     case brewerQuit = 8013
@@ -8,9 +11,12 @@ public enum XBloomCommand: UInt16, Sendable {
     case recipeSendManual = 8004
     case setBypass = 8102
     case setCup = 8104
-    case scaleVibrate = 2502
-    case scaleStop = 2505
     case recipeStop = 40519
+    /// Asks the machine which screen it is on — a read-only probe that moves no
+    /// mechanism, so it is safe to use as a connection test.
+    case deviceCurrentPage = 8023
+    /// Keeps the machine awake for the duration of a session.
+    case deviceNoSleep = 8008
 }
 
 public enum XBloomMachineState: String, Codable, Sendable {
@@ -35,6 +41,11 @@ public struct XBloomTelemetry: Equatable, Sendable {
     public var tankWaterLevel: Double?
     public var waterLevelOK: Bool?
     public var lastCommand: UInt16?
+    /// The first four payload bytes of a lifecycle notification, little-endian.
+    /// Several of the machine's events carry their meaning here rather than in
+    /// the identifier — `wateringPhase` reports which pour is starting, and
+    /// `deviceCurrentPage` reports which screen the machine is showing.
+    public var eventValue: UInt32?
 
     public init(
         state: XBloomMachineState = .idle,
@@ -43,7 +54,8 @@ public struct XBloomTelemetry: Equatable, Sendable {
         waterVolume: Double? = nil,
         tankWaterLevel: Double? = nil,
         waterLevelOK: Bool? = nil,
-        lastCommand: UInt16? = nil
+        lastCommand: UInt16? = nil,
+        eventValue: UInt32? = nil
     ) {
         self.state = state
         self.weight = weight
@@ -52,6 +64,7 @@ public struct XBloomTelemetry: Equatable, Sendable {
         self.tankWaterLevel = tankWaterLevel
         self.waterLevelOK = waterLevelOK
         self.lastCommand = lastCommand
+        self.eventValue = eventValue
     }
 }
 
@@ -172,29 +185,39 @@ public enum XBloomProtocol {
         guard expected == crc16(packet.dropLast(2)) else { throw XBloomProtocolError.invalidCRC }
         let command = packet.readUInt16LE(at: 3)
         var result = XBloomTelemetry(lastCommand: command)
+        if packet.count >= 16 {
+            result.eventValue = packet.readUInt32LE(at: 10)
+        }
 
-        switch command {
-        case 20501:
+        switch XBloomNotification(rawValue: command) {
+        case .weightRealTime:
             result.weight = Double(packet.readFloat32LE(at: 10))
-        case 8108:
+        case .deviceBrewerTemperature:
             result.temperature = Double(packet.readUInt32LE(at: 10)) / 10
-        case 40523:
-            result.waterVolume = normalizedWaterVolume(
-                Double(packet.readFloat32LE(at: 10))
+        case .brewerVolume:
+            result.waterVolume = pouredMilliliters(
+                fromMicroliters: Double(packet.readFloat32LE(at: 10))
             )
-        case 9003:
+        case .deviceBeginGrinder:
             result.state = .grinding
-        case 9005, 40502, 40510:
+        case .deviceBeginBrewer, .brewerStart, .wateringPhase:
             result.state = .brewing
-        case 9010:
+        case .deviceBrewerPass, .deviceWateringFinish:
             result.state = .paused
-        case 40507, 40511:
+        case .deviceGrinderFinish:
             result.state = .idle
-        case 40512, 40513:
+        case .takeCup, .brewerFinish:
             result.state = .complete
-        case 40517, 40522, 8203, 8204:
+        case .grinderEmptyAbnormal:
             result.state = .error
-        case 40521:
+        case .waterTankVolumeLow:
+            // Observed mid-brew with a zero payload while the machine carried
+            // on pouring normally, so a zero here is a status report and not a
+            // fault. Only a non-zero level is treated as a real problem.
+            if (result.eventValue ?? 0) != 0 {
+                result.state = .error
+            }
+        case .deviceSyncInfo:
             if packet.count > 46 {
                 result.waterLevelOK = packet[43] == 1
                 // Reservoir contents, not the amount poured into the dripper.
@@ -209,19 +232,22 @@ public enum XBloomProtocol {
     /// The largest poured volume a Studio recipe can plausibly report.
     public static let maximumPlausibleWaterVolume: Double = 750
 
-    /// Accepts the machine's poured-water counter only when it is a possible
-    /// milliliter figure.
+    /// Converts the machine's poured-volume counter into milliliters.
     ///
-    /// This used to divide the reading by ten until it fell under the limit, on
-    /// the theory that some firmware scales the counter. That rescaling fired
-    /// mid-brew — 740 stayed 740 while the next reading of 760 became 76 — and
-    /// the monotonic live figures then latched onto the pre-collapse value and
-    /// jumped to the final pour. An out-of-range reading is now simply ignored,
-    /// so a single odd frame costs one sample instead of the whole session.
-    public static func normalizedWaterVolume(_ rawValue: Double) -> Double? {
-        guard rawValue.isFinite,
-              (0...maximumPlausibleWaterVolume).contains(rawValue) else { return nil }
-        return rawValue
+    /// `brewerVolume` is a float32 in **microliters**. This was verified against
+    /// a recorded brew of 45 + 95 + 100 ml: the counter plateaued at exactly
+    /// 45000 after the bloom and 140000 after the second pour, and its rate of
+    /// change matched the recipe's 3.0 ml/s flow.
+    ///
+    /// Earlier versions guessed at the scale by dividing by ten until the value
+    /// fell under a plausible ceiling. That turned the 45 ml bloom into 450 ml,
+    /// which is why the display ran straight to the final pour seconds after a
+    /// brew began.
+    public static func pouredMilliliters(fromMicroliters rawValue: Double) -> Double? {
+        guard rawValue.isFinite, rawValue >= 0 else { return nil }
+        let milliliters = rawValue / 1_000
+        guard milliliters <= maximumPlausibleWaterVolume else { return nil }
+        return milliliters
     }
 
     private static func vibrationByte(for pour: PourStep) -> UInt8 {

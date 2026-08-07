@@ -226,16 +226,25 @@ import Testing
     #expect(log.receivedCommandSummary().map(\.command) == [9003])
 }
 
-@Test func machineTestUsesSafeScaleCommands() {
-    let vibrate = XBloomProtocol.command(.scaleVibrate)
-    let stop = XBloomProtocol.command(.scaleStop)
-    #expect(UInt16(vibrate[3]) | UInt16(vibrate[4]) << 8 == 2502)
-    #expect(UInt16(stop[3]) | UInt16(stop[4]) << 8 == 2505)
+@Test func everyCommandTheAppSendsExistsInTheVendorCommandSet() {
+    // The scale-vibrate pair this test used to cover (2502 / 2505) is absent
+    // from the official app's table, so the machine had no reason to answer the
+    // one probe whose whole job was to prove the link works.
+    for command in [
+        XBloomCommand.grinderQuit, .brewerQuit, .recipeSendAuto, .recipeExecute,
+        .recipeSendManual, .setBypass, .setCup, .recipeStop, .deviceCurrentPage,
+        .deviceNoSleep,
+    ] {
+        #expect(XBloomNotification(rawValue: command.rawValue) != nil)
+    }
+
+    let probe = XBloomProtocol.command(.deviceCurrentPage)
+    #expect(UInt16(probe[3]) | UInt16(probe[4]) << 8 == 8023)
 }
 
 @Test func notificationFramerSurvivesFragmentedAndConcatenatedPackets() {
-    let first = XBloomProtocol.command(.scaleVibrate)
-    let second = XBloomProtocol.command(.scaleStop)
+    let first = XBloomProtocol.command(.deviceCurrentPage)
+    let second = XBloomProtocol.command(.deviceNoSleep)
     var framer = XBloomNotificationFramer()
 
     #expect(framer.ingest(Data(first.prefix(7))).isEmpty)
@@ -248,16 +257,16 @@ import Testing
     #expect(framer.ingest(combined) == [second, first])
 }
 
-@Test func waterTelemetryIgnoresImpossibleReadingsInsteadOfRescalingThem() {
-    #expect(XBloomProtocol.normalizedWaterVolume(150) == 150)
-    #expect(XBloomProtocol.normalizedWaterVolume(0) == 0)
-    #expect(XBloomProtocol.normalizedWaterVolume(750) == 750)
-    // Rescaling used to turn 760 into 76 mid-brew, which collapsed the live
-    // figures and latched the display on the pre-collapse value.
-    #expect(XBloomProtocol.normalizedWaterVolume(760) == nil)
-    #expect(XBloomProtocol.normalizedWaterVolume(1_500_000) == nil)
-    #expect(XBloomProtocol.normalizedWaterVolume(.infinity) == nil)
-    #expect(XBloomProtocol.normalizedWaterVolume(-1) == nil)
+@Test func pouredVolumeIsReportedInMicroliters() {
+    // Verified against a recorded 45 + 95 + 100 ml brew: the counter plateaued
+    // at exactly 45000 after the bloom and 140000 after the second pour.
+    #expect(XBloomProtocol.pouredMilliliters(fromMicroliters: 45_000) == 45)
+    #expect(XBloomProtocol.pouredMilliliters(fromMicroliters: 140_000) == 140)
+    #expect(XBloomProtocol.pouredMilliliters(fromMicroliters: 387.5) == 0.3875)
+    #expect(XBloomProtocol.pouredMilliliters(fromMicroliters: 0) == 0)
+    #expect(XBloomProtocol.pouredMilliliters(fromMicroliters: 5_000_000) == nil)
+    #expect(XBloomProtocol.pouredMilliliters(fromMicroliters: .infinity) == nil)
+    #expect(XBloomProtocol.pouredMilliliters(fromMicroliters: -1) == nil)
 }
 
 @Test func machineInfoReportsTankLevelSeparatelyFromPouredWater() throws {
@@ -303,78 +312,88 @@ import Testing
     #expect(Brewing.extractionDuration(recipe: recipe) == 79)
 }
 
-@Test func brewProgressStartsExtractionOnlyWhenTheMachineStartsPouring() {
+@Test func brewProgressStartsExtractionAtTheFirstWateringPhase() {
     var tracker = BrewProgressTracker()
     let start = Date(timeIntervalSince1970: 1_000)
 
-    tracker.ingest(command: 9000, at: start)
-    tracker.ingest(command: 9003, at: start.addingTimeInterval(1))
-    #expect(tracker.phase == .grinding)
-    #expect(tracker.extractionStartedAt == nil)
-
-    tracker.ingest(command: 40507, at: start.addingTimeInterval(20))
-    tracker.ingest(command: 9001, at: start.addingTimeInterval(22))
+    // Recipe accepted. Nothing has been poured yet.
+    tracker.ingest(command: 40502, value: 0, at: start)
     #expect(tracker.phase == .heating)
     #expect(!tracker.isExtracting)
 
-    let firstPour = start.addingTimeInterval(35)
-    tracker.ingest(command: 9005, at: firstPour)
-    tracker.ingest(command: 40510, at: firstPour.addingTimeInterval(0.2))
+    tracker.ingest(command: 8023, value: 35, at: start.addingTimeInterval(0.4))
+    #expect(tracker.brewingPage == 35)
+    #expect(!tracker.isExtracting)
+
+    let firstPour = start.addingTimeInterval(1)
+    tracker.ingest(command: 40510, value: 0, at: firstPour)
     #expect(tracker.phase == .blooming)
     #expect(tracker.extractionStartedAt == firstPour)
     #expect(tracker.pourIndex == 0)
+    #expect(tracker.hasObservedPourEvents)
 }
 
-@Test func brewProgressAdvancesOnePourPerPauseAndResume() {
+@Test func wateringPhasePayloadNamesThePourThatIsStarting() {
     var tracker = BrewProgressTracker()
     let start = Date(timeIntervalSince1970: 2_000)
 
-    tracker.ingest(command: 9005, at: start)
+    tracker.ingest(command: 40510, value: 0, at: start)
     #expect(tracker.pourIndex == 0)
+    #expect(tracker.phase == .blooming)
 
-    tracker.ingest(command: 9010, at: start.addingTimeInterval(15))
-    #expect(tracker.phase == .resting)
-    #expect(tracker.pourIndex == 0)
-
-    tracker.ingest(command: 9005, at: start.addingTimeInterval(45))
+    tracker.ingest(command: 40510, value: 1, at: start.addingTimeInterval(57))
+    #expect(tracker.pourIndex == 1)
     #expect(tracker.phase == .pouring)
+
+    // A repeated or out-of-order frame must not rewind the display.
+    tracker.ingest(command: 40510, value: 0, at: start.addingTimeInterval(58))
     #expect(tracker.pourIndex == 1)
 
-    // Repeated start notifications inside one pour must not skip ahead.
-    tracker.ingest(command: 40502, at: start.addingTimeInterval(46))
-    #expect(tracker.pourIndex == 1)
+    tracker.ingest(command: 40510, value: 2, at: start.addingTimeInterval(120))
+    #expect(tracker.pourIndex == 2)
 }
 
-@Test func brewerStopOnlyCompletesTheRecipeAfterTheFinalPour() {
+@Test func leavingTheBrewingScreenCompletesARecipeThatSendsNoFinishEvent() {
     var tracker = BrewProgressTracker()
     let start = Date(timeIntervalSince1970: 3_000)
-    tracker.ingest(command: 9005, at: start)
-    tracker.ingest(command: 40511, at: start.addingTimeInterval(15))
 
-    tracker.confirmCompletionIfSettled(
-        at: start.addingTimeInterval(60),
-        finalPourDelivered: false
-    )
+    tracker.ingest(command: 40502, value: 0, at: start)
+    tracker.ingest(command: 8023, value: 35, at: start.addingTimeInterval(0.4))
+    tracker.ingest(command: 40510, value: 0, at: start.addingTimeInterval(1))
     #expect(tracker.completedAt == nil)
 
-    // A later start belongs to the next pour, not to a finished recipe.
-    tracker.ingest(command: 9005, at: start.addingTimeInterval(45))
-    #expect(tracker.pourIndex == 1)
-    #expect(tracker.completedAt == nil)
-
-    tracker.ingest(command: 40511, at: start.addingTimeInterval(80))
-    tracker.confirmCompletionIfSettled(
-        at: start.addingTimeInterval(84),
-        finalPourDelivered: true
-    )
-    #expect(tracker.completedAt == nil)
-
-    tracker.confirmCompletionIfSettled(
-        at: start.addingTimeInterval(90),
-        finalPourDelivered: true
-    )
-    #expect(tracker.completedAt == start.addingTimeInterval(90))
+    let finish = start.addingTimeInterval(200)
+    tracker.ingest(command: 8023, value: 1, at: finish)
+    #expect(tracker.completedAt == finish)
     #expect(tracker.phase == .complete)
+}
+
+@Test func aZeroWaterTankReportDoesNotInterruptARunningBrew() throws {
+    var tracker = BrewProgressTracker()
+    let start = Date(timeIntervalSince1970: 4_000)
+    tracker.ingest(command: 40510, value: 0, at: start)
+
+    // Seen mid-brew in a recording while the machine kept pouring normally.
+    tracker.ingest(command: 40522, value: 0, at: start.addingTimeInterval(60))
+    #expect(tracker.phase == .blooming)
+    #expect(tracker.errorCommand == nil)
+
+    tracker.ingest(command: 40522, value: 1, at: start.addingTimeInterval(70))
+    #expect(tracker.phase == .error)
+    #expect(tracker.errorCommand == 40522)
+}
+
+@Test func measurementFramesNeverMoveTheBrewLifecycle() {
+    var tracker = BrewProgressTracker()
+    let start = Date(timeIntervalSince1970: 5_000)
+    tracker.ingest(command: 40510, value: 0, at: start)
+    let afterFirstPour = tracker
+
+    for offset in stride(from: 1.0, to: 20.0, by: 0.2) {
+        tracker.ingest(command: 40523, value: 42_000, at: start.addingTimeInterval(offset))
+        tracker.ingest(command: 20501, value: 12, at: start.addingTimeInterval(offset))
+    }
+    #expect(tracker == afterFirstPour)
 }
 
 @Test func deliveryTrackerRejectsJumpsFasterThanTheMachineCanPour() {
@@ -530,4 +549,76 @@ import Testing
     let data = try JSONEncoder().encode(bean)
     let decoded = try JSONDecoder().decode(BeanProfile.self, from: data)
     #expect(decoded.acidityLevel == nil)
+}
+
+/// Replays the lifecycle frames from a real recorded brew — a grinder-off
+/// 45 + 95 + 100 ml recipe — in their original order and timing.
+@Test func recordedBrewDrivesTheLifecycleCorrectly() {
+    var tracker = BrewProgressTracker()
+    let origin = Date(timeIntervalSince1970: 10_000)
+    func at(_ offset: TimeInterval) -> Date { origin.addingTimeInterval(offset) }
+
+    // Idle telemetry before the recipe is sent must not start anything.
+    for offset in stride(from: 0.0, to: 8.0, by: 0.2) {
+        tracker.ingest(command: 40523, value: 0, at: at(offset))
+        tracker.ingest(command: 20501, value: 0, at: at(offset))
+    }
+    #expect(tracker.phase == .preparing)
+    #expect(!tracker.isExtracting)
+
+    tracker.ingest(command: 8102, value: 0, at: at(8.86))   // bypass ack
+    tracker.ingest(command: 8104, value: 0, at: at(9.87))   // pod type ack
+    tracker.ingest(command: 8004, value: 0, at: at(10.91))  // recipe ack
+    tracker.ingest(command: 8002, value: 0, at: at(11.96))  // marking ack
+    tracker.ingest(command: 40502, value: 0, at: at(11.99)) // brewer start
+    #expect(tracker.phase == .heating)
+    #expect(!tracker.isExtracting)
+
+    tracker.ingest(command: 8023, value: 35, at: at(12.39)) // brewing screen
+    #expect(tracker.brewingPage == 35)
+
+    tracker.ingest(command: 40510, value: 0, at: at(12.98)) // first pour
+    #expect(tracker.phase == .blooming)
+    #expect(tracker.pourIndex == 0)
+    #expect(tracker.extractionStartedAt == at(12.98))
+
+    // The bloom and the long rest that follows it: measurement frames only.
+    for offset in stride(from: 13.0, to: 69.4, by: 0.2) {
+        tracker.ingest(command: 40523, value: 45_000, at: at(offset))
+        tracker.ingest(command: 20501, value: 0, at: at(offset))
+    }
+    // A zero water-tank report arrives mid-brew and must not interrupt it.
+    tracker.ingest(command: 40522, value: 0, at: at(72.53))
+    #expect(tracker.pourIndex == 0)
+    #expect(tracker.errorCommand == nil)
+
+    tracker.ingest(command: 40510, value: 1, at: at(69.43)) // second pour
+    #expect(tracker.phase == .pouring)
+    #expect(tracker.pourIndex == 1)
+    #expect(tracker.completedAt == nil)
+
+    tracker.ingest(command: 40519, value: 0, at: at(108.88)) // stop ack
+    #expect(tracker.completedAt == nil)
+
+    tracker.ingest(command: 8023, value: 1, at: at(109.32))  // back to home
+    #expect(tracker.completedAt == at(109.32))
+    #expect(tracker.phase == .complete)
+}
+
+/// The counter values from the same recording, decoded through the parser.
+@Test func recordedWaterCounterMatchesTheRecipeVolumes() {
+    let bloomPlateau = XBloomProtocol.pouredMilliliters(fromMicroliters: 45_000)
+    let secondPourPlateau = XBloomProtocol.pouredMilliliters(fromMicroliters: 140_000)
+    let firstMovement = XBloomProtocol.pouredMilliliters(fromMicroliters: 387.5)
+
+    #expect(bloomPlateau == 45)          // recipe pour 1
+    #expect(secondPourPlateau == 140)    // pours 1 + 2
+    #expect(firstMovement == 0.3875)     // sub-millilitre, not 387 ml
+
+    // Two consecutive readings 0.28 s apart differ by 775 microlitres, which is
+    // the recipe's 3.0 ml/s flow. Anything that turned these into hundreds of
+    // millilitres was reading the counter at the wrong scale.
+    let a = XBloomProtocol.pouredMilliliters(fromMicroliters: 1_162.5) ?? 0
+    let b = XBloomProtocol.pouredMilliliters(fromMicroliters: 1_937.5) ?? 0
+    #expect(((b - a) / 0.28 - 2.77).magnitude < 0.1)
 }
