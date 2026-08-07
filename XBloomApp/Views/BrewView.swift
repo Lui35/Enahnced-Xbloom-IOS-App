@@ -1232,38 +1232,155 @@ struct BrewSessionView: View {
         .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    private enum LivePourState {
+        case done
+        case active
+        case upcoming
+    }
+
+    private func stateIcon(for state: LivePourState) -> String {
+        switch state {
+        case .done: "checkmark.circle.fill"
+        case .active: "drop.circle.fill"
+        case .upcoming: "circle"
+        }
+    }
+
+    private func state(ofPour index: Int) -> LivePourState {
+        if finished || index < activePourIndex { return .done }
+        return index == activePourIndex ? .active : .upcoming
+    }
+
+    /// Water already delivered into this particular pour, from the running
+    /// total. Pours before it have to be complete for it to be under way.
+    private func delivered(inPour index: Int) -> Double {
+        let before = recipe.pours.prefix(index).reduce(0.0) { $0 + Double($1.volume) }
+        let capacity = Double(recipe.pours[index].volume)
+        return min(capacity, max(0, water - before))
+    }
+
     private var pourTimeline: some View {
         StudioCard {
-            VStack(alignment: .leading, spacing: 14) {
-                StudioSectionTitle(title: "Recipe timeline", detail: "\(recipe.pours.count) pours", icon: "list.number")
+            VStack(alignment: .leading, spacing: 12) {
+                StudioSectionTitle(
+                    title: "Pours",
+                    detail: "\(min(activePourIndex + 1, recipe.pours.count)) of \(recipe.pours.count)",
+                    icon: "list.number"
+                )
                 ForEach(Array(recipe.pours.enumerated()), id: \.element.id) { index, pour in
-                    HStack(spacing: 12) {
-                        PourPatternMark(
-                            pattern: pour.pattern,
-                            color: index <= activePourIndex ? StudioTheme.accent : StudioTheme.muted,
-                            size: 31
-                        )
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(index == 0 ? "Bloom" : "Pour \(index + 1)")
-                                .font(.subheadline.weight(.semibold))
-                            Text("\(pour.volume) ml · \(pour.pauseAfter)s rest · \(patternTitle(pour.pattern))")
-                                .font(.caption)
-                                .foregroundStyle(StudioTheme.muted)
-                        }
+                    livePourCard(index: index, pour: pour)
+                }
+            }
+        }
+    }
+
+    private func livePourCard(index: Int, pour: PourStep) -> some View {
+        let state = state(ofPour: index)
+        let delivered = delivered(inPour: index)
+        let capacity = Double(max(1, pour.volume))
+        let share = recipe.totalWater > 0
+            ? Int((Double(pour.volume) / Double(recipe.totalWater) * 100).rounded())
+            : 0
+        let tint: Color = switch state {
+        case .done: StudioTheme.mint
+        case .active: StudioTheme.accent
+        case .upcoming: StudioTheme.muted
+        }
+
+        return VStack(spacing: 12) {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(index == 0 ? "Bloom" : "Pour \(index + 1)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                    HStack(alignment: .lastTextBaseline, spacing: 2) {
+                        Text("\(share)")
+                            .font(.system(size: 34, weight: .light, design: .rounded))
+                            .monospacedDigit()
+                        Text("%")
+                            .font(.subheadline.weight(.bold))
+                    }
+                }
+                .frame(width: 66, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 9) {
+                        PourPatternMark(pattern: pour.pattern, color: tint, size: 26)
+                        Text("\(pour.volume) ml · \(pour.temperature)°C")
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
                         Spacer()
-                        if pour.agitationBefore || pour.agitationAfter {
-                            AgitationTimingMarks(
-                                before: pour.agitationBefore,
-                                after: pour.agitationAfter,
-                                size: 20
-                            )
+                    }
+                    HStack(spacing: 8) {
+                        Text(patternTitle(pour.pattern))
+                        Text("·")
+                        Text("\(String(format: "%.1f", pour.flowRate)) ml/s")
+                        if pour.pauseAfter > 0 {
+                            Text("·")
+                            Text("\(pour.pauseAfter)s rest")
                         }
-                        Image(systemName: index < activePourIndex || finished ? "checkmark.circle.fill" : (index == activePourIndex ? "circle.inset.filled" : "circle"))
-                            .foregroundStyle(index <= activePourIndex || finished ? StudioTheme.mint : StudioTheme.muted)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(StudioTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(spacing: 6) {
+                    Image(systemName: stateIcon(for: state))
+                        .font(.title3)
+                        .foregroundStyle(tint)
+                    if pour.agitationBefore || pour.agitationAfter {
+                        AgitationTimingMarks(
+                            before: pour.agitationBefore,
+                            after: pour.agitationAfter,
+                            size: 17
+                        )
+                    }
+                }
+            }
+
+            // Only the running pour gets a live bar; the others would just be
+            // a full or empty rectangle saying nothing.
+            if state == .active, mode == .live || !finished {
+                VStack(spacing: 5) {
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(StudioTheme.raised)
+                            Capsule()
+                                .fill(tint)
+                                .frame(width: proxy.size.width * min(1, delivered / capacity))
+                                .animation(.smooth(duration: 0.25), value: delivered)
+                        }
+                    }
+                    .frame(height: 8)
+                    HStack {
+                        Text(stageTitle(for: currentPhase))
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(tint)
+                        Spacer()
+                        Text("\(Int(delivered.rounded())) / \(pour.volume) ml")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(StudioTheme.muted)
                     }
                 }
             }
         }
+        .padding(14)
+        .background(
+            state == .active ? StudioTheme.raised : StudioTheme.panel,
+            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(
+                    state == .active ? tint : .white.opacity(0.08),
+                    lineWidth: state == .active ? 2 : 1
+                )
+        }
+        .opacity(state == .upcoming ? 0.62 : 1)
+        .animation(.snappy(duration: 0.22), value: state)
     }
 
     @MainActor

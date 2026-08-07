@@ -21,21 +21,24 @@ struct ScaleView: View {
 
     var body: some View {
         ZStack {
-            AppBackground()
+            StudioBackground()
             ScrollView {
-                LazyVStack(spacing: 22) {
+                LazyVStack(spacing: 18) {
                     readout
                     controls
                     MachineToolStatusCard(status: status)
                     notes
                 }
                 .padding(.horizontal, 18)
-                .padding(.bottom, 30)
+                .padding(.bottom, 34)
             }
             .scrollIndicators(.hidden)
         }
         .navigationTitle("Scale")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(StudioTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .preferredColorScheme(.dark)
         .task { await open() }
         .onDisappear {
             Task { await machine.closeScale() }
@@ -46,76 +49,114 @@ struct ScaleView: View {
     }
 
     private var readout: some View {
-        VStack(spacing: 10) {
-            Text(displayedWeight)
-                .font(.system(size: 76, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .animation(.smooth(duration: 0.2), value: weight)
-            Text(showsGrams ? "grams" : "ounces")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+        VStack(spacing: 8) {
+            HStack(alignment: .lastTextBaseline, spacing: 8) {
+                Text(displayedWeight)
+                    .font(.system(size: 78, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.smooth(duration: 0.2), value: weight)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(showsGrams ? "g" : "oz")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(StudioTheme.muted)
+            }
+
+            Text(machine.isConnected ? machine.machineName : "Not connected")
+                .font(.subheadline)
+                .foregroundStyle(StudioTheme.muted)
 
             HStack(spacing: 10) {
-                MetricChip(title: "Peak", value: String(format: "%.1f g", peakWeight))
-                MetricChip(
-                    title: "Machine",
-                    value: machine.isConnected ? "Connected" : "Offline"
+                StudioReadoutChip(title: "Peak", value: String(format: "%.1f g", peakWeight))
+                StudioReadoutChip(
+                    title: "Temp",
+                    value: machine.telemetry.temperature.map { String(format: "%.0f°C", $0) } ?? "—"
+                )
+                StudioReadoutChip(
+                    title: "State",
+                    value: machine.telemetry.state.rawValue.capitalized
                 )
             }
+            .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 26)
-        .appCard()
+        .padding(.top, 14)
     }
 
     private var controls: some View {
-        VStack(spacing: 12) {
-            Button {
-                Task { await tare() }
-            } label: {
-                Label("Tare", systemImage: "scalemass")
-            }
-            .buttonStyle(PrimaryActionButtonStyle())
-            .disabled(!machine.isConnected || isWorking)
-
-            HStack(spacing: 12) {
-                Button {
-                    showsGrams.toggle()
-                } label: {
-                    Label(showsGrams ? "Show ounces" : "Show grams", systemImage: "arrow.left.arrow.right")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                }
-                .buttonStyle(.bordered)
+        StudioCard {
+            VStack(spacing: 12) {
+                StudioSectionTitle(title: "Scale", detail: "Live from the machine", icon: "scalemass.fill")
 
                 Button {
-                    peakWeight = weight
+                    Task { await tare() }
                 } label: {
-                    Label("Reset peak", systemImage: "arrow.counterclockwise")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Tare")
+                                .font(.headline)
+                            Text("Zeroes the machine, not just this screen")
+                                .font(.caption)
+                                .opacity(0.62)
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.counterclockwise.circle.fill")
+                            .font(.title2)
+                    }
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 17)
+                    .padding(.vertical, 13)
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
+                .disabled(!machine.isConnected || isWorking)
+                .opacity(machine.isConnected ? 1 : 0.5)
+
+                HStack(spacing: 10) {
+                    secondaryButton(
+                        showsGrams ? "Show ounces" : "Show grams",
+                        icon: "arrow.left.arrow.right"
+                    ) {
+                        showsGrams.toggle()
+                    }
+                    secondaryButton("Reset peak", icon: "arrow.uturn.backward") {
+                        peakWeight = weight
+                    }
+                }
             }
         }
     }
 
-    private var notes: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            AppSectionHeader(title: "About this screen")
-            Text(
-                "Weight comes from the machine's own load cell, several times a "
-                    + "second. Tare clears it on the machine, not just here. "
-                    + "Unit switching is display-only and does not change the "
-                    + "machine's setting."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+    private func secondaryButton(
+        _ title: String,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         }
-        .appCard()
+        .buttonStyle(.plain)
+    }
+
+    private var notes: some View {
+        StudioCard {
+            VStack(alignment: .leading, spacing: 8) {
+                StudioSectionTitle(title: "About this screen", icon: "info.circle")
+                Text(
+                    "Weight comes from the machine's own load cell, several times "
+                        + "a second. Tare clears it on the machine. Unit switching "
+                        + "is display-only and does not change the machine's own "
+                        + "setting."
+                )
+                .font(.caption)
+                .foregroundStyle(StudioTheme.muted)
+            }
+        }
     }
 
     private func open() async {
@@ -168,7 +209,7 @@ struct MachineToolStatusCard: View {
         case .idle:
             EmptyView()
         case .succeeded(let message):
-            row(message, icon: "checkmark.circle.fill", tint: AppTheme.sage)
+            row(message, icon: "checkmark.circle.fill", tint: StudioTheme.mint)
         case .unacknowledged(let message):
             row(
                 message + " The command was sent, but this control has not been "
@@ -186,25 +227,7 @@ struct MachineToolStatusCard: View {
             .font(.caption)
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-struct MetricChip: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(spacing: 3) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.subheadline.weight(.bold).monospacedDigit())
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .background(.white.opacity(0.06), in: Capsule())
+            .padding(15)
+            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }

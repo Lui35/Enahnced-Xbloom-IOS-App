@@ -9,164 +9,156 @@ import XBloomCore
 /// pattern chosen here are known to arrive as intended.
 struct ManualPourView: View {
     @Environment(XBloomBLEClient.self) private var machine
-    @State private var pour = ManualPour()
+    @State private var volume = 60.0
+    @State private var temperature = 93.0
+    @State private var flowRate = 3.2
+    @State private var pattern: PourPattern = .spiral
+    @State private var agitation = false
     @State private var status: MachineToolStatus = .idle
     @State private var isStarting = false
     @State private var isRunning = false
-    @State private var startedAt: Date?
+
+    private var pour: ManualPour {
+        ManualPour(
+            volume: Int(volume.rounded()),
+            temperature: Int(temperature.rounded()),
+            flowRate: flowRate,
+            pattern: pattern,
+            agitation: agitation
+        )
+    }
 
     private var poured: Double { machine.telemetry.waterVolume ?? 0 }
-
+    private var fraction: Double { min(1, poured / max(1, volume)) }
     private var issues: [ValidationIssue] { pour.validate() }
 
     var body: some View {
         ZStack {
-            AppBackground()
+            StudioBackground()
             ScrollView {
-                LazyVStack(spacing: 20) {
-                    liveReadout
-                    volumeCard
-                    temperatureCard
-                    flowCard
+                LazyVStack(spacing: 18) {
+                    readout
+                    parameters
                     patternCard
                     actions
                     MachineToolStatusCard(status: status)
                 }
                 .padding(.horizontal, 18)
-                .padding(.bottom, 30)
+                .padding(.bottom, 34)
             }
             .scrollIndicators(.hidden)
         }
         .navigationTitle("Brewer")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(StudioTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .preferredColorScheme(.dark)
         .onChange(of: machine.brewProgress) {
-            guard isRunning else { return }
-            if machine.brewProgress.completedAt != nil {
-                isRunning = false
-                status = .succeeded("Pour finished")
-            }
+            guard isRunning, machine.brewProgress.completedAt != nil else { return }
+            isRunning = false
+            status = .succeeded("Pour finished")
         }
     }
 
-    private var liveReadout: some View {
+    private var readout: some View {
         VStack(spacing: 12) {
-            Text(String(format: "%.0f", poured))
-                .font(.system(size: 64, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .animation(.smooth(duration: 0.2), value: poured)
-            Text("ml poured · target \(pour.volume) ml")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            ZStack {
+                Circle()
+                    .stroke(StudioTheme.raised, lineWidth: 10)
+                Circle()
+                    .trim(from: 0, to: max(0.02, fraction))
+                    .stroke(StudioTheme.accent, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.smooth(duration: 0.25), value: fraction)
+                VStack(spacing: 2) {
+                    Text("\(Int(poured.rounded()))")
+                        .font(.system(size: 40, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    Text("of \(Int(volume)) ml")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(StudioTheme.muted)
+                }
+            }
+            .frame(width: 138, height: 138)
 
-            ProgressView(value: min(1, poured / Double(max(1, pour.volume))))
-                .tint(AppTheme.crema)
+            Text(isRunning ? "Pouring" : "Ready")
+                .font(.title2.weight(.bold))
+            Text(machine.isConnected ? machine.machineName : "Not connected")
+                .font(.subheadline)
+                .foregroundStyle(StudioTheme.muted)
 
             HStack(spacing: 10) {
-                MetricChip(
+                StudioReadoutChip(
                     title: "Temp",
                     value: machine.telemetry.temperature.map { String(format: "%.0f°C", $0) } ?? "—"
                 )
-                MetricChip(
+                StudioReadoutChip(
                     title: "Cup",
                     value: String(format: "%.1f g", machine.telemetry.weight ?? 0)
                 )
-                MetricChip(
+                StudioReadoutChip(
                     title: "Est.",
                     value: String(format: "%.0f s", pour.estimatedDuration)
                 )
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .appCard()
+        .padding(.top, 10)
     }
 
-    private var volumeCard: some View {
-        settingCard(title: "Volume", value: "\(pour.volume) ml", icon: "drop.fill", tint: AppTheme.coffee) {
-            Slider(
-                value: Binding(
-                    get: { Double(pour.volume) },
-                    set: { pour.volume = Int($0.rounded()) }
-                ),
-                in: Double(ManualPour.volumeRange.lowerBound)...Double(ManualPour.volumeRange.upperBound),
-                step: 5
-            )
-            .tint(AppTheme.coffee)
-            .disabled(isRunning)
-        }
-    }
-
-    private var temperatureCard: some View {
-        settingCard(title: "Temperature", value: "\(pour.temperature) °C", icon: "thermometer.medium", tint: .orange) {
-            Slider(
-                value: Binding(
-                    get: { Double(pour.temperature) },
-                    set: { pour.temperature = Int($0.rounded()) }
-                ),
-                in: Double(ManualPour.temperatureRange.lowerBound)...Double(ManualPour.temperatureRange.upperBound),
-                step: 1
-            )
-            .tint(.orange)
-            .disabled(isRunning)
-        }
-    }
-
-    private var flowCard: some View {
-        settingCard(
-            title: "Flow rate",
-            value: String(format: "%.1f ml/s", pour.flowRate),
-            icon: "water.waves",
-            tint: AppTheme.crema
-        ) {
-            Slider(
-                value: $pour.flowRate,
-                in: ManualPour.flowRateRange.lowerBound...ManualPour.flowRateRange.upperBound,
-                step: 0.1
-            )
-            .tint(AppTheme.crema)
-            .disabled(isRunning)
+    private var parameters: some View {
+        StudioCard {
+            VStack(spacing: 12) {
+                StudioSectionTitle(
+                    title: "This pour",
+                    detail: "Drag each bar",
+                    icon: "slider.horizontal.3"
+                )
+                StudioDialBox(
+                    title: "Volume",
+                    value: $volume,
+                    range: Double(ManualPour.volumeRange.lowerBound)...Double(ManualPour.volumeRange.upperBound),
+                    step: 5,
+                    unit: "ml"
+                )
+                StudioDialBox(
+                    title: "Temperature",
+                    value: $temperature,
+                    range: Double(ManualPour.temperatureRange.lowerBound)...Double(ManualPour.temperatureRange.upperBound),
+                    unit: "°C",
+                    tint: .orange
+                )
+                StudioDialBox(
+                    title: "Flow rate",
+                    value: $flowRate,
+                    range: ManualPour.flowRateRange.lowerBound...ManualPour.flowRateRange.upperBound,
+                    step: 0.1,
+                    unit: "ml/s",
+                    decimals: 1,
+                    tint: .blue
+                )
+            }
+            .opacity(isRunning ? 0.45 : 1)
+            .allowsHitTesting(!isRunning)
         }
     }
 
     private var patternCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            AppSectionHeader(title: "Pattern")
-            HStack(spacing: 10) {
-                ForEach(PourPattern.allCases, id: \.self) { option in
-                    Button {
-                        pour.pattern = option
-                    } label: {
-                        VStack(spacing: 8) {
-                            PourPatternMark(
-                                pattern: option,
-                                color: pour.pattern == option ? AppTheme.espresso : AppTheme.crema,
-                                size: 40
-                            )
-                            Text(patternTitle(option))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(pour.pattern == option ? AppTheme.espresso : .primary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            pour.pattern == option ? AnyShapeStyle(AppTheme.crema) : AnyShapeStyle(.white.opacity(0.06)),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isRunning)
+        StudioCard {
+            VStack(alignment: .leading, spacing: 14) {
+                StudioSectionTitle(title: "Pattern", icon: "scribble.variable")
+                PourPatternSelector(selection: $pattern)
+                    .frame(height: 96)
+                Toggle(isOn: $agitation) {
+                    Label("Agitate before pouring", systemImage: "waveform")
+                        .font(.subheadline.weight(.semibold))
                 }
+                .tint(StudioTheme.mint)
             }
-
-            Toggle(isOn: $pour.agitation) {
-                Label("Agitate before pouring", systemImage: "waveform")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .tint(AppTheme.sage)
-            .disabled(isRunning)
+            .opacity(isRunning ? 0.45 : 1)
+            .allowsHitTesting(!isRunning)
         }
-        .appCard()
     }
 
     private var actions: some View {
@@ -193,10 +185,26 @@ struct ManualPourView: View {
                 Button {
                     Task { await start() }
                 } label: {
-                    Label(isStarting ? "Sending…" : "Start pour", systemImage: "play.fill")
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(isStarting ? "Sending…" : "Start pour")
+                                .font(.headline)
+                            Text("\(Int(volume)) ml · \(Int(temperature))°C · \(String(format: "%.1f", flowRate)) ml/s")
+                                .font(.caption)
+                                .opacity(0.62)
+                        }
+                        Spacer()
+                        Image(systemName: "play.circle.fill")
+                            .font(.title2)
+                    }
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 17)
+                    .padding(.vertical, 13)
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
                 }
-                .buttonStyle(PrimaryActionButtonStyle())
+                .buttonStyle(.plain)
                 .disabled(!machine.isConnected || isStarting || !issues.isEmpty)
+                .opacity(machine.isConnected && issues.isEmpty ? 1 : 0.5)
             }
 
             Text(
@@ -204,37 +212,8 @@ struct ManualPourView: View {
                     + "Make sure the dripper and cup are in place."
             )
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(StudioTheme.muted)
             .multilineTextAlignment(.center)
-        }
-    }
-
-    private func settingCard<Content: View>(
-        title: String,
-        value: String,
-        icon: String,
-        tint: Color,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(title, systemImage: icon)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(tint)
-                Spacer()
-                Text(value)
-                    .font(.headline.monospacedDigit())
-            }
-            content()
-        }
-        .appCard()
-    }
-
-    private func patternTitle(_ pattern: PourPattern) -> String {
-        switch pattern {
-        case .center: "Center"
-        case .circular: "Circular"
-        case .spiral: "Spiral"
         }
     }
 
@@ -244,13 +223,11 @@ struct ManualPourView: View {
         do {
             try await machine.startManualPour(pour)
             isRunning = true
-            startedAt = Date()
             status = .succeeded("Pouring")
         } catch XBloomBLEClient.MachineError.noMachineResponse {
             // The execute command may still have landed. Keep watching rather
             // than claiming a failure while water is coming out.
             isRunning = true
-            startedAt = Date()
             status = .unacknowledged("Sent, but the machine has not reported back yet.")
         } catch {
             status = .failed(error.localizedDescription)

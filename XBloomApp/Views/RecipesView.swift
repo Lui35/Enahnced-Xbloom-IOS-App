@@ -452,7 +452,11 @@ struct RecipeDetailView: View {
         HStack(spacing: 0) {
             compactMetric("Dose", "\(String(format: "%.1f", recipe.dose)) g")
             summaryDivider
-            compactMetric("Grind", recipe.useGrinder ? "\(recipe.grindSize)" : "Off")
+            compactMetric(
+                "Grind",
+                recipe.useGrinder ? "\(recipe.grindSize)" : "Off",
+                caption: recipe.useGrinder ? GrindSizeGuide.method(for: recipe.grindSize) : nil
+            )
             summaryDivider
             compactMetric("RPM", recipe.useGrinder ? "\(recipe.rpm.rawValue)" : "—")
         }
@@ -519,14 +523,21 @@ struct RecipeDetailView: View {
         }
     }
 
-    private func compactMetric(_ title: String, _ value: String) -> some View {
-        VStack(spacing: 6) {
+    private func compactMetric(_ title: String, _ value: String, caption: String? = nil) -> some View {
+        VStack(spacing: 3) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(StudioTheme.muted)
             Text(value)
                 .font(.title3.weight(.semibold).monospacedDigit())
                 .foregroundStyle(StudioTheme.accent)
+            if let caption {
+                Text(caption)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(StudioTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -833,7 +844,8 @@ struct RecipeEditorView: View {
                             ),
                             range: 1...80,
                             unit: "",
-                            tint: Color(red: 0.77, green: 0.62, blue: 0.43)
+                            tint: Color(red: 0.77, green: 0.62, blue: 0.43),
+                            caption: GrindSizeGuide.method(for: recipe.grindSize)
                         )
                         .opacity(recipe.useGrinder ? 1 : 0.42)
                         .allowsHitTesting(recipe.useGrinder)

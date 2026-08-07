@@ -9,8 +9,8 @@ import XBloomCore
 /// whether the machine actually acknowledged it, rather than assuming success.
 struct GrinderView: View {
     @Environment(XBloomBLEClient.self) private var machine
-    @State private var grindSize = 50
-    @State private var rpm: GrinderRPM = .rpm80
+    @State private var grindSize = 50.0
+    @State private var rpm = 80.0
     @State private var status: MachineToolStatus = .idle
     @State private var isWorking = false
     @State private var isGrinding = false
@@ -18,30 +18,31 @@ struct GrinderView: View {
     @State private var elapsed: TimeInterval = 0
     @State private var ticker: Task<Void, Never>?
 
-    /// The dripper sits away from the scale while grinding, so the load cell is
-    /// not a dose readout. The machine's own grinder report is shown instead,
-    /// unlabelled, because its units are not established.
-    private var grinderReport: UInt32? { machine.telemetry.grinderReport }
+    private var size: Int { Int(grindSize.rounded()) }
+    private var band: GrindGuide { GrindSizeGuide.band(for: size) }
 
     var body: some View {
         ZStack {
-            AppBackground()
+            StudioBackground()
             ScrollView {
-                LazyVStack(spacing: 20) {
+                LazyVStack(spacing: 18) {
                     readout
-                    sizeCard
-                    speedCard
+                    settings
+                    guideCard
                     actions
                     MachineToolStatusCard(status: status)
                     notes
                 }
                 .padding(.horizontal, 18)
-                .padding(.bottom, 30)
+                .padding(.bottom, 34)
             }
             .scrollIndicators(.hidden)
         }
         .navigationTitle("Grinder")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(StudioTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .preferredColorScheme(.dark)
         .onDisappear {
             ticker?.cancel()
             ticker = nil
@@ -55,89 +56,108 @@ struct GrinderView: View {
     }
 
     private var readout: some View {
-        VStack(spacing: 10) {
-            Text(isGrinding ? String(format: "%.0f", elapsed) : "\(grindSize)")
-                .font(.system(size: 68, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .animation(.smooth(duration: 0.2), value: isGrinding ? elapsed : Double(grindSize))
-            Text(isGrinding ? "seconds grinding" : "grind size")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 10) {
-                MetricChip(title: "Speed", value: "\(rpm.rawValue) rpm")
-                MetricChip(
-                    title: "Machine report",
-                    value: grinderReport.map(String.init) ?? "—"
-                )
-                MetricChip(
-                    title: "Gear",
-                    value: machine.telemetry.gearPosition.map(String.init) ?? "—"
-                )
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .stroke(StudioTheme.raised, lineWidth: 10)
+                Circle()
+                    .trim(from: 0, to: max(0.02, Double(size) / 80))
+                    .stroke(grindTint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.smooth(duration: 0.2), value: grindSize)
+                VStack(spacing: 2) {
+                    Text(isGrinding ? "\(Int(elapsed.rounded()))" : "\(size)")
+                        .font(.system(size: 40, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    Text(isGrinding ? "seconds" : "grind")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(StudioTheme.muted)
+                }
             }
+            .frame(width: 138, height: 138)
+
+            Text(band.method)
+                .font(.title2.weight(.bold))
+            Text(band.detail)
+                .font(.subheadline)
+                .foregroundStyle(StudioTheme.muted)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .appCard()
+        .padding(.top, 10)
     }
 
-    private var sizeCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Grind size", systemImage: "circle.grid.cross.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.crema)
-                Spacer()
-                Text("\(grindSize)")
-                    .font(.headline.monospacedDigit())
-            }
-            Slider(
-                value: Binding(
-                    get: { Double(grindSize) },
-                    set: { grindSize = Int($0.rounded()) }
-                ),
-                in: 1...80,
-                step: 1
-            )
-            .tint(AppTheme.crema)
-            .disabled(isGrinding)
-            HStack {
-                Text("1 · finest").font(.caption2).foregroundStyle(.secondary)
-                Spacer()
-                Text("80 · coarsest").font(.caption2).foregroundStyle(.secondary)
+    private var settings: some View {
+        StudioCard {
+            VStack(spacing: 12) {
+                StudioSectionTitle(
+                    title: "Grinder",
+                    detail: "Drag each bar to set it",
+                    icon: "circle.grid.cross.fill"
+                )
+                StudioDialBox(
+                    title: "Grind size",
+                    value: $grindSize,
+                    range: 1...80,
+                    tint: grindTint,
+                    caption: band.method
+                )
+                .opacity(isGrinding ? 0.45 : 1)
+                .allowsHitTesting(!isGrinding)
+
+                StudioDialBox(
+                    title: "Grinder speed",
+                    value: $rpm,
+                    range: 60...120,
+                    step: 10,
+                    unit: "RPM",
+                    tint: Color(red: 0.53, green: 0.62, blue: 0.86)
+                )
+                .opacity(isGrinding ? 0.45 : 1)
+                .allowsHitTesting(!isGrinding)
             }
         }
-        .appCard()
     }
 
-    private var speedCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            AppSectionHeader(title: "Grind speed")
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
-                spacing: 8
-            ) {
-                ForEach(GrinderRPM.allCases.filter { $0 != .off }, id: \.self) { option in
-                    Button {
-                        rpm = option
-                    } label: {
-                        Text("\(option.rawValue)")
-                            .font(.subheadline.weight(.bold).monospacedDigit())
-                            .foregroundStyle(rpm == option ? AppTheme.espresso : .primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+    /// The full dial laid out, so the whole range is visible rather than only
+    /// the band the dial happens to be sitting in.
+    private var guideCard: some View {
+        StudioCard {
+            VStack(alignment: .leading, spacing: 11) {
+                StudioSectionTitle(
+                    title: "Grind guide",
+                    detail: "What each part of the dial suits",
+                    icon: "list.bullet"
+                )
+                ForEach(GrindSizeGuide.bands) { guide in
+                    let active = guide.range.contains(size)
+                    HStack(spacing: 12) {
+                        Text("\(guide.range.lowerBound)–\(guide.range.upperBound)")
+                            .font(.caption.weight(.bold).monospacedDigit())
+                            .foregroundStyle(active ? .black : StudioTheme.muted)
+                            .frame(width: 54)
+                            .padding(.vertical, 6)
                             .background(
-                                rpm == option ? AnyShapeStyle(AppTheme.crema) : AnyShapeStyle(.white.opacity(0.06)),
-                                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                active ? AnyShapeStyle(grindTint) : AnyShapeStyle(StudioTheme.raised),
+                                in: Capsule()
                             )
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(guide.method)
+                                .font(.subheadline.weight(active ? .bold : .semibold))
+                            Text(guide.detail)
+                                .font(.caption2)
+                                .foregroundStyle(StudioTheme.muted)
+                        }
+                        Spacer()
+                        if active {
+                            Image(systemName: "arrow.left")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(grindTint)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isGrinding)
                 }
             }
         }
-        .appCard()
     }
 
     private var actions: some View {
@@ -157,46 +177,81 @@ struct GrinderView: View {
                 Button {
                     Task { await start() }
                 } label: {
-                    Label(isWorking ? "Sending…" : "Start grinding", systemImage: "play.fill")
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(isWorking ? "Sending…" : "Start grinding")
+                                .font(.headline)
+                            Text("\(band.method) · size \(size) · \(Int(rpm)) RPM")
+                                .font(.caption)
+                                .opacity(0.62)
+                        }
+                        Spacer()
+                        Image(systemName: "play.circle.fill")
+                            .font(.title2)
+                    }
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 17)
+                    .padding(.vertical, 13)
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
                 }
-                .buttonStyle(PrimaryActionButtonStyle())
+                .buttonStyle(.plain)
                 .disabled(!machine.isConnected || isWorking)
+                .opacity(machine.isConnected ? 1 : 0.5)
+            }
+
+            HStack(spacing: 10) {
+                StudioReadoutChip(
+                    title: "Machine report",
+                    value: machine.telemetry.grinderReport.map(String.init) ?? "—"
+                )
+                StudioReadoutChip(
+                    title: "Gear",
+                    value: machine.telemetry.gearPosition.map(String.init) ?? "—"
+                )
+                StudioReadoutChip(
+                    title: "State",
+                    value: machine.telemetry.state.rawValue.capitalized
+                )
             }
 
             Text("Put the dripper in the grinder cradle before starting.")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(StudioTheme.muted)
         }
     }
 
     private var notes: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            AppSectionHeader(title: "Not yet verified")
-            Text(
-                "These grinder commands come from the official app's command "
-                    + "table, but no recording has confirmed their payloads on "
-                    + "this machine. If a control does nothing, record a session "
-                    + "in Settings → Machine diagnostics — the transcript will "
-                    + "show what the machine made of it."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            Text(
-                "\"Machine report\" is the grinder's own progress value, shown "
-                    + "raw. It is not grams: the units are unknown."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        StudioCard(accent: .orange) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Not yet verified", systemImage: "questionmark.circle.fill")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.orange)
+                Text(
+                    "These grinder commands come from the official app's command "
+                        + "table, but no recording has confirmed their payloads on "
+                        + "this machine. If a control does nothing, record a session "
+                        + "in Settings → Machine diagnostics — the transcript will "
+                        + "show what the machine made of it."
+                )
+                .font(.caption)
+                .foregroundStyle(StudioTheme.muted)
+                Text(
+                    "\"Machine report\" is the grinder's own progress value, shown "
+                        + "raw. It is not grams: the units are unknown."
+                )
+                .font(.caption)
+                .foregroundStyle(StudioTheme.muted)
+            }
         }
-        .appCard()
     }
+
+    private var grindTint: Color { Color(red: 0.77, green: 0.62, blue: 0.43) }
 
     private func start() async {
         isWorking = true
         defer { isWorking = false }
         do {
-            let configured = try await machine.prepareGrinder(size: grindSize, speed: rpm.rawValue)
+            let configured = try await machine.prepareGrinder(size: size, speed: Int(rpm.rounded()))
             let started = try await machine.startGrinding()
             guard started else {
                 status = .unacknowledged("The machine did not acknowledge the grind command.")
@@ -207,7 +262,7 @@ struct GrinderView: View {
             elapsed = 0
             startTicker()
             status = configured
-                ? .succeeded("Grinding at size \(grindSize), \(rpm.rawValue) rpm")
+                ? .succeeded("Grinding · \(band.method) · size \(size), \(Int(rpm)) RPM")
                 : .unacknowledged("Grinding started, but the size and speed were not acknowledged.")
         } catch {
             status = .failed(error.localizedDescription)
@@ -219,12 +274,11 @@ struct GrinderView: View {
         defer { isWorking = false }
         do {
             let stopped = try await machine.stopGrinding()
-            finishGrinding(
-                message: stopped
-                    ? "Stopped after \(Int(elapsed.rounded())) s"
-                    : "Stop was sent but not acknowledged — check the machine."
-            )
-            if !stopped { status = .unacknowledged("Stop was sent but not acknowledged.") }
+            let seconds = Int(elapsed.rounded())
+            finishGrinding(message: "Stopped after \(seconds) s")
+            if !stopped {
+                status = .unacknowledged("Stop was sent but not acknowledged — check the machine.")
+            }
         } catch {
             status = .failed(error.localizedDescription)
         }
@@ -234,9 +288,7 @@ struct GrinderView: View {
         ticker?.cancel()
         ticker = nil
         isGrinding = false
-        if case .unacknowledged = status {} else {
-            status = .succeeded(message)
-        }
+        status = .succeeded(message)
     }
 
     private func startTicker() {
@@ -248,5 +300,25 @@ struct GrinderView: View {
                 elapsed = Date().timeIntervalSince(startedAt)
             }
         }
+    }
+}
+
+struct StudioReadoutChip: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(StudioTheme.muted)
+            Text(value)
+                .font(.subheadline.weight(.bold).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
 }

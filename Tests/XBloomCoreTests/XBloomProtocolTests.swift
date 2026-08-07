@@ -680,3 +680,34 @@ import Testing
     // Nothing pretends this is a weight.
     #expect(telemetry.weight == nil)
 }
+
+@Test func grindGuideCoversTheWholeDialWithoutGapsOrOverlaps() {
+    let bands = GrindSizeGuide.bands
+    #expect(bands.first?.range.lowerBound == GrindSizeGuide.fullRange.lowerBound)
+    #expect(bands.last?.range.upperBound == GrindSizeGuide.fullRange.upperBound)
+
+    for (previous, next) in zip(bands, bands.dropFirst()) {
+        #expect(next.range.lowerBound == previous.range.upperBound + 1)
+    }
+
+    // Every setting the dial can reach names exactly one method.
+    for size in GrindSizeGuide.fullRange {
+        let matches = bands.filter { $0.range.contains(size) }
+        #expect(matches.count == 1)
+    }
+}
+
+@Test func grindGuideNamesTheExpectedMethods() {
+    #expect(GrindSizeGuide.method(for: 1) == "Espresso")
+    #expect(GrindSizeGuide.method(for: 15) == "Espresso")
+    #expect(GrindSizeGuide.method(for: 16) == "AeroPress")
+    #expect(GrindSizeGuide.method(for: 30) == "AeroPress")
+    #expect(GrindSizeGuide.method(for: 31) == "Pour-over")
+    #expect(GrindSizeGuide.method(for: 55) == "Pour-over")
+    #expect(GrindSizeGuide.method(for: 56) == "French press")
+    #expect(GrindSizeGuide.method(for: 80) == "French press")
+
+    // Out-of-range values clamp rather than crashing or returning nothing.
+    #expect(GrindSizeGuide.method(for: 0) == "Espresso")
+    #expect(GrindSizeGuide.method(for: 500) == "French press")
+}

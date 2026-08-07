@@ -136,6 +136,9 @@ struct StudioDialBox: View {
     var decimals = 0
     var tint = StudioTheme.accent
     var height: CGFloat = 92
+    /// An optional label that changes with the value — what the current setting
+    /// actually means, shown inside the box next to the number.
+    var caption: String?
 
     @State private var dragStart: Double?
     @State private var hapticTick = 0
@@ -175,7 +178,16 @@ struct StudioDialBox: View {
                 }
                 Spacer(minLength: 0)
                 HStack(alignment: .lastTextBaseline, spacing: 5) {
-                    Spacer()
+                    if let caption, !caption.isEmpty {
+                        Text(caption)
+                            .font(.caption.weight(.heavy))
+                            .foregroundStyle(tint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                            .contentTransition(.opacity)
+                            .animation(.snappy(duration: 0.18), value: caption)
+                    }
+                    Spacer(minLength: 4)
                     Text(prefix + formattedValue)
                         .font(.system(size: height > 86 ? 34 : 29, weight: .semibold, design: .rounded))
                         .monospacedDigit()
@@ -220,7 +232,14 @@ struct StudioDialBox: View {
             trigger: hapticTick
         )
         .accessibilityElement(children: .combine)
-        .accessibilityValue("\(prefix)\(formattedValue) \(unit)")
+        .accessibilityValue(
+            [
+                "\(prefix)\(formattedValue) \(unit)",
+                caption,
+            ]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+        )
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment:
