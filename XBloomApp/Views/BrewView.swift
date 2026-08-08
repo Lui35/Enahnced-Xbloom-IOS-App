@@ -137,6 +137,19 @@ final class BrewSessionCoordinator {
         Task { await persistenceStore.clear(revision: revision) }
     }
 
+    /// Closes the live view while the machine carries on brewing.
+    ///
+    /// The saved snapshot is deliberately left in place, so reopening the app
+    /// finds the session still running and offers to pick it back up. Ending
+    /// the session outright is `dismiss()`.
+    func detach() {
+        guard let current = presentation, current.mode == .live, current.startedAt != nil else {
+            dismiss()
+            return
+        }
+        presentation = nil
+    }
+
     func dismiss() {
         let dismissedMode = presentation?.mode
         presentation = nil
@@ -528,6 +541,8 @@ struct BrewSessionView: View {
     @State private var weightBaseline: Double?
     @State private var waterBaseline: Double?
     @State private var reconnectAttempted = false
+    @State private var confirmingStop = false
+    @State private var confirmingLeave = false
     @State private var waterTracker: BrewDeliveryTracker
     @State private var weightTracker: BrewDeliveryTracker
     @State private var liveTicker: Task<Void, Never>?
@@ -684,17 +699,7 @@ struct BrewSessionView: View {
                     }
                     extractionChart
                     pourTimeline
-                    if mode == .live && !finished && machine.isConnected {
-                        Button(role: .destructive) {
-                            stopLiveBrew()
-                        } label: {
-                            Label("Stop brewing", systemImage: "stop.fill")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                        }
-                        .buttonStyle(.bordered)
-                    } else if mode == .live && !finished {
+                    if mode == .live, !finished, !machine.isConnected {
                         reconnectCard
                     }
                 }
@@ -714,7 +719,28 @@ struct BrewSessionView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .bottom) { sessionControls }
         .interactiveDismissDisabled(isSessionLocked)
+        .confirmationDialog(
+            "Stop this brew?",
+            isPresented: $confirmingStop,
+            titleVisibility: .visible
+        ) {
+            Button("Stop brewing", role: .destructive) { stopLiveBrew() }
+            Button("Keep brewing", role: .cancel) {}
+        } message: {
+            Text("The machine stops pouring straight away. What has already been extracted is kept in your history.")
+        }
+        .confirmationDialog(
+            "Leave the machine brewing?",
+            isPresented: $confirmingLeave,
+            titleVisibility: .visible
+        ) {
+            Button("Leave it running") { brewSession.detach() }
+            Button("Stay", role: .cancel) {}
+        } message: {
+            Text("The xBloom finishes the recipe on its own. This only closes the live view — reopen the app to pick the session back up.")
+        }
         .task { await launchSession() }
         .onDisappear {
             liveTicker?.cancel()
@@ -745,6 +771,91 @@ struct BrewSessionView: View {
             Text(errorMessage ?? "")
         }
         .preferredColorScheme(.dark)
+    }
+
+    /// Always on screen, whatever the session is doing. These used to sit at
+    /// the end of the scrolling content, below the chart and every pour card,
+    /// while the toolbar's close button was hidden for the duration of a live
+    /// brew — so there was no visible way out of a running session.
+    @ViewBuilder
+    private var sessionControls: some View {
+        VStack(spacing: 10) {
+            if finished {
+                Button {
+                    brewSession.dismiss()
+                } label: {
+                    Label("Done", systemImage: "checkmark")
+                        .font(.headline)
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(StudioTheme.mint, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            } else if mode == .simulation {
+                Button {
+                    brewSession.dismiss()
+                } label: {
+                    Label("Close preview", systemImage: "xmark")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(StudioTheme.raised, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            } else {
+                HStack(spacing: 12) {
+                    if machine.isConnected {
+                        Button {
+                            confirmingStop = true
+                        } label: {
+                            Label("Stop brewing", systemImage: "stop.fill")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(Color.red, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Button {
+                            reconnectAttempted = true
+                            machine.connect(resumingBrew: true)
+                        } label: {
+                            Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.headline)
+                                .foregroundStyle(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(Color.orange, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(
+                            machine.connectionState == .scanning
+                                || machine.connectionState == .connecting
+                                || machine.connectionState == .subscribing
+                        )
+                    }
+
+                    // Stopping and walking away are different intentions, and
+                    // conflating them either wastes a cup or traps you here.
+                    Button {
+                        confirmingLeave = true
+                    } label: {
+                        Label("Leave", systemImage: "rectangle.portrait.and.arrow.right")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .background(StudioTheme.raised, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 12)
+        .padding(.top, 10)
+        .background(.ultraThinMaterial)
     }
 
     private var extractionHero: some View {
@@ -855,27 +966,9 @@ struct BrewSessionView: View {
                 Label("Live monitoring disconnected", systemImage: "antenna.radiowaves.left.and.right.slash")
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.orange)
-                Text("The xBloom recipe keeps running on the machine. Reconnect only attaches to telemetry—it will not stop the brew or send the recipe again.")
+                Text("The xBloom recipe keeps running on the machine. Reconnecting only attaches to telemetry — it will not stop the brew or send the recipe again.")
                     .font(.subheadline)
                     .foregroundStyle(StudioTheme.muted)
-                Button {
-                    reconnectAttempted = true
-                    stage = "Reconnecting to active brew"
-                    machine.connect(resumingBrew: true)
-                } label: {
-                    Label("Reconnect live monitoring", systemImage: "arrow.triangle.2.circlepath")
-                        .font(.headline)
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(Color.orange, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(
-                    machine.connectionState == .scanning
-                        || machine.connectionState == .connecting
-                        || machine.connectionState == .subscribing
-                )
             }
         }
     }
