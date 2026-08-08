@@ -956,7 +956,13 @@ struct BrewSessionView: View {
                 tint: StudioTheme.mint,
                 targetIsEstimate: true
             )
-            extractionMetric("Water temperature", temperature.map { "\(String(format: "%.1f", $0))°C" } ?? "Heating…", "thermometer.medium", .orange)
+            extractionMetric(
+                "Water temperature",
+                temperatureValue,
+                "thermometer.medium",
+                .orange,
+                detail: temperatureDetail
+            )
         }
     }
 
@@ -1071,11 +1077,41 @@ struct BrewSessionView: View {
         }
     }
 
-    private func extractionMetric(_ title: String, _ value: String, _ icon: String, _ tint: Color) -> some View {
+    /// The temperature the machine is actually running at, or — when it never
+    /// reports one — the temperature the recipe asked for.
+    ///
+    /// This used to fall back to the word "Heating…", which read as a live
+    /// machine state. On firmware that never sends a brewer temperature at all,
+    /// that left "heating" on screen through every pour to the end of the brew.
+    private var temperatureValue: String {
+        if let temperature { return String(format: "%.1f°C", temperature) }
+        if let pour = activePour ?? recipe.pours.first { return "\(pour.temperature)°C" }
+        return "—"
+    }
+
+    private var temperatureDetail: String? {
+        guard temperature == nil else { return nil }
+        return recipe.pours.isEmpty ? "No reading" : "Recipe target · no live reading"
+    }
+
+    private func extractionMetric(
+        _ title: String,
+        _ value: String,
+        _ icon: String,
+        _ tint: Color,
+        detail: String? = nil
+    ) -> some View {
         HStack {
-            Label(title, systemImage: icon)
-                .font(.subheadline)
-                .foregroundStyle(StudioTheme.muted)
+            VStack(alignment: .leading, spacing: 2) {
+                Label(title, systemImage: icon)
+                    .font(.subheadline)
+                    .foregroundStyle(StudioTheme.muted)
+                if let detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(StudioTheme.muted.opacity(0.75))
+                }
+            }
             Spacer()
             Text(value)
                 .font(.title3.weight(.bold).monospacedDigit())

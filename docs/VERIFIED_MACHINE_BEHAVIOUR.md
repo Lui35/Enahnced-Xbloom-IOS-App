@@ -25,6 +25,7 @@ vendor binary), because it is the only source describing *this* machine.
 | 8023 | `device_current_page` | on screen change | uint32 screen id |
 | 40510 | `watering_phase` | once per pour | uint32 **zero-based pour index** |
 | 40522 | `watertank_volume_low` | once, mid-brew | uint32 level; `0` seen while brewing normally |
+| 8108 | `device_brewer_temputer` | **never** | not sent by this machine at all |
 | 8102 / 8104 / 8004 / 8002 / 40519 | command echoes | once each | acknowledgement of what the app sent |
 
 ## Findings that changed the app
@@ -90,7 +91,18 @@ pouring normally for another 36 s. Treating it as an error raised a false
 "machine needs attention" alert mid-brew. Only a non-zero payload is now a
 fault.
 
-### 6. The grinder-off recipe did start
+### 6. The machine never reports water temperature
+
+`8108 device_brewer_temputer` did not appear once in 1088 frames. The only
+measurements this machine streams are poured volume and scale weight.
+
+The app used to render a missing temperature as the word "Heating…", which reads
+as a live machine state rather than as an absent one — so "heating" stayed on
+screen through every pour to the end of the brew. The temperature row now shows
+the running pour's target from the recipe, labelled "Recipe target · no live
+reading", and only shows a number as a measurement when one actually arrives.
+
+### 7. The grinder-off recipe did start
 
 `8004 recipe_send_cmd_nogrinder` was acknowledged and the machine brewed. This
 capture was taken after three changes that were made on suspicion — sending the
