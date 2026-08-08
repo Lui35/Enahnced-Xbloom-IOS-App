@@ -1624,8 +1624,7 @@ struct BrewSessionView: View {
         }
 
         if machine.telemetry.state == .error, errorMessage == nil {
-            errorMessage = machine.lastError
-                ?? "The xBloom reported a machine error. The app kept your extraction record; check the machine display before stopping anything."
+            errorMessage = machineErrorMessage
         }
 
         finishIfMachineReportsCompletion()
@@ -1827,6 +1826,23 @@ struct BrewSessionView: View {
             return isWaterFlowing ? machinePhase : .resting
         default:
             return machinePhase
+        }
+    }
+
+    /// Names the fault where the machine names it. An empty grinder is by far
+    /// the most likely one on a recipe that grinds, and "check the machine"
+    /// does not help you work that out.
+    private var machineErrorMessage: String {
+        switch XBloomNotification(rawValue: machine.brewProgress.errorCommand ?? 0) {
+        case .grinderEmptyAbnormal:
+            return recipe.useGrinder
+                ? "The grinder found no beans. Put your dose into the grinder, then start the recipe again."
+                : "The grinder reported no beans, but this recipe does not grind. Check the machine before retrying."
+        case .waterTankVolumeLow:
+            return "The water tank is low. Top it up before brewing again."
+        default:
+            return machine.lastError
+                ?? "The xBloom reported a machine error. The app kept your extraction record; check the machine display before stopping anything."
         }
     }
 

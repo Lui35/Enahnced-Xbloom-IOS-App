@@ -15,11 +15,25 @@ struct DoseWeighingView: View {
     /// Called with the dose that was actually weighed out.
     let onConfirm: (Double) -> Void
 
+    /// Weighing and loading are separate steps because the beans have to
+    /// physically leave the scale and go into the machine in between. Going
+    /// straight from a confirmed weight to a running brew started the machine
+    /// with an empty grinder.
+    private enum Stage {
+        case weighing
+        case loading
+    }
+
+    @State private var stage: Stage = .weighing
     @State private var status: MachineToolStatus = .idle
     @State private var isWorking = false
     @State private var hasTared = false
     @State private var manualAdjustment: Double?
     @State private var reachedTargetOnce = false
+    /// The weight captured when the dose was confirmed. The live scale drops
+    /// back to zero the moment the beans are lifted off it, so the figure that
+    /// goes to the machine has to be held separately.
+    @State private var confirmedDose: Double = 0
 
     private var target: Double { recipe.dose }
 
@@ -56,30 +70,41 @@ struct DoseWeighingView: View {
                 StudioBackground()
                 ScrollView {
                     LazyVStack(spacing: 18) {
-                        readout
-                        steps
-                        adjustment
-                        MachineToolStatusCard(status: status)
+                        switch stage {
+                        case .weighing:
+                            readout
+                            steps
+                            adjustment
+                            MachineToolStatusCard(status: status)
+                        case .loading:
+                            loadingStage
+                        }
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, 34)
                 }
                 .scrollIndicators(.hidden)
             }
-            .navigationTitle("Weigh your dose")
+            .navigationTitle(stage == .weighing ? "Weigh your dose" : "Load the machine")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(StudioTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    if stage == .loading {
+                        Button("Back") {
+                            withAnimation(.snappy) { stage = .weighing }
+                        }
+                    } else {
+                        Button("Cancel") { dismiss() }
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom) { confirmBar }
             .task { await openScale() }
             .onDisappear { Task { await machine.closeScale() } }
             .onChange(of: isOnTarget) { _, onTarget in
-                guard onTarget, hasTared, !reachedTargetOnce else { return }
+                guard stage == .weighing, onTarget, hasTared, !reachedTargetOnce else { return }
                 reachedTargetOnce = true
                 MachineFeedback.acknowledged()
             }
@@ -166,7 +191,7 @@ struct DoseWeighingView: View {
                 )
                 stepRow(
                     number: 3,
-                    title: "Start brewing with the weight you actually got",
+                    title: "Tip them into \(destination), then start",
                     done: false
                 )
             }
@@ -241,37 +266,188 @@ struct DoseWeighingView: View {
     /// here with an explanation rather than failing after the sheet closes.
     private var isDoseBrewable: Bool { (5.0...30.0).contains(measured) }
 
-    private var confirmBar: some View {
-        VStack(spacing: 8) {
-            if measured > 0, !isDoseBrewable {
-                Text("The machine accepts 5–30 g. Adjust the dose to continue.")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+    /// Where the beans have to end up, which is not the same place for a
+    /// recipe that grinds and one that does not.
+    private var destination: String {
+        recipe.useGrinder ? "the grinder" : "the dripper"
+    }
+
+    /// The scale falling back to near zero is the machine's own confirmation
+    /// that the beans have been lifted off it.
+    private var beansLifted: Bool {
+        guard let weight = machine.telemetry.weight else { return false }
+        return weight < max(1, confirmedDose * 0.25)
+    }
+
+    private var loadingStage: some View {
+        VStack(spacing: 18) {
+            VStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .stroke(StudioTheme.raised, lineWidth: 12)
+                    Circle()
+                        .trim(from: 0, to: beansLifted ? 1 : 0.001)
+                        .stroke(StudioTheme.mint, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.smooth(duration: 0.4), value: beansLifted)
+                    VStack(spacing: 1) {
+                        Text(String(format: "%.1f", confirmedDose))
+                            .font(.system(size: 46, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                        Text("g measured")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(StudioTheme.muted)
+                    }
+                }
+                .frame(width: 168, height: 168)
+
+                Text("Now put the beans in")
+                    .font(.title2.weight(.bold))
+                Text("Tip the coffee you just weighed into \(destination).")
+                    .font(.subheadline)
+                    .foregroundStyle(StudioTheme.muted)
+                    .multilineTextAlignment(.center)
             }
-            Button {
-                onConfirm(measured)
-                dismiss()
-            } label: {
-                Label(
-                    String(format: "Brew with %.1f g", measured),
-                    systemImage: "play.fill"
-                )
-                .font(.headline)
-                .foregroundStyle(.black)
-                .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background(
-                    isDoseBrewable ? AnyShapeStyle(StudioTheme.accent) : AnyShapeStyle(StudioTheme.raised),
-                    in: Capsule()
-                )
+            .frame(maxWidth: .infinity)
+            .padding(.top, 12)
+
+            StudioCard(accent: beansLifted ? StudioTheme.mint : StudioTheme.accent) {
+                HStack(spacing: 14) {
+                    Image(systemName: beansLifted ? "checkmark.circle.fill" : "arrow.up.circle")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(beansLifted ? StudioTheme.mint : StudioTheme.accent)
+                        .frame(width: 50, height: 50)
+                        .background(
+                            (beansLifted ? StudioTheme.mint : StudioTheme.accent).opacity(0.14),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        )
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(beansLifted ? "Beans are off the scale" : "Waiting for the scale to clear")
+                            .font(.headline)
+                        Text(
+                            beansLifted
+                                ? "The machine reads \(String(format: "%.1f", machine.telemetry.weight ?? 0)) g now"
+                                : "Lift the container so the reading drops back to zero"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(StudioTheme.muted)
+                    }
+                    Spacer()
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(!isDoseBrewable)
+
+            if recipe.useGrinder {
+                StudioCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        StudioSectionTitle(title: "Before you start", icon: "checklist")
+                        checklistRow("Beans are in the grinder, not still in your cup")
+                        checklistRow("The dripper is seated on the machine")
+                        checklistRow("There is water in the tank")
+                        Text(
+                            "The machine will grind \(String(format: "%.1f", confirmedDose)) g at "
+                                + "size \(recipe.grindSize) · \(GrindSizeGuide.method(for: recipe.grindSize)), "
+                                + "then brew."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(StudioTheme.muted)
+                        .padding(.top, 2)
+                    }
+                }
+            } else {
+                StudioCard(accent: .orange) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("This recipe does not grind", systemImage: "exclamationmark.circle.fill")
+                            .font(.headline)
+                            .foregroundStyle(.orange)
+                        Text(
+                            "The grinder is switched off for this recipe, so put "
+                                + "already-ground coffee in the dripper. Turn the "
+                                + "grinder on in the recipe if you meant to grind "
+                                + "whole beans."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(StudioTheme.muted)
+                    }
+                }
+            }
         }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 12)
-        .padding(.top, 10)
-        .background(.ultraThinMaterial)
+    }
+
+    private func checklistRow(_ text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 5))
+                .foregroundStyle(StudioTheme.accent)
+            Text(text)
+                .font(.subheadline)
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var confirmBar: some View {
+        switch stage {
+        case .weighing:
+            VStack(spacing: 8) {
+                if measured > 0, !isDoseBrewable {
+                    Text("The machine accepts 5–30 g. Adjust the dose to continue.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                Button {
+                    confirmedDose = measured
+                    withAnimation(.snappy) { stage = .loading }
+                } label: {
+                    Label(
+                        String(format: "Continue with %.1f g", measured),
+                        systemImage: "arrow.right"
+                    )
+                    .font(.headline)
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(
+                        isDoseBrewable ? AnyShapeStyle(StudioTheme.accent) : AnyShapeStyle(StudioTheme.raised),
+                        in: Capsule()
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(!isDoseBrewable)
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 12)
+            .padding(.top, 10)
+            .background(.ultraThinMaterial)
+
+        case .loading:
+            VStack(spacing: 8) {
+                Button {
+                    onConfirm(confirmedDose)
+                    dismiss()
+                } label: {
+                    Label(
+                        String(format: "Beans are in — brew %.1f g", confirmedDose),
+                        systemImage: "play.fill"
+                    )
+                    .font(.headline)
+                    .foregroundStyle(.black)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(StudioTheme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Text("Nothing is sent to the machine until you tap this.")
+                    .font(.caption2)
+                    .foregroundStyle(StudioTheme.muted)
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 12)
+            .padding(.top, 10)
+            .background(.ultraThinMaterial)
+        }
     }
 
     private func openScale() async {

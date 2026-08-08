@@ -711,3 +711,60 @@ import Testing
     #expect(GrindSizeGuide.method(for: 0) == "Espresso")
     #expect(GrindSizeGuide.method(for: 500) == "French press")
 }
+
+/// Guards the grinder-on path against the grinder-off work that sits beside it.
+@Test func grinderOnRecipesStillCarryEverythingTheGrinderNeeds() throws {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.useGrinder = true
+    recipe.grindSize = 55
+    recipe.rpm = .rpm70
+    recipe.dose = 17
+
+    let packets = try XBloomProtocol.brewSequence(for: recipe)
+    let commandIDs = packets.map { UInt16($0[3]) | UInt16($0[4]) << 8 }
+    // 8001 is the grind-and-brew program; 8004 would skip the grinder entirely.
+    #expect(commandIDs == [8102, 8104, 8001, 8002])
+
+    let bypassDose = UInt32(packets[0][18])
+        | UInt32(packets[0][19]) << 8
+        | UInt32(packets[0][20]) << 16
+        | UInt32(packets[0][21]) << 24
+    #expect(bypassDose == 17)
+
+    // The cup minimum separates a grinding program from a manual one.
+    let cupMinimum = Float(
+        bitPattern: UInt32(packets[1][14])
+            | UInt32(packets[1][15]) << 8
+            | UInt32(packets[1][16]) << 16
+            | UInt32(packets[1][17]) << 24
+    )
+    #expect(cupMinimum == 40)
+
+    let payload = try XBloomProtocol.recipePayload(for: recipe)
+    #expect(payload[payload.count - 2] == UInt8(recipe.grindSize))
+    // RPM rides in the first pour's metadata block and must not be zero, or the
+    // burrs never turn.
+    #expect(payload[7] == UInt8(recipe.rpm.rawValue))
+    #expect(payload[7] != 0)
+}
+
+@Test func aWeighedDoseReplacesTheRecipeTargetWithoutTouchingTheGrinder() throws {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.useGrinder = true
+    recipe.dose = 16
+
+    // What DoseWeighingView hands back after the beans are on the scale.
+    var brewed = recipe
+    brewed.dose = 16.1
+
+    #expect(brewed.useGrinder)
+    #expect(brewed.grindSize == recipe.grindSize)
+    #expect(brewed.rpm == recipe.rpm)
+
+    let packets = try XBloomProtocol.brewSequence(for: brewed)
+    #expect(packets.map { UInt16($0[3]) | UInt16($0[4]) << 8 } == [8102, 8104, 8001, 8002])
+
+    // The bag is debited by what was really weighed, not the rounded target.
+    let bean = BeanProfile(name: "Bag", initialWeightGrams: 250, remainingWeightGrams: 100)
+    #expect(Brewing.deductDose(brewed.dose, from: bean).remainingWeightGrams == 83.9)
+}
