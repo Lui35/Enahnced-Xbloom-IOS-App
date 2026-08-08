@@ -7,6 +7,9 @@ import XBloomCore
 /// of the bag in exact grams, so the amount that actually goes in is nearly
 /// always a little off — and that real figure is what the machine should be
 /// told and what the bag should be debited by.
+///
+/// Only offered for recipes that grind. With the grinder off the coffee is
+/// already ground and measured, and the beans never reach the scale.
 struct DoseWeighingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(XBloomBLEClient.self) private var machine
@@ -191,7 +194,7 @@ struct DoseWeighingView: View {
                 )
                 stepRow(
                     number: 3,
-                    title: "Tip them into \(destination), then start",
+                    title: "Tip them into the grinder, then start",
                     done: false
                 )
             }
@@ -266,12 +269,6 @@ struct DoseWeighingView: View {
     /// here with an explanation rather than failing after the sheet closes.
     private var isDoseBrewable: Bool { (5.0...30.0).contains(measured) }
 
-    /// Where the beans have to end up, which is not the same place for a
-    /// recipe that grinds and one that does not.
-    private var destination: String {
-        recipe.useGrinder ? "the grinder" : "the dripper"
-    }
-
     /// The scale falling back to near zero is the machine's own confirmation
     /// that the beans have been lifted off it.
     private var beansLifted: Bool {
@@ -303,7 +300,7 @@ struct DoseWeighingView: View {
 
                 Text("Now put the beans in")
                     .font(.title2.weight(.bold))
-                Text("Tip the coffee you just weighed into \(destination).")
+                Text("Tip the coffee you just weighed into the grinder.")
                     .font(.subheadline)
                     .foregroundStyle(StudioTheme.muted)
                     .multilineTextAlignment(.center)
@@ -336,38 +333,20 @@ struct DoseWeighingView: View {
                 }
             }
 
-            if recipe.useGrinder {
-                StudioCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        StudioSectionTitle(title: "Before you start", icon: "checklist")
-                        checklistRow("Beans are in the grinder, not still in your cup")
-                        checklistRow("The dripper is seated on the machine")
-                        checklistRow("There is water in the tank")
-                        Text(
-                            "The machine will grind \(String(format: "%.1f", confirmedDose)) g at "
-                                + "size \(recipe.grindSize) · \(GrindSizeGuide.method(for: recipe.grindSize)), "
-                                + "then brew."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(StudioTheme.muted)
-                        .padding(.top, 2)
-                    }
-                }
-            } else {
-                StudioCard(accent: .orange) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("This recipe does not grind", systemImage: "exclamationmark.circle.fill")
-                            .font(.headline)
-                            .foregroundStyle(.orange)
-                        Text(
-                            "The grinder is switched off for this recipe, so put "
-                                + "already-ground coffee in the dripper. Turn the "
-                                + "grinder on in the recipe if you meant to grind "
-                                + "whole beans."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(StudioTheme.muted)
-                    }
+            StudioCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    StudioSectionTitle(title: "Before you start", icon: "checklist")
+                    checklistRow("Beans are in the grinder, not still in your cup")
+                    checklistRow("The dripper is seated on the machine")
+                    checklistRow("There is water in the tank")
+                    Text(
+                        "The machine will grind \(String(format: "%.1f", confirmedDose)) g at "
+                            + "size \(recipe.grindSize) · \(GrindSizeGuide.method(for: recipe.grindSize)), "
+                            + "then brew."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(StudioTheme.muted)
+                    .padding(.top, 2)
                 }
             }
         }

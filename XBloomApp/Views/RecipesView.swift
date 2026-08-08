@@ -345,16 +345,17 @@ struct RecipeDetailView: View {
                 .buttonStyle(.plain)
 
                 if machine.isConnected {
-                    // Two ways in: some beans are weighed out in advance, some
-                    // are not. Weighing first also lets the brew record the
-                    // dose that really went in, not the recipe's rounded
-                    // target.
-                    brewAction(
-                        "Weigh dose",
-                        icon: "scalemass.fill",
-                        tint: StudioTheme.mint
-                    ) {
-                        weighingDose = true
+                    // Weighing is only worth offering when the machine is going
+                    // to grind. With the grinder off the coffee is already
+                    // ground and measured, and the beans never touch the scale.
+                    if recipe.useGrinder {
+                        brewAction(
+                            "Weigh dose",
+                            icon: "scalemass.fill",
+                            tint: StudioTheme.mint
+                        ) {
+                            weighingDose = true
+                        }
                     }
                     brewAction("Start brew", icon: "play.fill", tint: StudioTheme.accent) {
                         brewSession.present(recipe: recipe, mode: .live)
