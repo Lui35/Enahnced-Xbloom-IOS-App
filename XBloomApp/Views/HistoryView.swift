@@ -392,12 +392,36 @@ struct BrewHistoryDetailView: View {
         }
     }
 
+    /// Water poured and coffee collected live here rather than on the live brew
+    /// screen. During a brew you are watching the pours; afterwards these are
+    /// the two numbers that say how the cup actually came out, which is only
+    /// meaningful against what the recipe asked for.
     private var resultMetrics: some View {
         HStack(spacing: 10) {
-            MetricTile(title: "Duration", value: formatDuration(entry?.duration ?? brew.duration), icon: "timer", tint: StudioTheme.accent)
-            MetricTile(title: "Water", value: "\(Int((entry?.water ?? 0).rounded())) ml", icon: "drop.fill", tint: .blue)
-            MetricTile(title: "Yield", value: "\(String(format: "%.1f", entry?.coffeeWeight ?? 0)) g", icon: "scalemass.fill", tint: StudioTheme.mint)
+            MetricTile(
+                title: "Duration",
+                value: formatDuration(entry?.duration ?? brew.duration),
+                icon: "timer",
+                tint: StudioTheme.accent
+            )
+            MetricTile(
+                title: waterTileCaption,
+                value: "\(Int((entry?.water ?? 0).rounded())) ml",
+                icon: "drop.fill",
+                tint: .blue
+            )
+            MetricTile(
+                title: "Coffee collected",
+                value: "\(String(format: "%.1f", entry?.coffeeWeight ?? 0)) g",
+                icon: "scalemass.fill",
+                tint: StudioTheme.mint
+            )
         }
+    }
+
+    private var waterTileCaption: String {
+        guard let target = originalRecipe?.totalWater, target > 0 else { return "Water poured" }
+        return "Water poured of \(target)"
     }
 
     private func recipeContext(_ recipe: Recipe) -> some View {

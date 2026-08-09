@@ -636,10 +636,6 @@ struct BrewSessionView: View {
         Brewing.extractionEvents(recipe: recipe)
     }
 
-    private var chartPourEvents: [BrewTimelineEvent] {
-        chartTimelineEvents.filter { $0.kind == .pour }
-    }
-
     private var chartDuration: TimeInterval {
         max(1, max(estimatedExtractionDuration, chartSamples.last?.elapsed ?? 0))
     }
@@ -691,14 +687,23 @@ struct BrewSessionView: View {
                 LazyVStack(spacing: 18) {
                     extractionHero
                     sessionTiming
-                    liveMetrics
                     if let activePour, [.blooming, .pouring, .resting].contains(currentPhase) {
                         activePourCard(activePour)
                     } else if !finished {
                         preparationCard
                     }
-                    extractionChart
+                    if let machineWarning {
+                        Label(machineWarning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    // The pours are what you are following while a brew runs;
+                    // the curve is what you read afterwards.
                     pourTimeline
+                    extractionChart
                     if mode == .live, !finished, !machine.isConnected {
                         reconnectCard
                     }
@@ -896,11 +901,6 @@ struct BrewSessionView: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             HStack(spacing: 10) {
                 timingCell(
-                    title: "Local time",
-                    value: context.date.formatted(date: .omitted, time: .shortened),
-                    icon: "clock.fill"
-                )
-                timingCell(
                     title: finished ? "Completed in" : "Elapsed",
                     value: durationText(
                         finished
@@ -935,30 +935,6 @@ struct BrewSessionView: View {
         .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 
-    private var liveMetrics: some View {
-        VStack(spacing: 12) {
-            extractionProgressMetric(
-                title: "Water poured",
-                detail: mode == .live ? "Machine delivery" : "Simulated delivery",
-                value: water,
-                target: Double(recipe.totalWater),
-                unit: "ml",
-                icon: "drop.fill",
-                tint: StudioTheme.accent
-            )
-            extractionProgressMetric(
-                title: "Coffee collected",
-                detail: mode == .live ? "Live xBloom scale" : "Simulated cup yield",
-                value: weight,
-                target: expectedCupYield,
-                unit: "g",
-                icon: "scalemass.fill",
-                tint: StudioTheme.mint,
-                targetIsEstimate: true
-            )
-        }
-    }
-
     private var reconnectCard: some View {
         StudioCard(accent: .orange) {
             VStack(alignment: .leading, spacing: 12) {
@@ -991,82 +967,6 @@ struct BrewSessionView: View {
                 ProgressView()
                     .tint(phaseTint)
             }
-        }
-    }
-
-    private func extractionProgressMetric(
-        title: String,
-        detail: String,
-        value: Double,
-        target: Double,
-        unit: String,
-        icon: String,
-        tint: Color,
-        targetIsEstimate: Bool = false
-    ) -> some View {
-        let fraction = target > 0 ? min(1, max(0, value / target)) : 0
-
-        return VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .top) {
-                HStack(spacing: 11) {
-                    Image(systemName: icon)
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(tint)
-                        .frame(width: 38, height: 38)
-                        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(.headline.weight(.bold))
-                        Text(detail)
-                            .font(.caption)
-                            .foregroundStyle(StudioTheme.muted)
-                    }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("\(String(format: "%.1f", value)) \(unit)")
-                        .font(.title3.weight(.bold).monospacedDigit())
-                    Text("\(targetIsEstimate ? "est. " : "")target \(Int(target.rounded())) \(unit)")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(StudioTheme.muted)
-                }
-            }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(StudioTheme.raised)
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [tint.opacity(0.72), tint],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: proxy.size.width * fraction)
-                }
-            }
-            .frame(height: 13)
-            .animation(.smooth(duration: 0.25), value: fraction)
-
-            HStack {
-                Text("\(Int((fraction * 100).rounded()))%")
-                    .font(.caption.weight(.bold).monospacedDigit())
-                    .foregroundStyle(tint)
-                Spacer()
-                if targetIsEstimate {
-                    Text("Measured weight stays exact")
-                        .font(.caption2)
-                        .foregroundStyle(StudioTheme.muted)
-                }
-            }
-        }
-        .padding(16)
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(tint.opacity(0.55), lineWidth: 1.5)
         }
     }
 
@@ -1258,30 +1158,6 @@ struct BrewSessionView: View {
                 }
                 .font(.caption2.weight(.semibold))
 
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 7), count: 3),
-                    spacing: 7
-                ) {
-                    ForEach(chartPourEvents) { event in
-                        HStack(spacing: 5) {
-                            Circle()
-                                .fill(StudioTheme.accent)
-                                .frame(width: 6, height: 6)
-                            Text(event.title)
-                                .fontWeight(.bold)
-                                .layoutPriority(1)
-                            Text(durationText(event.elapsed))
-                                .foregroundStyle(StudioTheme.muted)
-                        }
-                        .font(.caption2.monospacedDigit())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity)
-                        .background(StudioTheme.raised, in: Capsule())
-                    }
-                }
             }
         }
     }
@@ -1321,8 +1197,16 @@ struct BrewSessionView: View {
         }
     }
 
+    /// True once the machine is actually working through the pours. While it is
+    /// still grinding or heating, no pour is under way — marking the first one
+    /// active there put "Grinding beans · 0 / 50 ml" inside the bloom card.
+    private var hasStartedPouring: Bool {
+        [.blooming, .pouring, .resting].contains(currentPhase)
+    }
+
     private func state(ofPour index: Int) -> LivePourState {
         if finished || index < activePourIndex { return .done }
+        guard hasStartedPouring else { return .upcoming }
         return index == activePourIndex ? .active : .upcoming
     }
 
@@ -1339,7 +1223,9 @@ struct BrewSessionView: View {
             VStack(alignment: .leading, spacing: 12) {
                 StudioSectionTitle(
                     title: "Pours",
-                    detail: "\(min(activePourIndex + 1, recipe.pours.count)) of \(recipe.pours.count)",
+                    detail: hasStartedPouring
+                        ? "\(min(activePourIndex + 1, recipe.pours.count)) of \(recipe.pours.count)"
+                        : "\(recipe.pours.count) steps",
                     icon: "list.number"
                 )
                 ForEach(Array(recipe.pours.enumerated()), id: \.element.id) { index, pour in
@@ -1907,18 +1793,36 @@ struct BrewSessionView: View {
     /// Names the fault where the machine names it. An empty grinder is by far
     /// the most likely one on a recipe that grinds, and "check the machine"
     /// does not help you work that out.
-    private var machineErrorMessage: String {
-        switch XBloomNotification(rawValue: machine.brewProgress.errorCommand ?? 0) {
+    /// Faults the machine names, and which of them should interrupt you.
+    ///
+    /// A low tank is reported by a machine that carries on brewing regardless,
+    /// and the one time it was captured it arrived mid-pour with a zero
+    /// payload. It belongs in a banner, not in an alert that stops the session.
+    private var machineErrorMessage: String? {
+        let command = machine.brewProgress.errorCommand
+        switch XBloomNotification(rawValue: command ?? 0) {
         case .grinderEmptyAbnormal:
             return recipe.useGrinder
                 ? "The grinder found no beans. Put your dose into the grinder, then start the recipe again."
                 : "The grinder reported no beans, but this recipe does not grind. Check the machine before retrying."
         case .waterTankVolumeLow:
-            return "The water tank is low. Top it up before brewing again."
+            return nil
         default:
-            return machine.lastError
-                ?? "The xBloom reported a machine error. The app kept your extraction record; check the machine display before stopping anything."
+            if let existing = machine.lastError { return existing }
+            // Naming the identifier makes a one-off fault identifiable next
+            // time instead of an unreproducible "machine error".
+            let identifier = command.map { " (report \($0))" } ?? ""
+            return "The xBloom reported a fault\(identifier). The app kept your extraction record; "
+                + "check the machine display before stopping anything. Settings › Machine diagnostics "
+                + "records the exact frames if it happens again."
         }
+    }
+
+    /// Shown inline while the brew carries on, rather than interrupting it.
+    private var machineWarning: String? {
+        guard XBloomNotification(rawValue: machine.brewProgress.errorCommand ?? 0) == .waterTankVolumeLow
+        else { return nil }
+        return "The machine reported the water tank running low."
     }
 
     private var isWaterFlowing: Bool {
