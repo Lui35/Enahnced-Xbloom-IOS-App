@@ -768,3 +768,54 @@ import Testing
     let bean = BeanProfile(name: "Bag", initialWeightGrams: 250, remainingWeightGrams: 100)
     #expect(Brewing.deductDose(brewed.dose, from: bean).remainingWeightGrams == 83.9)
 }
+
+/// The weighing sheet holds the machine's scale screen open. Leaving it has to
+/// happen before the brew's setup commands, not alongside them.
+@Test func theScaleScreenIsGivenBackBeforeABrewAndOnlyOnce() {
+    var pages = MachinePages()
+    #expect(pages.isEmpty)
+    #expect(pages.exitsBeforeBrew.isEmpty)
+
+    pages.scale = true
+    #expect(!pages.isEmpty)
+    #expect(pages.exitsBeforeBrew == [.outScalePage])
+
+    pages.grinder = true
+    // The scale goes first, and neither exit is repeated.
+    #expect(pages.exitsBeforeBrew == [.outScalePage, .outGrinderPage])
+
+    // A page the app never opened sends nothing: an unnecessary frame next to a
+    // recipe is exactly what broke the grind.
+    #expect(MachinePages(grinder: true).exitsBeforeBrew == [.outGrinderPage])
+    #expect(MachinePages().exitsBeforeBrew.isEmpty)
+}
+
+@Test func aGrindingRecipeNeverSendsAZeroGrinderSpeed() throws {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.useGrinder = true
+    recipe.rpm = .off
+
+    // An imported or synced recipe can pair grinding with no speed. The payload
+    // byte that turns the burrs must still be a real speed, or 8001 is accepted
+    // and the machine pours onto whole beans.
+    #expect(recipe.programRPM != .off)
+    let payload = try XBloomProtocol.recipePayload(for: recipe)
+    #expect(payload[7] == UInt8(recipe.programRPM.rawValue))
+    #expect(payload[7] != 0)
+
+    // It is a warning, not a silent repair: the editor says which speed will run.
+    let issue = RecipeValidator.validate(recipe).first { $0.field == "rpm" }
+    #expect(issue?.severity == .warning)
+    // ...and it never blocks the brew.
+    try RecipeValidator.requireSafe(recipe)
+
+    // A real speed is passed through untouched.
+    recipe.rpm = .rpm110
+    #expect(recipe.programRPM == .rpm110)
+    #expect(RecipeValidator.validate(recipe).contains { $0.field == "rpm" } == false)
+
+    // A grinder-off recipe keeps the bytes the verified capture recorded.
+    recipe.useGrinder = false
+    recipe.rpm = .off
+    #expect(recipe.programRPM == .off)
+}

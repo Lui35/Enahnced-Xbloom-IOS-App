@@ -111,6 +111,25 @@ real dose with `recipe_bypass` instead of zero, spacing all four setup commands
 wrap. Which of them mattered, if any, is **not established**; the failure was
 intermittent and has not been reproduced since.
 
+### 8. A brew started from the weighing sheet did not grind
+
+Reported from a real session, not read out of a capture: weighing a dose, tapping
+through to the brew, and watching the machine pour water without grinding first.
+The recipe had the grinder on, and the payload for it is correct — `8001` with a
+non-zero grind size and RPM, which the protocol tests cover.
+
+What was different about that path is the scale screen. The weighing sheet opens
+it with `8003` and used to give it back from `onDisappear`, which is unordered
+with respect to the brew starting. With a second between each setup command, the
+`8014 out_scale_page` landed **inside** the `8102 → 8104 → 8001 → 8002`
+sequence — the machine was told to leave the scale halfway through being handed
+a recipe.
+
+The app now releases every screen it holds before the first setup command and
+waits a second afterwards, the same gap the sequence itself uses. That the page
+exit is what cost the grind is **inferred, not captured**; what is certain is
+that an unrelated command no longer arrives in the middle of a recipe upload.
+
 ## Direct machine tools — what each one rests on
 
 The Scale, Brewer, and Grinder screens reach the machine by different routes,
@@ -139,7 +158,9 @@ units are unknown, so neither is presented as grams.
 
 ## Still unverified
 
-- Grinder-on behaviour. Needs a capture with the grinder enabled.
+- Grinder-on behaviour. Needs a capture with the grinder enabled — and that
+  capture is now the way to settle whether the scale-page exit was what skipped
+  the grind (see 8 above).
 - Whether `40511 device_watering_finish` appears on any firmware. It did not
   here, so the end of a pour is inferred from the volume counter going still.
 - `device_pod_type` (8104) payload shape. The app sends two float32 cup weights;

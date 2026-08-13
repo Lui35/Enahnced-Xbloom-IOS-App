@@ -31,6 +31,16 @@ public enum RecipeValidator {
         if !(1...80).contains(recipe.grindSize) {
             issues.append(.init(field: "grindSize", message: "Grind size must be between 1 and 80."))
         }
+        if recipe.useGrinder, recipe.rpm == .off {
+            issues.append(
+                .init(
+                    field: "rpm",
+                    message: "This recipe grinds but has no grinder speed. "
+                        + "It will run at \(recipe.programRPM.rawValue) RPM.",
+                    severity: .warning
+                )
+            )
+        }
         if recipe.pours.isEmpty || recipe.pours.count > 8 {
             issues.append(.init(field: "pours", message: "Use between 1 and 8 pour steps."))
         }

@@ -67,6 +67,9 @@ final class XBloomBLEClient: NSObject {
     @ObservationIgnored private var lastBrewActivityAt: Date?
     @ObservationIgnored private var resumeConnectionRequested = false
     @ObservationIgnored private var acknowledgements: [UInt16: Date] = [:]
+    /// Machine screens this app has opened and not yet given back. A brew
+    /// cannot start on top of one, so `startBrew` leaves them first.
+    @ObservationIgnored private var openPages = MachinePages()
 
     override init() {
         super.init()
@@ -139,9 +142,10 @@ final class XBloomBLEClient: NSObject {
             "Brew start · \(recipe.name) · grinder \(recipe.useGrinder ? "on" : "off") · "
                 + "\(recipe.pours.count) pours · \(recipe.totalWater) ml · dose \(recipe.dose) g"
         )
-        let packetCountBeforeBrew = receivedPacketCount
         isSendingRecipe = true
         defer { isSendingRecipe = false }
+        await releaseOpenPages()
+        let packetCountBeforeBrew = receivedPacketCount
         var executeSentAt = Date.distantPast
 
         for (index, packet) in packets.enumerated() {
@@ -212,10 +216,32 @@ final class XBloomBLEClient: NSObject {
         return false
     }
 
+    /// Gives back every machine screen this app still holds, and lets the
+    /// machine settle, before a recipe goes out.
+    ///
+    /// The screens are opened from views that release them in `onDisappear`,
+    /// which is unordered with respect to a brew starting: the exit landed
+    /// between the brew's own setup commands, and a recipe sent to grind
+    /// poured without grinding. Doing it here, awaited, is the only way the
+    /// machine is guaranteed to be off the scale before `8102` arrives.
+    private func releaseOpenPages() async {
+        guard !openPages.isEmpty else { return }
+        let exits = openPages.exitsBeforeBrew
+        openPages = MachinePages()
+        trafficLog.note("Releasing machine screens before the recipe")
+        for exit in exits {
+            try? await write(XBloomProtocol.command(exit))
+            // The same one-second gap the setup commands use. The machine is
+            // changing screens here, which is not faster than accepting one.
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
+
     /// Opens the machine's scale screen so its display follows the app.
     @discardableResult
     func openScale() async throws -> Bool {
         trafficLog.note("Scale opened from the app")
+        openPages.scale = true
         return try await send(.inScalePage)
     }
 
@@ -225,7 +251,11 @@ final class XBloomBLEClient: NSObject {
         return try await send(.weightCleared)
     }
 
+    /// Leaving a screen the app is not on sends a frame the machine did not ask
+    /// for, and the one place that costs something is next to a running recipe.
     func closeScale() async {
+        guard openPages.scale else { return }
+        openPages.scale = false
         trafficLog.note("Scale closed")
         _ = try? await send(.outScalePage, awaitingAcknowledgement: false)
     }
@@ -234,6 +264,7 @@ final class XBloomBLEClient: NSObject {
     @discardableResult
     func prepareGrinder(size: Int, speed: Int) async throws -> Bool {
         trafficLog.note("Grinder prepared · size \(size) · speed \(speed)")
+        openPages.grinder = true
         _ = try await send(.inGrinderPage)
         let sizeAccepted = try await send(.grinderSize, values: [UInt32(max(0, size))])
         let speedAccepted = try await send(.grinderSpeed, values: [UInt32(max(0, speed))])
@@ -253,6 +284,8 @@ final class XBloomBLEClient: NSObject {
     }
 
     func closeGrinder() async {
+        guard openPages.grinder else { return }
+        openPages.grinder = false
         _ = try? await send(.outGrinderPage, awaitingAcknowledgement: false)
     }
 
@@ -333,6 +366,9 @@ final class XBloomBLEClient: NSObject {
         auxiliaryNotifyCharacteristic = nil
         statusNotificationFramer.reset()
         auxiliaryNotificationFramer.reset()
+        // Screens do not survive the link. Leaving them marked open would make
+        // the next brew send exits for pages the machine is no longer on.
+        openPages = MachinePages()
         connectionState = .disconnected
         telemetry = XBloomTelemetry(state: .disconnected)
         // A live session keeps its own copy of the phase and pour index, so
@@ -372,6 +408,7 @@ final class XBloomBLEClient: NSObject {
             try await Task.sleep(for: .milliseconds(500))
             try await write(XBloomProtocol.command(.outBrewerPage))
             try await write(XBloomProtocol.command(.outGrinderPage))
+            openPages = MachinePages()
             // The machine has an explicit keep-awake command, which is a better
             // answer than telling the user to keep prodding it.
             try await write(XBloomProtocol.command(.deviceNoSleep))

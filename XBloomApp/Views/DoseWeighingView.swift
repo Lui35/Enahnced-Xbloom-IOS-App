@@ -401,8 +401,7 @@ struct DoseWeighingView: View {
         case .loading:
             VStack(spacing: 8) {
                 Button {
-                    onConfirm(confirmedDose)
-                    dismiss()
+                    Task { await handOffToBrew() }
                 } label: {
                     Label(
                         String(format: "Beans are in — brew %.1f g", confirmedDose),
@@ -415,8 +414,10 @@ struct DoseWeighingView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 54)
                     .background(StudioTheme.accent, in: Capsule())
+                    .opacity(isWorking ? 0.6 : 1)
                 }
                 .buttonStyle(.plain)
+                .disabled(isWorking)
 
                 Text("Nothing is sent to the machine until you tap this.")
                     .font(.caption2)
@@ -427,6 +428,21 @@ struct DoseWeighingView: View {
             .padding(.top, 10)
             .background(.ultraThinMaterial)
         }
+    }
+
+    /// Gives the scale screen back before the recipe is handed over.
+    ///
+    /// Left to `onDisappear`, the exit is sent while the brew is already
+    /// writing its setup commands, and the machine — still on the scale when
+    /// the recipe arrives — poured without grinding. Closing it here, awaited,
+    /// puts the machine back on its own home screen first; `closeScale` is a
+    /// no-op afterwards, so the disappear path adds nothing.
+    private func handOffToBrew() async {
+        isWorking = true
+        await machine.closeScale()
+        isWorking = false
+        onConfirm(confirmedDose)
+        dismiss()
     }
 
     private func openScale() async {

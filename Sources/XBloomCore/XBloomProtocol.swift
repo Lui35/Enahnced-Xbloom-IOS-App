@@ -165,7 +165,7 @@ public enum XBloomProtocol {
             let pause = min(255, pour.pauseAfter + nextPause)
             body.append(UInt8(truncatingIfNeeded: -pause))
             body.append(0)
-            body.append(index == 0 ? UInt8(recipe.rpm.rawValue) : 0)
+            body.append(index == 0 ? UInt8(recipe.programRPM.rawValue) : 0)
             body.append(UInt8((pour.flowRate * 10).rounded(.towardZero)))
         }
 

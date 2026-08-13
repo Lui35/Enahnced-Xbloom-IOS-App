@@ -114,6 +114,19 @@ public struct Recipe: Codable, Equatable, Identifiable, Sendable {
         self.pours = pours
     }
 
+    /// The speed the grinder is actually told to run at.
+    ///
+    /// The RPM byte in the recipe payload is what turns the burrs, so a recipe
+    /// that grinds at `.off` is accepted by the machine and then pours onto
+    /// whole beans. The editor cannot produce that pairing, but an import, a
+    /// cloud record, or an AI draft can, and the grinder is the whole point of
+    /// such a recipe — the default speed stands in rather than silently
+    /// skipping the grind.
+    public var programRPM: GrinderRPM {
+        guard useGrinder else { return rpm }
+        return rpm == .off ? .rpm80 : rpm
+    }
+
     public var totalWater: Int {
         pours.reduce(0) { $0 + $1.volume }
     }
