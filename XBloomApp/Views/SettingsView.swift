@@ -8,6 +8,10 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SupabaseService.self) private var cloud
     @Environment(GeminiService.self) private var gemini
+    @Environment(XBloomBLEClient.self) private var machine
+    @Environment(BrewSessionCoordinator.self) private var brewSession
+    @State private var confirmingMachineStop = false
+    @State private var machineStopMessage: String?
     @State private var email = ""
     @State private var password = ""
     @State private var model = ""
@@ -213,6 +217,10 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .contentShape(Rectangle())
+
+                        Divider()
+
+                        machineStopRow
                     }
                     .appCard()
 
@@ -231,6 +239,72 @@ struct SettingsView: View {
         .onDisappear {
             testTask?.cancel()
             testTask = nil
+        }
+    }
+
+    /// The last resort for a machine that is pouring when nothing in the app is
+    /// showing a brew — one started from the xBloom's own panel or another app,
+    /// or a session this app lost track of while the link was down.
+    ///
+    /// Deliberately not conditional on the app believing a brew is running: the
+    /// case it exists for is precisely the one where the app does not know.
+    private var machineStopRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                confirmingMachineStop = true
+            } label: {
+                HStack(spacing: 14) {
+                    IconBadge(systemImage: "stop.circle.fill", tint: .red, size: 44)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Stop the machine now")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(
+                            machine.isConnected
+                                ? "Sends a stop to the xBloom, whatever started the brew"
+                                : "Connect to the machine to send a stop"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!machine.isConnected)
+            .opacity(machine.isConnected ? 1 : 0.5)
+
+            if let machineStopMessage {
+                Text(machineStopMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .confirmationDialog(
+            "Stop the machine?",
+            isPresented: $confirmingMachineStop,
+            titleVisibility: .visible
+        ) {
+            Button("Stop the machine", role: .destructive) { stopMachine() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The xBloom stops pouring straight away. Whatever is in the cup stays there.")
+        }
+    }
+
+    private func stopMachine() {
+        do {
+            try machine.stopBrew()
+            // A session the app had detached from is over now. Clearing its
+            // restore snapshot stops the next launch resurrecting a brew that
+            // was just killed.
+            brewSession.markCompleted()
+            machineStopMessage = "Stop sent to the machine."
+            MachineFeedback.acknowledged()
+        } catch {
+            machineStopMessage = error.localizedDescription
         }
     }
 

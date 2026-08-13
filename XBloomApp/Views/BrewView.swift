@@ -139,9 +139,11 @@ final class BrewSessionCoordinator {
 
     /// Closes the live view while the machine carries on brewing.
     ///
-    /// The saved snapshot is deliberately left in place, so reopening the app
-    /// finds the session still running and offers to pick it back up. Ending
-    /// the session outright is `dismiss()`.
+    /// Reachable only when the machine is unreachable, because stopping it is
+    /// otherwise the single way out of a running brew. The saved snapshot is
+    /// deliberately left in place, so reopening the app finds the session still
+    /// running and offers to pick it back up. Ending the session outright is
+    /// `dismiss()`.
     func detach() {
         guard let current = presentation, current.mode == .live, current.startedAt != nil else {
             dismiss()
@@ -737,14 +739,18 @@ struct BrewSessionView: View {
             Text("The machine stops pouring straight away. What has already been extracted is kept in your history.")
         }
         .confirmationDialog(
-            "Leave the machine brewing?",
+            "Close without stopping the machine?",
             isPresented: $confirmingLeave,
             titleVisibility: .visible
         ) {
-            Button("Leave it running") { brewSession.detach() }
+            Button("Close anyway", role: .destructive) { brewSession.detach() }
             Button("Stay", role: .cancel) {}
         } message: {
-            Text("The xBloom finishes the recipe on its own. This only closes the live view — reopen the app to pick the session back up.")
+            Text(
+                "The app cannot reach the xBloom, so it cannot stop it. The machine carries on with the recipe. "
+                    + "Reopen the app once it reconnects to pick the session back up, or use Settings › Machine › "
+                    + "Stop the machine now."
+            )
         }
         .task { await launchSession() }
         .onDisappear {
@@ -808,53 +814,57 @@ struct BrewSessionView: View {
                         .background(StudioTheme.raised, in: Capsule())
                 }
                 .buttonStyle(.plain)
-            } else {
-                HStack(spacing: 12) {
-                    if machine.isConnected {
-                        Button {
-                            confirmingStop = true
-                        } label: {
-                            Label("Stop brewing", systemImage: "stop.fill")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
-                                .background(Color.red, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        Button {
-                            reconnectAttempted = true
-                            machine.connect(resumingBrew: true)
-                        } label: {
-                            Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
-                                .font(.headline)
-                                .foregroundStyle(.black)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
-                                .background(Color.orange, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(
-                            machine.connectionState == .scanning
-                                || machine.connectionState == .connecting
-                                || machine.connectionState == .subscribing
-                        )
-                    }
-
-                    // Stopping and walking away are different intentions, and
-                    // conflating them either wastes a cup or traps you here.
-                    Button {
-                        confirmingLeave = true
-                    } label: {
-                        Label("Leave", systemImage: "rectangle.portrait.and.arrow.right")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
-                            .background(StudioTheme.raised, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
+            } else if machine.isConnected {
+                // Stopping the machine is the only way out of a running brew.
+                // Walking away used to be offered beside it, which let the app
+                // and the machine disagree about whether coffee was being made
+                // — the session closed, the xBloom kept pouring, and nothing on
+                // screen said so.
+                Button {
+                    confirmingStop = true
+                } label: {
+                    Label("Stop brewing", systemImage: "stop.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(Color.red, in: Capsule())
                 }
+                .buttonStyle(.plain)
+            } else {
+                // Nothing can be sent while the link is down, so there is no
+                // stop to offer. Reconnecting is the way back to one — but a
+                // dropped connection must not lock the app into a session it
+                // can no longer control, so closing stays available here and
+                // only here, and says plainly what it does not do.
+                Button {
+                    reconnectAttempted = true
+                    machine.connect(resumingBrew: true)
+                } label: {
+                    Label("Reconnect to stop it", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.headline)
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(Color.orange, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(
+                    machine.connectionState == .scanning
+                        || machine.connectionState == .connecting
+                        || machine.connectionState == .subscribing
+                )
+
+                Button {
+                    confirmingLeave = true
+                } label: {
+                    Label("Close without stopping", systemImage: "rectangle.portrait.and.arrow.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(StudioTheme.muted)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 18)
