@@ -13,19 +13,21 @@ struct HistoryView: View {
 
     var body: some View {
         ZStack {
-            AppBackground()
+            StudioBackground()
             ScrollView {
                 LazyVStack(spacing: 14) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Brew journal")
-                                .font(.title2.weight(.bold))
-                            Text("Every cup, stored on this iPhone")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        StatusPill(title: "\(totalHistoryCount) brews", color: AppTheme.coffee, systemImage: "clock.fill")
+                    // One name for the screen: the tab, the navigation bar and
+                    // this line used to read History, History and Brew journal.
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Every cup, stored on this iPhone")
+                            .font(.subheadline)
+                            .foregroundStyle(StudioTheme.muted)
+                        Spacer(minLength: 10)
+                        StatusPill(
+                            title: totalHistoryCount == 1 ? "1 brew" : "\(totalHistoryCount) brews",
+                            color: StudioTheme.accent,
+                            systemImage: "clock.fill"
+                        )
                     }
                     .padding(.bottom, 4)
 
@@ -46,7 +48,7 @@ struct HistoryView: View {
                                 .font(.subheadline.weight(.bold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 13)
-                                .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -64,6 +66,8 @@ struct HistoryView: View {
         }
         .navigationTitle("History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(StudioTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar { MachineToolbar() }
         .onAppear { reloadFirstPage() }
     }
@@ -81,15 +85,19 @@ struct HistoryView: View {
         return HStack(spacing: 15) {
             IconBadge(
                 systemImage: isAI ? "sparkles" : "waveform.path.ecg",
-                tint: isAI ? StudioTheme.accent : AppTheme.coffee,
+                tint: StudioTheme.accent,
                 size: 50
             )
+            // Two badges beside the title left "Peach Clarity AI" as "Peach C…".
+            // The name gets the line and the priority; the badges that are not
+            // about identity move down to the facts line, where there is room.
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
                     Text(brew.recipeName)
                         .font(.headline)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
+                        .layoutPriority(1)
                     if isAI {
                         Text("AI")
                             .font(.caption2.weight(.heavy))
@@ -97,46 +105,64 @@ struct HistoryView: View {
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
                             .background(StudioTheme.accent, in: Capsule())
-                    }
-                    if isSimulated {
-                        Text("SIM")
-                            .font(.caption2.weight(.heavy))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Color.cyan, in: Capsule())
+                            .fixedSize()
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Text(brew.beanName ?? brew.completedAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                if let style {
-                    Text("\(styleTitle(style)) · \(servings) cup\(servings == 1 ? "" : "s")")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(style == .iced ? .cyan : AppTheme.crema)
+                HStack(spacing: 5) {
+                    if isSimulated {
+                        // A simulation is not a cup of coffee. An outline, not
+                        // a filled badge competing with AI, and no colour
+                        // borrowed from something that means something else.
+                        Text("SIM")
+                            .font(.caption2.weight(.heavy))
+                            .foregroundStyle(StudioTheme.muted)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .overlay { Capsule().stroke(StudioTheme.muted.opacity(0.6), lineWidth: 1) }
+                            .fixedSize()
+                    }
+                    if let style {
+                        Text("\(style == .iced ? "Iced" : "Hot") · \(servings) cup\(servings == 1 ? "" : "s")")
+                            .foregroundStyle(style == .iced ? StudioTheme.iced : StudioTheme.crema)
+                        Text("·")
+                            .foregroundStyle(StudioTheme.muted)
+                    }
+                    Text(brew.completedAt.formatted(date: .abbreviated, time: .omitted))
+                        .foregroundStyle(StudioTheme.muted)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 5) {
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // The chevron used to sit at the bottom of this column, which made
+            // the column tall, pushed it wide, and truncated the recipe name
+            // three characters in. It belongs beside the row, centred.
+            VStack(alignment: .trailing, spacing: 4) {
                 if let rating = brew.rating {
                     Label("\(rating)/5", systemImage: "star.fill")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(AppTheme.crema)
+                        .foregroundStyle(StudioTheme.crema)
                 } else {
                     Text(formatDuration(brew.duration))
                         .font(.subheadline.weight(.bold).monospacedDigit())
                         .foregroundStyle(.primary)
                 }
-                Text(brew.completedAt, style: .relative)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.tertiary)
             }
+            .fixedSize(horizontal: true, vertical: false)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(StudioTheme.muted.opacity(0.7))
         }
-        .appCard()
+        .studioCard()
     }
 
     private func reloadFirstPage() {
@@ -218,7 +244,7 @@ struct BrewHistoryDetailView: View {
 
     private var telemetryWeightTarget: Double {
         if let recipe = originalRecipe {
-            return max(1, Double(recipe.totalWater) - (recipe.dose * 2))
+            return recipe.expectedYield
         }
         return max(1, entry?.coffeeWeight ?? 1)
     }
@@ -363,13 +389,13 @@ struct BrewHistoryDetailView: View {
     }
 
     private var resultHero: some View {
-        StudioCard(accent: originalRecipe?.generatedByAI == true ? StudioTheme.accent : AppTheme.crema) {
+        StudioCard(accent: originalRecipe?.generatedByAI == true ? StudioTheme.accent : StudioTheme.crema) {
             HStack(spacing: 15) {
                 Image(systemName: originalRecipe?.generatedByAI == true ? "sparkles" : "cup.and.saucer.fill")
                     .font(.title2.weight(.bold))
                     .foregroundStyle(.black)
                     .frame(width: 58, height: 58)
-                    .background(originalRecipe?.generatedByAI == true ? StudioTheme.accent : AppTheme.crema, in: RoundedRectangle(cornerRadius: 18))
+                    .background(originalRecipe?.generatedByAI == true ? StudioTheme.accent : StudioTheme.crema, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile))
                 VStack(alignment: .leading, spacing: 5) {
                     Text(
                         entry?.wasSimulated == true
@@ -465,12 +491,12 @@ struct BrewHistoryDetailView: View {
                             } label: {
                                 Image(systemName: value <= rating ? "star.fill" : "star")
                                     .font(.title2.weight(.semibold))
-                                    .foregroundStyle(value <= rating ? AppTheme.crema : StudioTheme.muted)
+                                    .foregroundStyle(value <= rating ? StudioTheme.crema : StudioTheme.muted)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 48)
                                     .background(
-                                        value == rating ? AppTheme.crema.opacity(0.13) : StudioTheme.raised,
-                                        in: RoundedRectangle(cornerRadius: 14)
+                                        value == rating ? StudioTheme.crema.opacity(0.13) : StudioTheme.raised,
+                                        in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control)
                                     )
                             }
                             .buttonStyle(.plain)
@@ -543,13 +569,13 @@ struct BrewHistoryDetailView: View {
                     )
                     .lineLimit(3...6)
                     .padding(14)
-                    .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+                    .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control))
                 }
 
                 if !gemini.hasAPIKey {
                     Label("Add your Gemini API key in Settings to create an enhanced recipe.", systemImage: "key.fill")
                         .font(.footnote)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(StudioTheme.warning)
                 }
                 if let statusMessage {
                     Label(statusMessage, systemImage: "checkmark.circle.fill")
@@ -604,13 +630,13 @@ struct BrewHistoryDetailView: View {
     }
 
     private var missingRecipeCard: some View {
-        StudioCard(accent: .orange) {
+        StudioCard(accent: StudioTheme.warning) {
             Label(
                 "This older history entry does not contain a recipe snapshot, and its original recipe is no longer in the library.",
                 systemImage: "exclamationmark.triangle.fill"
             )
             .font(.subheadline)
-            .foregroundStyle(.orange)
+            .foregroundStyle(StudioTheme.warning)
         }
     }
 
@@ -698,7 +724,7 @@ struct BrewHistoryDetailView: View {
                                 y: .value("Weight jump", min(100, sample.coffeeWeight / telemetryWeightTarget * 100))
                             )
                             .symbolSize(42)
-                            .foregroundStyle(Color.orange)
+                            .foregroundStyle(StudioTheme.warning)
                         }
 
                         ForEach(telemetryWaterJumpSamples, id: \.elapsed) { sample in
@@ -707,7 +733,7 @@ struct BrewHistoryDetailView: View {
                                 y: .value("Water jump", min(100, sample.water / telemetryWaterTarget * 100))
                             )
                             .symbolSize(42)
-                            .foregroundStyle(Color.orange)
+                            .foregroundStyle(StudioTheme.warning)
                         }
                     }
                     .frame(height: 230)
@@ -740,7 +766,7 @@ struct BrewHistoryDetailView: View {
                     .chartPlotStyle { plot in
                         plot
                             .background(.black.opacity(0.16))
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
                     }
 
                     HStack(spacing: 10) {
@@ -765,7 +791,7 @@ struct BrewHistoryDetailView: View {
                             .foregroundStyle(StudioTheme.muted)
                         if !telemetryJumpSamples.isEmpty || !telemetryWaterJumpSamples.isEmpty {
                             Label("Invalid jump", systemImage: "circle.fill")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(StudioTheme.warning)
                         }
                     }
                     .font(.caption2.weight(.semibold))
@@ -801,7 +827,7 @@ struct BrewHistoryDetailView: View {
                             systemImage: "waveform.path.ecg"
                         )
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(StudioTheme.warning)
                     }
                 }
             }
@@ -837,7 +863,7 @@ struct BrewHistoryDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(10)
-        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.chip, style: .continuous))
     }
 
     private func feedbackChip(_ title: String) -> some View {

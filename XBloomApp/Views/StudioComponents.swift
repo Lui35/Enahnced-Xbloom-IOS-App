@@ -4,69 +4,6 @@ import XBloomCore
 import UIKit
 #endif
 
-enum StudioTheme {
-    static let background = Color(red: 0.045, green: 0.05, blue: 0.05)
-    static let panel = Color(red: 0.10, green: 0.12, blue: 0.12)
-    static let raised = Color(red: 0.15, green: 0.18, blue: 0.18)
-    static let accent = Color(red: 0.63, green: 0.79, blue: 0.80)
-    static let mint = Color(red: 0.24, green: 0.82, blue: 0.56)
-    static let muted = Color.white.opacity(0.52)
-}
-
-struct StudioBackground: View {
-    var body: some View {
-        StudioTheme.background
-            .ignoresSafeArea()
-            .overlay(alignment: .topTrailing) {
-                Circle()
-                    .fill(StudioTheme.accent.opacity(0.10))
-                    .frame(width: 320, height: 320)
-                    .blur(radius: 70)
-                    .offset(x: 130, y: -170)
-                    .allowsHitTesting(false)
-            }
-    }
-}
-
-struct StudioCard<Content: View>: View {
-    var accent: Color = StudioTheme.accent
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        content
-            .padding(18)
-            .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(accent.opacity(0.22), lineWidth: 1)
-            }
-    }
-}
-
-struct StudioSectionTitle: View {
-    let title: String
-    var detail: String?
-    var icon: String?
-
-    var body: some View {
-        HStack(spacing: 10) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(StudioTheme.accent)
-            }
-            Text(title)
-                .font(.title3.weight(.bold))
-            Spacer()
-            if let detail {
-                Text(detail)
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(StudioTheme.muted)
-            }
-        }
-    }
-}
-
 struct StudioTextField: View {
     let title: String
     @Binding var text: String
@@ -82,7 +19,7 @@ struct StudioTextField: View {
                 .font(.body.weight(.medium))
                 .textFieldStyle(.plain)
                 .padding(14)
-                .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
         }
     }
 }
@@ -112,7 +49,7 @@ struct StudioValueStepper: View {
             }
         }
         .padding(14)
-        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
     }
 
     private func stepButton(_ icon: String, action: @escaping () -> Void) -> some View {
@@ -154,7 +91,7 @@ struct StudioDialBox: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                 .fill(StudioTheme.panel)
 
             GeometryReader { proxy in
@@ -166,7 +103,7 @@ struct StudioDialBox: View {
                 let available = max(0, proxy.size.width - inset * 2)
                 let clamped = min(1, max(0, progress))
 
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
                     .fill(tint.opacity(0.17))
                     .frame(width: min(available, max(8, available * clamped)))
                     .padding(inset)
@@ -213,12 +150,12 @@ struct StudioDialBox: View {
         .frame(height: height)
         // A second guarantee that nothing inside can paint past the border,
         // whatever a future value or animation does.
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                 .stroke(tint.opacity(0.85), lineWidth: 2)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
         .overlay {
             GeometryReader { proxy in
                 HorizontalPanSurface(
@@ -348,7 +285,7 @@ struct GrinderPowerControl: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
         .sensoryFeedback(.selection, trigger: isOn)
     }
 
@@ -426,7 +363,7 @@ struct PourPatternSelector: View {
             let segmentWidth = (proxy.size.width - outerPadding * 2) / CGFloat(patterns.count)
 
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                     .fill(StudioTheme.raised)
 
                 HStack(spacing: 8) {
@@ -444,7 +381,7 @@ struct PourPatternSelector: View {
                     .frame(width: segmentWidth, height: proxy.size.height - outerPadding * 2)
                     .background(
                         StudioTheme.accent,
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
                     )
                     .frame(width: segmentWidth)
                     .offset(
@@ -761,7 +698,7 @@ struct StudioMenuField: View {
                 }
                 .foregroundStyle(.white)
                 .padding(15)
-                .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
             }
             .buttonStyle(.plain)
         }
@@ -793,7 +730,7 @@ struct RoastLevelSelector: View {
                 Spacer()
                 Text(levels[selectedIndex])
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(AppTheme.crema)
+                    .foregroundStyle(StudioTheme.crema)
             }
             HStack {
                 ForEach(levels.indices, id: \.self) { index in
@@ -822,7 +759,7 @@ struct RoastLevelSelector: View {
                 .foregroundStyle(StudioTheme.muted)
         }
         .padding(15)
-        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
     }
 }
 
@@ -886,7 +823,7 @@ struct AcidityLevelSelector: View {
                 .foregroundStyle(StudioTheme.muted)
         }
         .padding(15)
-        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
         .sensoryFeedback(.selection, trigger: level ?? 0)
     }
 
@@ -994,7 +931,7 @@ struct AIProcessingOverlay: View {
                                 startRadius: 2,
                                 endRadius: 48
                             ),
-                            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                         )
                         .scaleEffect(breathes ? 1.04 : 0.94)
                         .shadow(color: tint.opacity(0.38), radius: breathes ? 22 : 9)
@@ -1046,9 +983,9 @@ struct AIProcessingOverlay: View {
             .frame(maxWidth: 290)
             .padding(.horizontal, 24)
             .padding(.vertical, 26)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
                     .stroke(tint.opacity(0.28), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.45), radius: 30, y: 16)

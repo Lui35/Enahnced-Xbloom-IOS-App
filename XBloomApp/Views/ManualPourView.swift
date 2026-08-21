@@ -127,7 +127,7 @@ struct ManualPourView: View {
                     value: $temperature,
                     range: Double(ManualPour.temperatureRange.lowerBound)...Double(ManualPour.temperatureRange.upperBound),
                     unit: "°C",
-                    tint: .orange
+                    tint: StudioTheme.crema
                 )
                 StudioDialBox(
                     title: "Flow rate",
@@ -166,7 +166,7 @@ struct ManualPourView: View {
             if let issue = issues.first {
                 Label(issue.message, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(StudioTheme.warning)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
@@ -180,7 +180,7 @@ struct ManualPourView: View {
                         .padding(.vertical, 15)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .tint(StudioTheme.danger)
             } else {
                 Button {
                     Task { await start() }
@@ -200,7 +200,7 @@ struct ManualPourView: View {
                     .foregroundStyle(.black)
                     .padding(.horizontal, 17)
                     .padding(.vertical, 13)
-                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!machine.isConnected || isStarting || !issues.isEmpty)

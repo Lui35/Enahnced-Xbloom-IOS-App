@@ -132,6 +132,28 @@ public struct Recipe: Codable, Equatable, Identifiable, Sendable {
     }
 
     public var ratio: Double {
+        ratio(atDose: dose)
+    }
+
+    /// What should end up in the cup: the water poured, less what the bed keeps.
+    ///
+    /// The retention constant was 2 g per gram of dose, which is the figure
+    /// quoted for a fully drained pour-over bed. This machine does not agree:
+    /// the 2026-08-21 recording poured 168 ml over 16 g and delivered 155.8 g,
+    /// so it kept 0.76 g per gram. One gram per gram sits between the two and
+    /// is within 4 g of the only brew that has actually been measured.
+    ///
+    /// ponytail: single measurement. `StoredBrew.coffeeWeight` records the real
+    /// yield of every brew — fit this from the user's own history if the
+    /// estimate starts drifting on their machine.
+    public var expectedYield: Double {
+        max(1, Double(totalWater) - dose)
+    }
+
+    /// The ratio the brew actually runs at when the coffee that went in is not
+    /// the dose the recipe asks for. The water does not change with the dose,
+    /// so a short dose brews weaker and a heavy one stronger.
+    public func ratio(atDose dose: Double) -> Double {
         dose > 0 ? Double(totalWater) / dose : 0
     }
 }

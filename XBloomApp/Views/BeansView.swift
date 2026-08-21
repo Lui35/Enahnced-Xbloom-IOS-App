@@ -16,7 +16,7 @@ struct BeansView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppBackground()
+                StudioBackground()
                 ScrollView {
                     LazyVStack(spacing: 18) {
                         beanShelfHero
@@ -76,7 +76,7 @@ struct BeansView: View {
                 Text("PRIVATE COFFEE LIBRARY")
                     .font(.caption2.weight(.heavy))
                     .tracking(1.2)
-                    .foregroundStyle(AppTheme.sage)
+                    .foregroundStyle(StudioTheme.mint)
                 Text("Your bean shelf")
                     .font(.title.weight(.bold))
                 Text("Origin, cup profile, freshness, and inventory—all stored on this iPhone.")
@@ -92,10 +92,10 @@ struct BeansView: View {
                 Text("BAGS")
                     .font(.caption2.weight(.heavy))
                     .tracking(1)
-                    .foregroundStyle(AppTheme.sage)
+                    .foregroundStyle(StudioTheme.mint)
             }
             .frame(width: 76, height: 82)
-            .background(AppTheme.sage.opacity(0.10), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(StudioTheme.mint.opacity(0.10), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .padding(20)
         .background(
@@ -108,7 +108,7 @@ struct BeansView: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(AppTheme.sage.opacity(0.25), lineWidth: 1)
+                .stroke(StudioTheme.mint.opacity(0.25), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.28), radius: 18, y: 9)
     }
@@ -136,14 +136,14 @@ struct BeansView: View {
                             RoundedRectangle(cornerRadius: 20, style: .continuous)
                                 .fill(
                                     LinearGradient(
-                                        colors: [AppTheme.sage.opacity(0.28), StudioTheme.accent.opacity(0.10)],
+                                        colors: [StudioTheme.mint.opacity(0.28), StudioTheme.accent.opacity(0.10)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
                             Image(systemName: "leaf.fill")
                                 .font(.title2.weight(.semibold))
-                                .foregroundStyle(AppTheme.sage)
+                                .foregroundStyle(StudioTheme.mint)
                         }
                         .frame(width: 62, height: 62)
 
@@ -158,7 +158,7 @@ struct BeansView: View {
                             if !originLine.isEmpty {
                                 Text(originLine)
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(AppTheme.sage)
+                                    .foregroundStyle(StudioTheme.mint)
                                     .lineLimit(1)
                             }
                         }
@@ -172,12 +172,12 @@ struct BeansView: View {
 
                     HStack(spacing: 8) {
                         if let acidity = profile?.acidityLevel {
-                            beanStat("Acidity \(acidity)/5", "sun.max.fill", AppTheme.crema)
+                            beanStat("Acidity \(acidity)/5", "sun.max.fill", StudioTheme.crema)
                         } else {
                             beanStat("Acidity unknown", "questionmark.circle.fill", StudioTheme.muted)
                         }
                         if let roast = profile?.roastLevel, !roast.isEmpty {
-                            beanStat(roast, "flame.fill", Color.orange)
+                            beanStat(roast, "flame.fill", StudioTheme.crema)
                         }
                         if let notes = profile?.tastingNotes, !notes.isEmpty {
                             beanStat("Tasting notes", "text.quote", StudioTheme.accent)
@@ -194,10 +194,10 @@ struct BeansView: View {
                                 .font(.headline.monospacedDigit())
                             Text("· \(remainingPercent)%")
                                 .font(.caption.weight(.bold).monospacedDigit())
-                                .foregroundStyle(AppTheme.sage)
+                                .foregroundStyle(StudioTheme.mint)
                         }
                         ProgressView(value: remaining, total: initialWeight)
-                            .tint(AppTheme.sage)
+                            .tint(StudioTheme.mint)
                             .scaleEffect(x: 1, y: 1.8, anchor: .center)
                     }
                     .padding(13)
@@ -213,44 +213,41 @@ struct BeansView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "sparkles")
-                            .font(.subheadline.weight(.bold))
+                            .font(.caption.weight(.bold))
                             .foregroundStyle(.black)
-                            .frame(width: 38, height: 38)
-                            .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
+                            .frame(width: 32, height: 32)
+                            .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
                             Text("Design an AI recipe")
                                 .font(.subheadline.weight(.bold))
                             Text("You choose style and cups")
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundStyle(StudioTheme.muted)
                         }
-                        Spacer()
+                        Spacer(minLength: 8)
                         Image(systemName: "arrow.right")
-                            .font(.caption.weight(.bold))
+                            .font(.caption2.weight(.bold))
                             .foregroundStyle(StudioTheme.accent)
-                            .frame(width: 32, height: 32)
-                            .background(StudioTheme.accent.opacity(0.10), in: Circle())
+                            .frame(width: 26, height: 26)
+                            .background(StudioTheme.accent.opacity(0.12), in: Circle())
                     }
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 9)
                     .background(
-                        LinearGradient(
-                            colors: [StudioTheme.raised, StudioTheme.accent.opacity(0.08)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
+                        StudioTheme.raised,
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(StudioTheme.accent.opacity(0.22), lineWidth: 1)
+                    }
                 }
                 .buttonStyle(.plain)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(.white.opacity(0.07))
-                        .frame(height: 1)
-                }
+                .padding(.horizontal, 17)
+                .padding(.bottom, 17)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 27, style: .continuous))
         .background(
             LinearGradient(
                 colors: [StudioTheme.panel, Color(red: 0.075, green: 0.11, blue: 0.10)],
@@ -389,7 +386,7 @@ struct BeanDetailView: View {
             ? Int(floor(max(0, profile.remainingWeightGrams) / referenceDose))
             : 0
 
-        return StudioCard(accent: AppTheme.sage) {
+        return StudioCard(accent: StudioTheme.mint) {
             VStack(alignment: .leading, spacing: 14) {
                 StudioSectionTitle(
                     title: "Bean workspace",
@@ -407,21 +404,21 @@ struct BeanDetailView: View {
                         value: "\(beanBrews.count)",
                         label: "Brews",
                         icon: "cup.and.saucer.fill",
-                        tint: AppTheme.sage
+                        tint: StudioTheme.mint
                     )
                     relationshipMetric(
                         value: averageRating.map { String(format: "%.1f", $0) } ?? "—",
                         label: "Rating",
                         icon: "star.fill",
-                        tint: AppTheme.crema
+                        tint: StudioTheme.crema
                     )
                 }
 
                 HStack(spacing: 12) {
                     Image(systemName: "scalemass.fill")
-                        .foregroundStyle(AppTheme.sage)
+                        .foregroundStyle(StudioTheme.mint)
                         .frame(width: 36, height: 36)
-                        .background(AppTheme.sage.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .background(StudioTheme.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("About \(estimatedDoses) dose\(estimatedDoses == 1 ? "" : "s") remaining")
                             .font(.subheadline.weight(.bold))
@@ -520,7 +517,7 @@ struct BeanDetailView: View {
 
     @ViewBuilder
     private var recentBrewsCard: some View {
-        StudioCard(accent: AppTheme.crema) {
+        StudioCard(accent: StudioTheme.crema) {
             VStack(alignment: .leading, spacing: 13) {
                 StudioSectionTitle(
                     title: "Recent cups",
@@ -538,9 +535,9 @@ struct BeanDetailView: View {
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: stored.entry?.wasSimulated == true ? "play.rectangle.fill" : "waveform.path.ecg")
-                                    .foregroundStyle(AppTheme.crema)
+                                    .foregroundStyle(StudioTheme.crema)
                                     .frame(width: 37, height: 37)
-                                    .background(AppTheme.crema.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                                    .background(StudioTheme.crema.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(stored.recipeName)
                                         .font(.subheadline.weight(.bold))
@@ -553,7 +550,7 @@ struct BeanDetailView: View {
                                 if let rating = stored.rating {
                                     Label("\(rating)", systemImage: "star.fill")
                                         .font(.caption.weight(.bold))
-                                        .foregroundStyle(AppTheme.crema)
+                                        .foregroundStyle(StudioTheme.crema)
                                 }
                                 Image(systemName: "chevron.right")
                                     .font(.caption.weight(.bold))
@@ -593,7 +590,7 @@ struct BeanDetailView: View {
         .foregroundStyle(.black.opacity(0.78))
         .padding(20)
         .background(
-            LinearGradient(colors: [AppTheme.sage, StudioTheme.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
+            LinearGradient(colors: [StudioTheme.mint, StudioTheme.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
         .padding(.top, 8)
@@ -617,7 +614,7 @@ struct BeanDetailView: View {
     }
 
     private func coffeeProfileCard(_ profile: BeanProfile) -> some View {
-        StudioCard(accent: AppTheme.crema) {
+        StudioCard(accent: StudioTheme.crema) {
             VStack(spacing: 14) {
                 StudioSectionTitle(title: "Coffee profile", icon: "sparkles")
                 detailRow("Process", value: profile.process, icon: "arrow.triangle.2.circlepath")
@@ -653,7 +650,7 @@ struct BeanDetailView: View {
     private func inventoryCard(_ profile: BeanProfile) -> some View {
         let remaining = max(0, min(profile.remainingWeightGrams, profile.initialWeightGrams))
         let fraction = profile.initialWeightGrams > 0 ? remaining / profile.initialWeightGrams : 0
-        return StudioCard(accent: AppTheme.sage) {
+        return StudioCard(accent: StudioTheme.mint) {
             VStack(spacing: 14) {
                 StudioSectionTitle(
                     title: "Bag inventory",
@@ -673,7 +670,7 @@ struct BeanDetailView: View {
                         .foregroundStyle(StudioTheme.muted)
                 }
                 ProgressView(value: remaining, total: max(1, profile.initialWeightGrams))
-                    .tint(AppTheme.sage)
+                    .tint(StudioTheme.mint)
                     .scaleEffect(x: 1, y: 1.8, anchor: .center)
 
                 Button {
@@ -688,10 +685,10 @@ struct BeanDetailView: View {
                             .foregroundStyle(StudioTheme.muted)
                     }
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(AppTheme.sage)
+                    .foregroundStyle(StudioTheme.mint)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
-                    .background(AppTheme.sage.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(StudioTheme.mint.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -744,15 +741,15 @@ struct BeanDetailView: View {
                 Spacer()
                 Text(level.map { "\($0) / 5" } ?? "Unknown / not provided")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(level == nil ? StudioTheme.muted : AppTheme.crema)
+                    .foregroundStyle(level == nil ? StudioTheme.muted : StudioTheme.crema)
             }
             HStack(spacing: 9) {
                 ForEach(1...5, id: \.self) { value in
                     Circle()
-                        .fill(value <= (level ?? 0) ? AppTheme.crema : StudioTheme.raised)
+                        .fill(value <= (level ?? 0) ? StudioTheme.crema : StudioTheme.raised)
                         .frame(width: 22, height: 22)
                         .overlay {
-                            Circle().stroke(AppTheme.crema.opacity(0.35), lineWidth: 1)
+                            Circle().stroke(StudioTheme.crema.opacity(0.35), lineWidth: 1)
                         }
                 }
             }
@@ -835,10 +832,10 @@ private struct BeanRefillView: View {
                         if let errorMessage {
                             Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(StudioTheme.warning)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(14)
-                                .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 15))
+                                .background(StudioTheme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 15))
                         }
                     }
                     .padding(.horizontal, 18)
@@ -886,7 +883,7 @@ private struct BeanRefillView: View {
                         "Checking what changed on this label…",
                     ],
                     systemImage: "camera.viewfinder",
-                    tint: AppTheme.sage
+                    tint: StudioTheme.mint
                 ) {
                     scanTask?.cancel()
                 }
@@ -905,7 +902,7 @@ private struct BeanRefillView: View {
                 .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(.black.opacity(0.72))
                 .frame(width: 70, height: 70)
-                .background(AppTheme.sage, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(StudioTheme.mint, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             VStack(alignment: .leading, spacing: 5) {
                 Text(bean.name)
                     .font(.title3.weight(.bold))
@@ -920,7 +917,7 @@ private struct BeanRefillView: View {
     }
 
     private var sizeCard: some View {
-        StudioCard(accent: AppTheme.sage) {
+        StudioCard(accent: StudioTheme.mint) {
             VStack(alignment: .leading, spacing: 14) {
                 StudioSectionTitle(title: "New bag size", detail: "Up to 1 kg", icon: "bag.fill")
                 HStack(spacing: 9) {
@@ -934,7 +931,7 @@ private struct BeanRefillView: View {
                                 .padding(.vertical, 12)
                                 .foregroundStyle(size == option ? .black : .white)
                                 .background(
-                                    size == option ? AppTheme.sage : StudioTheme.raised,
+                                    size == option ? StudioTheme.mint : StudioTheme.raised,
                                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 )
                         }
@@ -950,7 +947,7 @@ private struct BeanRefillView: View {
                         range: 50...1_000,
                         step: 10,
                         unit: "g",
-                        tint: AppTheme.sage,
+                        tint: StudioTheme.mint,
                         height: 82
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -961,7 +958,7 @@ private struct BeanRefillView: View {
     }
 
     private var freshnessCard: some View {
-        StudioCard(accent: AppTheme.crema) {
+        StudioCard(accent: StudioTheme.crema) {
             VStack(alignment: .leading, spacing: 12) {
                 StudioSectionTitle(title: "Freshness", detail: "New bag", icon: "calendar.badge.clock")
                 DatePicker(
@@ -971,7 +968,7 @@ private struct BeanRefillView: View {
                     displayedComponents: .date
                 )
                 .datePickerStyle(.compact)
-                .tint(AppTheme.crema)
+                .tint(StudioTheme.crema)
                 Text("The bean record’s update date becomes today, and this roast date replaces the previous bag’s date.")
                     .font(.caption)
                     .foregroundStyle(StudioTheme.muted)
@@ -1411,10 +1408,10 @@ struct AIRecipeDesignerView: View {
                         if let errorMessage {
                             Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(StudioTheme.danger)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(14)
-                                .background(.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .background(StudioTheme.danger.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
                     }
                     .padding(.horizontal, 18)
@@ -1623,7 +1620,7 @@ struct BeanEditorView: View {
                     LazyVStack(spacing: 18) {
                         beanIdentity
 
-                        StudioCard(accent: AppTheme.sage) {
+                        StudioCard(accent: StudioTheme.mint) {
                             VStack(spacing: 14) {
                                 StudioSectionTitle(title: "Bag", detail: "Required", icon: "bag.fill")
                                 StudioTextField(title: "Coffee name", text: $profile.name, icon: "cup.and.saucer.fill")
@@ -1634,7 +1631,7 @@ struct BeanEditorView: View {
                                     range: 50...1_000,
                                     step: 50,
                                     unit: "g",
-                                    tint: AppTheme.sage
+                                    tint: StudioTheme.mint
                                 )
                             }
                         }
@@ -1654,7 +1651,7 @@ struct BeanEditorView: View {
                             }
                         }
 
-                        StudioCard(accent: AppTheme.crema) {
+                        StudioCard(accent: StudioTheme.crema) {
                             VStack(spacing: 14) {
                                 StudioSectionTitle(title: "Coffee profile", icon: "sparkles")
                                 StudioMenuField(
@@ -1725,7 +1722,7 @@ struct BeanEditorView: View {
         .foregroundStyle(.black.opacity(0.78))
         .padding(20)
         .background(
-            LinearGradient(colors: [AppTheme.sage, StudioTheme.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
+            LinearGradient(colors: [StudioTheme.mint, StudioTheme.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
         .padding(.top, 8)
@@ -1788,11 +1785,11 @@ struct BeanPhotoImporterView: View {
                         photoSlots
 
                         if !gemini.hasAPIKey {
-                            StudioCard(accent: .orange) {
+                            StudioCard(accent: StudioTheme.warning) {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Label("Gemini key needed", systemImage: "key.fill")
                                         .font(.headline)
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(StudioTheme.warning)
                                     Text("Your key is stored securely in the iPhone Keychain. It is used only when you tap Read bag.")
                                         .font(.subheadline)
                                         .foregroundStyle(StudioTheme.muted)
@@ -1832,10 +1829,10 @@ struct BeanPhotoImporterView: View {
                         if let errorMessage {
                             Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(StudioTheme.danger)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(15)
-                                .background(.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
+                                .background(StudioTheme.danger.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
                         }
                     }
                     .padding(.horizontal, 18)
@@ -1881,7 +1878,7 @@ struct BeanPhotoImporterView: View {
                         "Preparing a bean profile for review…",
                     ],
                     systemImage: "doc.viewfinder.fill",
-                    tint: AppTheme.sage
+                    tint: StudioTheme.mint
                 ) {
                     importTask?.cancel()
                 }

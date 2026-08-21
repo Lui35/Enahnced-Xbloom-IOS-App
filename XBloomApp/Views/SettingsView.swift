@@ -22,11 +22,11 @@ struct SettingsView: View {
 
     var body: some View {
         ZStack {
-            AppBackground()
+            StudioBackground()
             ScrollView {
                 LazyVStack(spacing: 22) {
                     HStack(spacing: 15) {
-                        IconBadge(systemImage: "cup.and.saucer.fill", tint: AppTheme.crema, size: 58)
+                        IconBadge(systemImage: "cup.and.saucer.fill", tint: StudioTheme.crema, size: 58)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("xBloom companion")
                                 .font(.title2.weight(.bold))
@@ -36,18 +36,18 @@ struct SettingsView: View {
                         }
                         Spacer()
                     }
-                    .appCard()
+                    .studioCard()
 
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            AppSectionHeader(
+                            StudioSectionTitle(
                                 title: "Cloud & Gemini",
                                 subtitle: "Supabase backup and server-side AI"
                             )
                             Spacer()
                             StatusPill(
                                 title: cloud.isAuthenticated ? "Connected" : "Setup",
-                                color: cloud.isAuthenticated ? AppTheme.sage : .orange,
+                                color: cloud.isAuthenticated ? StudioTheme.mint : StudioTheme.warning,
                                 systemImage: cloud.isAuthenticated ? "checkmark.circle.fill" : "icloud.slash"
                             )
                         }
@@ -125,7 +125,7 @@ struct SettingsView: View {
                         if let message = statusMessage ?? cloud.statusMessage {
                             Text(message)
                                 .font(.footnote)
-                                .foregroundStyle(message.contains("failed") ? .orange : .secondary)
+                                .foregroundStyle(message.contains("failed") ? StudioTheme.warning : .secondary)
                         }
 
                         Label(
@@ -135,10 +135,10 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     }
-                    .appCard()
+                    .studioCard()
 
                     VStack(alignment: .leading, spacing: 14) {
-                        AppSectionHeader(title: "Library & privacy")
+                        StudioSectionTitle(title: "Library & privacy")
                         NavigationLink {
                             HistoryView()
                         } label: {
@@ -146,7 +146,7 @@ struct SettingsView: View {
                                 icon: "clock.arrow.circlepath",
                                 title: "Brew history",
                                 subtitle: "Sessions and telemetry",
-                                tint: AppTheme.coffee
+                                tint: StudioTheme.accent
                             )
                         }
                         .buttonStyle(.plain)
@@ -161,7 +161,7 @@ struct SettingsView: View {
                                 icon: "internaldrive.fill",
                                 title: "On-device storage",
                                 subtitle: "Beans, recipes, history, and preferences",
-                                tint: AppTheme.sage
+                                tint: StudioTheme.mint
                             )
                         }
                         .buttonStyle(.plain)
@@ -176,7 +176,7 @@ struct SettingsView: View {
                                 icon: "square.and.arrow.up.on.square.fill",
                                 title: "Recipe transfer",
                                 subtitle: "Export or import a complete library",
-                                tint: AppTheme.crema
+                                tint: StudioTheme.crema
                             )
                         }
                         .buttonStyle(.plain)
@@ -192,7 +192,7 @@ struct SettingsView: View {
                             }
                         )) {
                             HStack(spacing: 14) {
-                                IconBadge(systemImage: "speaker.wave.2.fill", tint: AppTheme.coffee, size: 44)
+                                IconBadge(systemImage: "speaker.wave.2.fill", tint: StudioTheme.accent, size: 44)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("Connection sound").font(.headline)
                                     Text("Chime when the machine pairs or drops")
@@ -201,7 +201,7 @@ struct SettingsView: View {
                                 }
                             }
                         }
-                        .tint(AppTheme.sage)
+                        .tint(StudioTheme.mint)
 
                         Divider()
 
@@ -212,7 +212,7 @@ struct SettingsView: View {
                                 icon: "waveform.path.ecg",
                                 title: "Machine diagnostics",
                                 subtitle: "Record and share Bluetooth traffic",
-                                tint: .orange
+                                tint: StudioTheme.warning
                             )
                         }
                         .buttonStyle(.plain)
@@ -222,7 +222,7 @@ struct SettingsView: View {
 
                         machineStopRow
                     }
-                    .appCard()
+                    .studioCard()
 
                     Text("xBloom Native · Version 0.1")
                         .font(.caption)
@@ -254,7 +254,7 @@ struct SettingsView: View {
                 confirmingMachineStop = true
             } label: {
                 HStack(spacing: 14) {
-                    IconBadge(systemImage: "stop.circle.fill", tint: .red, size: 44)
+                    IconBadge(systemImage: "stop.circle.fill", tint: StudioTheme.danger, size: 44)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Stop the machine now")
                             .font(.headline)
@@ -429,12 +429,12 @@ private struct RecipeTransferView: View {
 
     var body: some View {
         ZStack {
-            AppBackground()
+            StudioBackground()
             ScrollView {
                 LazyVStack(spacing: 18) {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack(alignment: .top, spacing: 15) {
-                            IconBadge(systemImage: "arrow.left.arrow.right.circle.fill", tint: AppTheme.crema, size: 58)
+                            IconBadge(systemImage: "arrow.left.arrow.right.circle.fill", tint: StudioTheme.crema, size: 58)
                             VStack(alignment: .leading, spacing: 5) {
                                 Text("Move your recipe library")
                                     .font(.title2.weight(.bold))
@@ -447,14 +447,14 @@ private struct RecipeTransferView: View {
 
                         StatusPill(
                             title: "\(recipes.count) recipe\(recipes.count == 1 ? "" : "s") ready",
-                            color: AppTheme.sage,
+                            color: StudioTheme.mint,
                             systemImage: "checkmark.circle.fill"
                         )
                     }
-                    .appCard()
+                    .studioCard()
 
                     VStack(alignment: .leading, spacing: 14) {
-                        AppSectionHeader(
+                        StudioSectionTitle(
                             title: "Export",
                             subtitle: "Share with another iPhone using AirDrop, Messages, Mail, or Files"
                         )
@@ -474,10 +474,10 @@ private struct RecipeTransferView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .appCard()
+                    .studioCard()
 
                     VStack(alignment: .leading, spacing: 14) {
-                        AppSectionHeader(
+                        StudioSectionTitle(
                             title: "Import",
                             subtitle: "Choose an xBloom recipe-library file received from another device"
                         )
@@ -487,12 +487,12 @@ private struct RecipeTransferView: View {
                         } label: {
                             Label("Import recipe library", systemImage: "square.and.arrow.down.fill")
                                 .font(.headline)
-                                .foregroundStyle(AppTheme.crema)
+                                .foregroundStyle(StudioTheme.crema)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(.primary.opacity(0.045), in: Capsule())
                                 .overlay {
-                                    Capsule().stroke(AppTheme.crema.opacity(0.62), lineWidth: 1.5)
+                                    Capsule().stroke(StudioTheme.crema.opacity(0.62), lineWidth: 1.5)
                                 }
                         }
                         .buttonStyle(.plain)
@@ -504,7 +504,7 @@ private struct RecipeTransferView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     }
-                    .appCard()
+                    .studioCard()
 
                     if let resultMessage {
                         Label(
@@ -512,7 +512,7 @@ private struct RecipeTransferView: View {
                             systemImage: resultIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
                         )
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(resultIsError ? .orange : AppTheme.sage)
+                        .foregroundStyle(resultIsError ? StudioTheme.warning : StudioTheme.mint)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 4)
                     }
@@ -622,12 +622,12 @@ private struct OnDeviceStorageView: View {
 
     var body: some View {
         ZStack {
-            AppBackground()
+            StudioBackground()
             ScrollView {
                 LazyVStack(spacing: 18) {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack(alignment: .top, spacing: 15) {
-                            IconBadge(systemImage: "iphone.gen3", tint: AppTheme.sage, size: 58)
+                            IconBadge(systemImage: "iphone.gen3", tint: StudioTheme.mint, size: 58)
                             VStack(alignment: .leading, spacing: 5) {
                                 Text("Stored on this iPhone")
                                     .font(.title2.weight(.bold))
@@ -640,12 +640,12 @@ private struct OnDeviceStorageView: View {
 
                         Label("Local database ready", systemImage: "checkmark.shield.fill")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppTheme.sage)
+                            .foregroundStyle(StudioTheme.mint)
                     }
-                    .appCard()
+                    .studioCard()
 
                     VStack(alignment: .leading, spacing: 16) {
-                        AppSectionHeader(
+                        StudioSectionTitle(
                             title: "Saved library",
                             subtitle: "Content currently managed by xBloom"
                         )
@@ -657,7 +657,7 @@ private struct OnDeviceStorageView: View {
                             detail: archivedBeans == 0
                                 ? "\(activeBeans) active"
                                 : "\(activeBeans) active · \(archivedBeans) archived",
-                            tint: AppTheme.sage
+                            tint: StudioTheme.mint
                         )
                         Divider()
                         storageMetric(
@@ -665,7 +665,7 @@ private struct OnDeviceStorageView: View {
                             title: "Recipes",
                             value: "\(recipes.count)",
                             detail: "Manual and AI-created",
-                            tint: AppTheme.coffee
+                            tint: StudioTheme.accent
                         )
                         Divider()
                         storageMetric(
@@ -673,13 +673,13 @@ private struct OnDeviceStorageView: View {
                             title: "Brew sessions",
                             value: "\(brews.count)",
                             detail: "History and extraction telemetry",
-                            tint: AppTheme.crema
+                            tint: StudioTheme.crema
                         )
                     }
-                    .appCard()
+                    .studioCard()
 
                     VStack(alignment: .leading, spacing: 14) {
-                        AppSectionHeader(title: "Storage details")
+                        StudioSectionTitle(title: "Storage details")
 
                         HStack {
                             Label("Saved content", systemImage: "externaldrive.fill")
@@ -702,7 +702,7 @@ private struct OnDeviceStorageView: View {
                         }
                         .buttonStyle(PrimaryActionButtonStyle())
                     }
-                    .appCard()
+                    .studioCard()
 
                     Label(
                         "Cloud sync keeps a private copy in Supabase while this on-device database remains available offline.",

@@ -107,7 +107,7 @@ struct ScaleView: View {
                     .foregroundStyle(.black)
                     .padding(.horizontal, 17)
                     .padding(.vertical, 13)
-                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!machine.isConnected || isWorking)
@@ -138,7 +138,7 @@ struct ScaleView: View {
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -215,10 +215,10 @@ struct MachineToolStatusCard: View {
                 message + " The command was sent, but this control has not been "
                     + "confirmed against a real machine capture yet.",
                 icon: "questionmark.circle.fill",
-                tint: .orange
+                tint: StudioTheme.warning
             )
         case .failed(let message):
-            row(message, icon: "exclamationmark.triangle.fill", tint: .red)
+            row(message, icon: "exclamationmark.triangle.fill", tint: StudioTheme.danger)
         }
     }
 
@@ -228,6 +228,6 @@ struct MachineToolStatusCard: View {
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(15)
-            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
     }
 }

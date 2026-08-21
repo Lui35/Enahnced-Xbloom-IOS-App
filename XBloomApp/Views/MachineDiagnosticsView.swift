@@ -18,7 +18,7 @@ struct MachineDiagnosticsView: View {
 
     var body: some View {
         ZStack {
-            AppBackground()
+            StudioBackground()
             ScrollView {
                 LazyVStack(spacing: 22) {
                     instructions
@@ -53,7 +53,7 @@ struct MachineDiagnosticsView: View {
 
     private var instructions: some View {
         VStack(alignment: .leading, spacing: 12) {
-            AppSectionHeader(title: "Capture a real brew")
+            StudioSectionTitle(title: "Capture a real brew")
             Text(
                 """
                 1. Connect to the machine.
@@ -72,22 +72,22 @@ struct MachineDiagnosticsView: View {
             .font(.caption)
             .foregroundStyle(.tertiary)
         }
-        .appCard()
+        .studioCard()
     }
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            AppSectionHeader(title: "Recording")
+            StudioSectionTitle(title: "Recording")
 
             HStack(spacing: 10) {
                 statusPill(
                     log.isRecording ? "Recording" : "Idle",
-                    tint: log.isRecording ? .red : .secondary
+                    tint: log.isRecording ? StudioTheme.danger : .secondary
                 )
-                statusPill("\(log.entries.count) frames", tint: AppTheme.coffee)
+                statusPill("\(log.entries.count) frames", tint: StudioTheme.accent)
                 statusPill(
                     machine.isConnected ? "Connected" : machine.connectionState.rawValue.capitalized,
-                    tint: machine.isConnected ? AppTheme.sage : .orange
+                    tint: machine.isConnected ? StudioTheme.mint : StudioTheme.warning
                 )
             }
 
@@ -101,7 +101,7 @@ struct MachineDiagnosticsView: View {
                         .padding(.vertical, 13)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .tint(StudioTheme.danger)
             } else {
                 Button {
                     machine.startTrafficRecording()
@@ -112,7 +112,7 @@ struct MachineDiagnosticsView: View {
                         .padding(.vertical, 13)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppTheme.coffee)
+                .tint(StudioTheme.accent)
             }
 
             if !log.entries.isEmpty {
@@ -146,12 +146,12 @@ struct MachineDiagnosticsView: View {
                 .buttonStyle(.borderless)
             }
         }
-        .appCard()
+        .studioCard()
     }
 
     private var identifierSummary: some View {
         VStack(alignment: .leading, spacing: 12) {
-            AppSectionHeader(title: "Identifiers received")
+            StudioSectionTitle(title: "Identifiers received")
             Text("In the order they first appeared.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
@@ -163,7 +163,7 @@ struct MachineDiagnosticsView: View {
                     Text(name(for: row.command))
                         .font(.footnote)
                         .foregroundStyle(
-                            XBloomNotification(rawValue: row.command) == nil ? .orange : .primary
+                            XBloomNotification(rawValue: row.command) == nil ? StudioTheme.warning : .primary
                         )
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -178,12 +178,12 @@ struct MachineDiagnosticsView: View {
                 }
             }
         }
-        .appCard()
+        .studioCard()
     }
 
     private var recentFrames: some View {
         VStack(alignment: .leading, spacing: 10) {
-            AppSectionHeader(title: "Latest frames")
+            StudioSectionTitle(title: "Latest frames")
             ForEach(log.entries.suffix(60).reversed()) { entry in
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
@@ -215,7 +215,7 @@ struct MachineDiagnosticsView: View {
                 Divider()
             }
         }
-        .appCard()
+        .studioCard()
     }
 
     private func name(for command: UInt16) -> String {
@@ -227,9 +227,9 @@ struct MachineDiagnosticsView: View {
 
     private func tint(for direction: MachineTrafficEntry.Direction) -> Color {
         switch direction {
-        case .sent: AppTheme.coffee
-        case .received: AppTheme.sage
-        case .unparsed: .orange
+        case .sent: StudioTheme.accent
+        case .received: StudioTheme.mint
+        case .unparsed: StudioTheme.warning
         case .note: .secondary
         }
     }

@@ -33,7 +33,7 @@ struct RootView: View {
                     .zIndex(10)
             }
         }
-        .tint(AppTheme.coffee)
+        .tint(StudioTheme.accent)
         .preferredColorScheme(.dark)
         .task {
             await BrewLiveActivityManager.shared.endSimulationActivities()
@@ -145,7 +145,7 @@ struct MachineToolbar: ToolbarContent {
             } label: {
                 HStack(spacing: 7) {
                     Circle()
-                        .fill(machine.isConnected ? AppTheme.sage : .secondary)
+                        .fill(machine.isConnected ? StudioTheme.mint : .secondary)
                         .frame(width: 7, height: 7)
                     Text(machine.isConnected ? "Connected" : "Connect")
                         .font(.caption.weight(.bold))

@@ -111,7 +111,7 @@ struct GrinderView: View {
                     range: 60...120,
                     step: 10,
                     unit: "RPM",
-                    tint: Color(red: 0.53, green: 0.62, blue: 0.86)
+                    tint: StudioTheme.accent
                 )
                 .opacity(isGrinding ? 0.45 : 1)
                 .allowsHitTesting(!isGrinding)
@@ -172,7 +172,7 @@ struct GrinderView: View {
                         .padding(.vertical, 15)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .tint(StudioTheme.danger)
             } else {
                 Button {
                     Task { await start() }
@@ -192,7 +192,7 @@ struct GrinderView: View {
                     .foregroundStyle(.black)
                     .padding(.horizontal, 17)
                     .padding(.vertical, 13)
-                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!machine.isConnected || isWorking)
@@ -221,11 +221,11 @@ struct GrinderView: View {
     }
 
     private var notes: some View {
-        StudioCard(accent: .orange) {
+        StudioCard(accent: StudioTheme.warning) {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Not yet verified", systemImage: "questionmark.circle.fill")
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(StudioTheme.warning)
                 Text(
                     "These grinder commands come from the official app's command "
                         + "table, but no recording has confirmed their payloads on "
@@ -245,7 +245,7 @@ struct GrinderView: View {
         }
     }
 
-    private var grindTint: Color { Color(red: 0.77, green: 0.62, blue: 0.43) }
+    private var grindTint: Color { StudioTheme.crema }
 
     private func start() async {
         isWorking = true
@@ -319,6 +319,6 @@ struct StudioReadoutChip: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.chip, style: .continuous))
     }
 }

@@ -60,23 +60,25 @@ struct RecipesView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppBackground()
+                StudioBackground()
                 ScrollView {
                     LazyVStack(spacing: 14) {
-                        recipeSearchField
-
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Recipe library")
-                                    .font(.title2.weight(.bold))
-                                Text("Programs ready for your xBloom")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            StatusPill(title: "\(recipes.count) saved", color: AppTheme.coffee, systemImage: "bookmark.fill")
+                        // The navigation bar names the screen. It used to say
+                        // "Recipes" while a second bold headline underneath said
+                        // "Recipe library" — one screen, two names, two titles.
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Programs ready for your xBloom")
+                                .font(.subheadline)
+                                .foregroundStyle(StudioTheme.muted)
+                            Spacer(minLength: 10)
+                            StatusPill(
+                                title: recipes.count == 1 ? "1 saved" : "\(recipes.count) saved",
+                                color: StudioTheme.accent,
+                                systemImage: "bookmark.fill"
+                            )
                         }
-                        .padding(.bottom, 4)
+
+                        recipeSearchField
 
                         RecipeLibraryFilterPicker(selection: $selectedFilter)
                             .padding(.bottom, 4)
@@ -105,10 +107,10 @@ struct RecipesView: View {
                                     }
                                     .buttonStyle(.plain)
                                 }
-                                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                                .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
+                                .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
                                 .overlay {
-                                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                    RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
                                         .stroke(.white.opacity(0.08), lineWidth: 1)
                                 }
                                 .contextMenu {
@@ -176,9 +178,9 @@ struct RecipesView: View {
         .font(.body)
         .padding(.horizontal, 14)
         .frame(height: 46)
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 17, style: .continuous)
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
@@ -205,32 +207,47 @@ struct RecipeRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
+            // The tile carries the three things you sort a library by: whether
+            // it is hot or iced, how many pours it takes, and how the water
+            // goes on. The stats line no longer repeats the pour count.
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(recipeTint)
+                RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
+                    .fill(styleTint)
 
                 Text(recipe.brewStyle == .iced ? "ICED" : "HOT")
                     .font(.system(size: 10, weight: .heavy, design: .rounded))
                     .tracking(0.8)
-                    .foregroundStyle(.black.opacity(0.43))
-                    .padding(12)
+                    .foregroundStyle(.black.opacity(0.58))
+                    .padding(11)
 
-                Text("\(recipe.pours.count)")
-                    .font(.system(size: 56, weight: .light, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.30))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(.trailing, 11)
-                    .padding(.bottom, 2)
+                VStack(alignment: .trailing, spacing: -4) {
+                    Text("\(recipe.pours.count)")
+                        .font(.system(size: 40, weight: .light, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.62))
+                    Text(recipe.pours.count == 1 ? "POUR" : "POURS")
+                        .font(.system(size: 8, weight: .heavy, design: .rounded))
+                        .tracking(0.5)
+                        .foregroundStyle(.black.opacity(0.42))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, 10)
+                .padding(.bottom, 9)
 
                 PourPatternMark(
                     pattern: recipe.pours.first?.pattern ?? .center,
-                    color: .black.opacity(0.42),
-                    size: 21
+                    color: .black.opacity(0.5),
+                    size: 22
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(12)
+                .padding(11)
             }
-            .frame(width: 92, height: 108)
+            .frame(width: 92, height: 104)
+            .accessibilityElement()
+            .accessibilityLabel(
+                "\(recipe.brewStyle == .iced ? "Iced" : "Hot"), \(recipe.pours.count) "
+                    + "pour\(recipe.pours.count == 1 ? "" : "s"), "
+                    + "\(patternName(recipe.pours.first?.pattern ?? .center))"
+            )
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 7) {
@@ -264,7 +281,7 @@ struct RecipeRow: View {
                     }
                 }
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(recipe.brewStyle == .iced ? .cyan : AppTheme.crema)
+                .foregroundStyle(styleTint)
 
                 Text(sourceTitle)
                     .font(.caption)
@@ -279,16 +296,20 @@ struct RecipeRow: View {
         .contentShape(Rectangle())
     }
 
-    private var recipeTint: Color {
-        switch recipe.pours.count {
-        case 0...3: Color(red: 0.64, green: 0.73, blue: 0.86)
-        case 4: StudioTheme.accent
-        default: Color(red: 0.82, green: 0.72, blue: 0.48)
-        }
+    private var styleTint: Color {
+        recipe.brewStyle == .iced ? StudioTheme.iced : StudioTheme.crema
     }
 
     private var primaryStats: String {
-        "1:\(compactNumber(recipe.ratio)) | \(compactNumber(recipe.dose)) g | \(recipe.totalWater) ml | \(recipe.pours.count) pours"
+        "1:\(compactNumber(recipe.ratio)) · \(compactNumber(recipe.dose)) g · \(recipe.totalWater) ml"
+    }
+
+    private func patternName(_ pattern: PourPattern) -> String {
+        switch pattern {
+        case .center: "centred pour"
+        case .circular: "circular pour"
+        case .spiral: "spiral pour"
+        }
     }
 
     private func compactNumber(_ value: Double) -> String {
@@ -305,6 +326,7 @@ struct RecipeDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(XBloomBLEClient.self) private var machine
     @Environment(BrewSessionCoordinator.self) private var brewSession
+    @Query private var beans: [StoredBean]
     let stored: StoredRecipe
     @State var recipe: Recipe
     @State private var editing: Recipe?
@@ -329,6 +351,7 @@ struct RecipeDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
                 Menu {
@@ -422,15 +445,14 @@ struct RecipeDetailView: View {
     private var detailIdentity: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
+                // The name leads. An all-caps "HOT POUR-OVER" used to sit above
+                // it as a kicker, and a 52pt ghost "3 POURS" sat beside it,
+                // both repeating what the figures and the Pours section say.
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 8) {
-                        Label(
-                            recipe.brewStyle == .iced ? "ICED POUR-OVER" : "HOT POUR-OVER",
-                            systemImage: recipe.brewStyle == .iced ? "snowflake" : "sun.max.fill"
-                        )
-                            .font(.caption2.weight(.heavy))
-                            .tracking(1.4)
-                            .foregroundStyle(.black.opacity(0.52))
+                        Text(recipe.name)
+                            .font(.title2.weight(.bold))
+                            .lineLimit(2)
                         if recipe.generatedByAI {
                             Label("AI", systemImage: "sparkles")
                                 .font(.caption2.weight(.heavy))
@@ -439,50 +461,81 @@ struct RecipeDetailView: View {
                                 .background(.black.opacity(0.12), in: Capsule())
                         }
                     }
-                    Text(recipe.name)
-                        .font(.title3.weight(.bold))
-                        .lineLimit(2)
                     Text([recipe.roaster, recipe.origin].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.subheadline)
                         .foregroundStyle(.black.opacity(0.56))
                 }
-                Spacer()
-                VStack(alignment: .trailing, spacing: -5) {
-                    Text("POURS")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.black.opacity(0.36))
-                        .fixedSize(horizontal: true, vertical: false)
-                    Text("\(recipe.pours.count)")
-                        .font(.system(size: 52, weight: .light, design: .rounded))
-                        .foregroundStyle(.black.opacity(0.25))
-                }
-                .frame(minWidth: 62, alignment: .trailing)
+                Spacer(minLength: 0)
             }
             HStack(alignment: .center, spacing: 8) {
                 Text("1:\(String(format: "%.1f", recipe.ratio))")
-                Rectangle().fill(.black.opacity(0.28)).frame(width: 1, height: 28)
+                heroDivider
                 Text("\(recipe.totalWater) ml")
+                heroDivider
+                Label(
+                    recipe.brewStyle == .iced ? "Iced" : "Hot",
+                    systemImage: recipe.brewStyle == .iced ? "snowflake" : "sun.max.fill"
+                )
                 if recipe.brewStyle == .iced, recipe.iceGrams > 0 {
-                    Rectangle().fill(.black.opacity(0.28)).frame(width: 1, height: 28)
+                    heroDivider
                     Label("\(recipe.iceGrams) g ice", systemImage: "snowflake")
                         .foregroundStyle(.black.opacity(0.56))
                         .lineLimit(1)
                 }
             }
-            .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
+            .font(.system(size: 21, weight: .bold, design: .rounded).monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
         }
         .foregroundStyle(.black.opacity(0.76))
-        .padding(16)
+        .padding(StudioTheme.Space.card)
         .background(
-            LinearGradient(colors: [StudioTheme.accent, Color(red: 0.52, green: 0.70, blue: 0.71)], startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+            LinearGradient(colors: [StudioTheme.accent, StudioTheme.accentDeep], startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
         )
         .padding(.top, 8)
     }
 
+    private var bean: BeanProfile? {
+        // ponytail: linear scan over the bean library — a handful of bags.
+        recipe.beanID.flatMap { id in beans.first { $0.id == id }?.profile }
+    }
+
+    /// How many cups of this recipe are left in the bag, as a caption on the
+    /// dose it qualifies.
+    ///
+    /// The dose sheet needs a connected machine, so a bag that cannot cover the
+    /// recipe used to be discovered after committing to a brew. The bag is
+    /// known here, and one glyph plus a count is enough to carry it — a short
+    /// bag turns the caption red and names the grams instead of the cups.
+    private var bagCaption: (text: String, icon: String, tint: Color)? {
+        guard let bean else { return nil }
+        let cups = Int(floor(bean.remainingWeightGrams / max(1, recipe.dose)))
+        guard cups >= 1 else {
+            return (
+                String(format: "%.0f g left", bean.remainingWeightGrams),
+                "exclamationmark.triangle.fill",
+                StudioTheme.danger
+            )
+        }
+        return (cups == 1 ? "1 cup left" : "\(cups) cups left", "cup.and.saucer.fill", StudioTheme.muted)
+    }
+
+    private var heroDivider: some View {
+        Rectangle()
+            .fill(.black.opacity(0.28))
+            .frame(width: 1, height: 26)
+    }
+
     private var coffeeSummary: some View {
         HStack(spacing: 0) {
-            compactMetric("Dose", "\(String(format: "%.1f", recipe.dose)) g")
+            compactMetric(
+                "Dose",
+                "\(String(format: "%.1f", recipe.dose)) g",
+                caption: bagCaption?.text,
+                captionIcon: bagCaption?.icon,
+                captionTint: bagCaption?.tint ?? StudioTheme.muted
+            )
             summaryDivider
             compactMetric(
                 "Grind",
@@ -493,9 +546,9 @@ struct RecipeDetailView: View {
             compactMetric("RPM", recipe.useGrinder ? "\(recipe.rpm.rawValue)" : "—")
         }
         .padding(.vertical, 13)
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
         }
     }
@@ -555,7 +608,13 @@ struct RecipeDetailView: View {
         }
     }
 
-    private func compactMetric(_ title: String, _ value: String, caption: String? = nil) -> some View {
+    private func compactMetric(
+        _ title: String,
+        _ value: String,
+        caption: String? = nil,
+        captionIcon: String? = nil,
+        captionTint: Color = StudioTheme.muted
+    ) -> some View {
         VStack(spacing: 3) {
             Text(title)
                 .font(.caption)
@@ -564,11 +623,17 @@ struct RecipeDetailView: View {
                 .font(.title3.weight(.semibold).monospacedDigit())
                 .foregroundStyle(StudioTheme.accent)
             if let caption {
-                Text(caption)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(StudioTheme.muted)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                Group {
+                    if let captionIcon {
+                        Label(caption, systemImage: captionIcon)
+                    } else {
+                        Text(caption)
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(captionTint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             }
         }
         .frame(maxWidth: .infinity)
@@ -592,7 +657,7 @@ struct RecipeDetailView: View {
                 .lineLimit(1)
 
             ZStack {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: StudioTheme.Radius.chip, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [pourTint(index).opacity(0.42), pourTint(index).opacity(0.18)],
@@ -639,15 +704,22 @@ struct RecipeDetailView: View {
                 .font(.caption.weight(.bold))
                 .lineLimit(1)
 
+            // Hidden rather than removed: dropping the row shortened the
+            // column and knocked its temperature and name out of line with
+            // the pours beside it.
             Label("\(pour.pauseAfter)s rest", systemImage: "pause.fill")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(StudioTheme.muted)
                 .lineLimit(1)
+                .opacity(pour.pauseAfter > 0 ? 1 : 0)
+                .accessibilityHidden(pour.pauseAfter == 0)
         }
         .frame(width: width)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(index == 0 ? "Bloom" : "Pour \(index + 1)"), \(pour.volume) milliliters, \(pour.temperature) degrees, \(patternTitle(pour.pattern)), \(pour.pauseAfter) seconds rest"
+            "\(index == 0 ? "Bloom" : "Pour \(index + 1)"), \(pour.volume) milliliters, "
+                + "\(pour.temperature) degrees, \(patternTitle(pour.pattern))"
+                + (pour.pauseAfter > 0 ? ", \(pour.pauseAfter) seconds rest" : "")
         )
     }
 
@@ -664,9 +736,12 @@ struct RecipeDetailView: View {
         .overlay { Circle().stroke(.black.opacity(0.18), lineWidth: 1) }
     }
 
+    /// The bloom wets the bed and the pours extract it — that difference is
+    /// worth a colour. The old tint cycled the whole palette by index, so pour
+    /// three was brown for no reason and mint meant "done" in one screen and
+    /// "third pour" in this one.
     private func pourTint(_ index: Int) -> Color {
-        let colors: [Color] = [StudioTheme.accent, StudioTheme.mint, AppTheme.crema, .cyan, .indigo]
-        return colors[index % colors.count]
+        index == 0 ? StudioTheme.crema : StudioTheme.accent
     }
 
     private func patternTitle(_ pattern: PourPattern) -> String {
@@ -794,14 +869,14 @@ struct RecipeEditorView: View {
         .padding(20)
         .background(
             LinearGradient(
-                colors: [StudioTheme.accent, Color(red: 0.52, green: 0.70, blue: 0.71)],
+                colors: [StudioTheme.accent, StudioTheme.accentDeep],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
                 .stroke(.white.opacity(0.28), lineWidth: 1)
         }
         .padding(.top, 8)
@@ -863,7 +938,7 @@ struct RecipeEditorView: View {
                                 range: 0...500,
                                 step: 5,
                                 unit: "g",
-                                tint: Color.cyan
+                                tint: StudioTheme.iced
                             )
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
@@ -876,7 +951,7 @@ struct RecipeEditorView: View {
                             ),
                             range: 1...80,
                             unit: "",
-                            tint: Color(red: 0.77, green: 0.62, blue: 0.43),
+                            tint: StudioTheme.crema,
                             caption: GrindSizeGuide.method(for: recipe.grindSize)
                         )
                         .opacity(recipe.useGrinder ? 1 : 0.42)
@@ -891,7 +966,7 @@ struct RecipeEditorView: View {
                             range: 60...120,
                             step: 10,
                             unit: "RPM",
-                            tint: Color(red: 0.53, green: 0.62, blue: 0.86)
+                            tint: StudioTheme.accent
                         )
                         .opacity(recipe.useGrinder ? 1 : 0.42)
                         .allowsHitTesting(recipe.useGrinder)
@@ -908,7 +983,7 @@ struct RecipeEditorView: View {
                     .font(.largeTitle.weight(.semibold))
                 Text("\(recipe.totalWater)/500 ml")
                     .font(.headline.monospacedDigit())
-                    .foregroundStyle(recipe.totalWater > 500 ? .orange : StudioTheme.mint)
+                    .foregroundStyle(recipe.totalWater > 500 ? StudioTheme.warning : StudioTheme.mint)
                 Spacer()
                 Button {
                     let newPour = PourStep(volume: 50, temperature: 92, flowRate: 3.2)
@@ -1021,9 +1096,9 @@ struct RecipeEditorView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
                 .stroke(expanded ? StudioTheme.accent : .white.opacity(0.08), lineWidth: expanded ? 2 : 1)
         }
     }
@@ -1049,7 +1124,7 @@ struct RecipeEditorView: View {
                     ),
                     range: 80...96,
                     unit: "°C",
-                    tint: .orange,
+                    tint: StudioTheme.crema,
                     height: 84
                 )
                 StudioDialBox(
@@ -1168,7 +1243,7 @@ struct RecipeEditorView: View {
             .frame(height: 66)
             .background(
                 isOn ? StudioTheme.accent : StudioTheme.raised,
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
             )
         }
         .buttonStyle(.plain)
@@ -1190,7 +1265,7 @@ struct RecipeEditorView: View {
     @ViewBuilder
     private var validationCard: some View {
         if !issues.isEmpty {
-            StudioCard(accent: issues.contains(where: { $0.severity == .error }) ? .red : .orange) {
+            StudioCard(accent: issues.contains(where: { $0.severity == .error }) ? StudioTheme.danger : StudioTheme.warning) {
                 VStack(alignment: .leading, spacing: 10) {
                     StudioSectionTitle(title: "Recipe checks", icon: "checkmark.shield")
                     ForEach(issues) { issue in
@@ -1201,7 +1276,7 @@ struct RecipeEditorView: View {
                                 : "exclamationmark.triangle.fill"
                         )
                         .font(.footnote)
-                        .foregroundStyle(issue.severity == .error ? .red : .orange)
+                        .foregroundStyle(issue.severity == .error ? StudioTheme.danger : StudioTheme.warning)
                     }
                 }
             }

@@ -9,44 +9,48 @@ private struct HomeCupRecommendation {
     let reason: String
 }
 
+/// What is different about a recipe now compared with the last time it was
+/// actually brewed. History lists the cups; only Home can say what has moved
+/// since.
+private struct HomeLastCup {
+    let stored: StoredRecipe
+    let recipe: Recipe
+    let brewedAt: Date
+    let changes: [String]
+}
+
 struct HomeView: View {
     @Binding var selectedTab: Int
     @Environment(\.modelContext) private var modelContext
     @Environment(XBloomBLEClient.self) private var machine
-    @Query private var history: [StoredBrew]
     @State private var activeBeans = 0
     @State private var recipeCount = 0
-    @State private var recentRecipeLookup: [UUID: StoredRecipe] = [:]
     @State private var nextCup: HomeCupRecommendation?
-
-    init(selectedTab: Binding<Int>) {
-        _selectedTab = selectedTab
-        var descriptor = FetchDescriptor<StoredBrew>(
-            sortBy: [SortDescriptor(\StoredBrew.completedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = 3
-        _history = Query(descriptor)
-    }
+    @State private var lastCup: HomeLastCup?
 
     var body: some View {
         NavigationStack {
             ZStack {
-                AppBackground()
+                StudioBackground()
                 ScrollView {
                     LazyVStack(spacing: 24) {
                         welcomeHeader
                         machineHero
                         machineTools
                         nextCupCard
-                        recentActivity
+                        sinceLastCup
                         libraryOverview
                     }
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, StudioTheme.Space.margin)
+                    .padding(.top, 6)
                     .padding(.bottom, 30)
                 }
                 .scrollIndicators(.hidden)
             }
+            .navigationTitle("Good \(dayPart)")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(StudioTheme.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 MachineToolbar()
                 ToolbarItem(placement: .topBarLeading) {
@@ -62,25 +66,16 @@ struct HomeView: View {
         }
     }
 
+    /// The greeting is the screen's title, so it now sits in the navigation bar
+    /// where iOS puts titles. It used to be four lines of 34pt display type plus
+    /// a decorative leaf tile, which pushed the one thing this screen exists to
+    /// show — whether the machine is reachable — below the fold.
     private var welcomeHeader: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Good \(dayPart)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text("Ready for something\nexceptional?")
-                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                    .tracking(-0.7)
-            }
-            Spacer()
-            Image(systemName: "leaf.fill")
-                .font(.title2)
-                .foregroundStyle(AppTheme.crema)
-                .frame(width: 52, height: 52)
-                .background(AppTheme.espresso, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: AppTheme.espresso.opacity(0.22), radius: 15, y: 7)
-        }
-        .padding(.top, 8)
+        Text("Ready for something exceptional?")
+            .font(.subheadline)
+            .foregroundStyle(StudioTheme.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var machineHero: some View {
@@ -96,7 +91,7 @@ struct HomeView: View {
                 Spacer()
                 StatusPill(
                     title: machine.connectionState.rawValue.capitalized,
-                    color: machine.isConnected ? Color(red: 0.53, green: 0.93, blue: 0.68) : .white.opacity(0.78),
+                    color: machine.isConnected ? StudioTheme.mint : .white.opacity(0.78),
                     systemImage: machine.isConnected ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right"
                 )
             }
@@ -109,12 +104,12 @@ struct HomeView: View {
                 }
                 Text(machine.telemetry.state.rawValue.capitalized)
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(AppTheme.crema)
+                    .foregroundStyle(StudioTheme.crema)
             } else {
                 HStack(spacing: 12) {
                     Image(systemName: "iphone.radiowaves.left.and.right")
                         .font(.title2)
-                        .foregroundStyle(AppTheme.crema)
+                        .foregroundStyle(StudioTheme.crema)
                     Text("Keep your phone near the machine. Connection and brewing happen directly over Bluetooth.")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.70))
@@ -134,8 +129,11 @@ struct HomeView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .foregroundStyle(AppTheme.espresso)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .foregroundStyle(StudioTheme.background)
+                        .background(
+                            StudioTheme.accent,
+                            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
+                        )
                     }
                     .disabled(machine.diagnosticState == .testing)
                     .buttonStyle(.plain)
@@ -147,7 +145,7 @@ struct HomeView: View {
                             .font(.headline)
                             .frame(width: 48, height: 48)
                             .foregroundStyle(.white)
-                            .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                            .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control))
                     }
                     .buttonStyle(.plain)
                 }
@@ -159,8 +157,11 @@ struct HomeView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .foregroundStyle(AppTheme.espresso)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .foregroundStyle(StudioTheme.background)
+                        .background(
+                            StudioTheme.accent,
+                            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
+                        )
                 }
                 .buttonStyle(.plain)
             }
@@ -170,12 +171,15 @@ struct HomeView: View {
             if let error = machine.lastError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(Color(red: 1, green: 0.67, blue: 0.60))
+                    .foregroundStyle(StudioTheme.danger)
             }
         }
         .padding(22)
         .foregroundStyle(.white)
-        .background(AppTheme.heroGradient, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .background(
+            StudioTheme.heroGradient,
+            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
+        )
         .overlay(alignment: .topTrailing) {
             Circle()
                 .fill(.white.opacity(0.06))
@@ -183,13 +187,13 @@ struct HomeView: View {
                 .offset(x: 55, y: -75)
                 .allowsHitTesting(false)
         }
-        .shadow(color: AppTheme.espresso.opacity(0.22), radius: 24, y: 12)
+        .shadow(color: StudioTheme.background.opacity(0.22), radius: 24, y: 12)
     }
 
     /// Direct access to the three machine subsystems, each on its own screen.
     private var machineTools: some View {
         VStack(spacing: 14) {
-            AppSectionHeader(
+            StudioSectionTitle(
                 title: "Machine tools",
                 subtitle: machine.isConnected
                     ? "Drive the scale, brewer, and grinder on their own"
@@ -202,21 +206,21 @@ struct HomeView: View {
                         ? String(format: "%.1f g", machine.telemetry.weight ?? 0)
                         : "Weigh & tare",
                     icon: "scalemass.fill",
-                    tint: AppTheme.sage
+                    tint: StudioTheme.mint
                 ) { ScaleView() }
 
                 machineToolCard(
                     title: "Brewer",
                     detail: "Single pour",
                     icon: "drop.fill",
-                    tint: AppTheme.coffee
+                    tint: StudioTheme.accent
                 ) { ManualPourView() }
 
                 machineToolCard(
                     title: "Grinder",
                     detail: "Size & speed",
                     icon: "circle.grid.cross.fill",
-                    tint: AppTheme.crema
+                    tint: StudioTheme.crema
                 ) { GrinderView() }
             }
         }
@@ -245,9 +249,9 @@ struct HomeView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                     .stroke(tint.opacity(machine.isConnected ? 0.45 : 0.15), lineWidth: 1)
             }
         }
@@ -258,10 +262,10 @@ struct HomeView: View {
 
     private var libraryOverview: some View {
         VStack(spacing: 14) {
-            AppSectionHeader(title: "Your coffee", subtitle: "Everything stays on this iPhone")
+            StudioSectionTitle(title: "Your coffee", subtitle: "Everything stays on this iPhone")
             HStack(spacing: 12) {
-                libraryButton(title: "Beans", value: activeBeans, icon: "leaf.fill", tint: AppTheme.sage, tab: 2)
-                libraryButton(title: "Recipes", value: recipeCount, icon: "list.bullet.rectangle.fill", tint: AppTheme.crema, tab: 1)
+                libraryButton(title: "Beans", value: activeBeans, icon: "leaf.fill", tint: StudioTheme.mint, tab: 2)
+                libraryButton(title: "Recipes", value: recipeCount, icon: "list.bullet.rectangle.fill", tint: StudioTheme.crema, tab: 1)
             }
             Button {
                 selectedTab = 1
@@ -284,7 +288,6 @@ struct HomeView: View {
                 sortBy: [SortDescriptor(\StoredRecipe.updatedAt, order: .reverse)]
             )
         )) ?? []
-        recentRecipeLookup = Dictionary(uniqueKeysWithValues: recipes.map { ($0.id, $0) })
 
         let beans = (try? modelContext.fetch(activeDescriptor)) ?? []
         let beanProfiles = Dictionary(
@@ -303,20 +306,25 @@ struct HomeView: View {
             beans: beanProfiles,
             history: recentHistory
         )
+        lastCup = makeLastCup(
+            recipes: Dictionary(uniqueKeysWithValues: recipes.map { ($0.id, $0) }),
+            beans: beanProfiles,
+            history: recentHistory
+        )
     }
 
     @ViewBuilder
     private var nextCupCard: some View {
         if let nextCup {
             VStack(spacing: 12) {
-                AppSectionHeader(title: "Your next cup", subtitle: "Chosen locally from your coffee memory")
+                StudioSectionTitle(title: "Your next cup", subtitle: "Chosen locally from your coffee memory")
                 NavigationLink {
                     RecipeDetailView(stored: nextCup.stored, recipe: nextCup.recipe)
                 } label: {
                     VStack(alignment: .leading, spacing: 15) {
                         HStack(alignment: .top, spacing: 13) {
                             ZStack {
-                                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                                     .fill(
                                         LinearGradient(
                                             colors: [StudioTheme.accent, StudioTheme.mint],
@@ -351,7 +359,7 @@ struct HomeView: View {
                                     .lineLimit(1)
                                 Text("\(nextCup.recipe.brewStyle == .iced ? "Iced" : "Hot") · \(String(format: "%.1f", nextCup.recipe.dose)) g · 1:\(String(format: "%.1f", nextCup.recipe.ratio))")
                                     .font(.caption.weight(.semibold).monospacedDigit())
-                                    .foregroundStyle(nextCup.recipe.brewStyle == .iced ? .cyan : AppTheme.crema)
+                                    .foregroundStyle(nextCup.recipe.brewStyle == .iced ? StudioTheme.iced : StudioTheme.crema)
                             }
                             Spacer(minLength: 0)
                         }
@@ -371,12 +379,12 @@ struct HomeView: View {
                         .foregroundStyle(.black)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
-                        .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
                     }
                     .padding(17)
-                    .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
                             .stroke(StudioTheme.accent.opacity(0.28), lineWidth: 1)
                     }
                 }
@@ -385,110 +393,111 @@ struct HomeView: View {
         }
     }
 
-    private var recentActivity: some View {
-        VStack(spacing: 14) {
-            AppSectionHeader(title: "Coffee memory", subtitle: "Your latest cups, ready to revisit")
-            if history.isEmpty {
-                HStack(spacing: 15) {
-                    IconBadge(systemImage: "clock.arrow.circlepath", tint: .secondary, size: 50)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("No brews yet").font(.headline)
-                        Text("Your first completed brew will appear here.")
+    /// The one thing History cannot show: what moved since the last time this
+    /// recipe was brewed — an edited dose, a bag running out, beans getting
+    /// older. The list of past cups lives in the History tab.
+    @ViewBuilder
+    private var sinceLastCup: some View {
+        if let lastCup {
+            VStack(spacing: 14) {
+                StudioSectionTitle(
+                    title: "Since your last cup",
+                    subtitle: "\(lastCup.recipe.name) · \(lastCup.brewedAt.formatted(.relative(presentation: .named)))"
+                )
+                VStack(alignment: .leading, spacing: 12) {
+                    if lastCup.changes.isEmpty {
+                        Label("Nothing has moved — same recipe, same bag.", systemImage: "checkmark.circle.fill")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .appCard()
-            } else {
-                ForEach(history) { brew in
-                    VStack(spacing: 12) {
-                        NavigationLink {
-                            BrewHistoryDetailView(brew: brew)
-                        } label: {
-                            HStack(spacing: 13) {
-                                IconBadge(
-                                    systemImage: brew.wasSimulated == true ? "play.rectangle.fill" : "waveform.path.ecg",
-                                    tint: brew.wasSimulated == true ? .cyan : AppTheme.coffee,
-                                    size: 46
-                                )
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(brew.recipeName)
-                                        .font(.headline)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Text(brew.completedAt.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.caption)
-                                        .foregroundStyle(StudioTheme.muted)
-                                }
-                                Spacer()
-                                if let rating = brew.rating {
-                                    Label("\(rating)", systemImage: "star.fill")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(AppTheme.crema)
-                                } else {
-                                    Text("UNRATED")
-                                        .font(.system(size: 9, weight: .heavy, design: .rounded))
-                                        .tracking(0.6)
-                                        .foregroundStyle(.orange)
-                                }
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-
-                        HStack(spacing: 9) {
-                            if let stored = recipeForBrew(brew), let recipe = stored.recipe {
-                                NavigationLink {
-                                    RecipeDetailView(stored: stored, recipe: recipe)
-                                } label: {
-                                    Label("Brew again", systemImage: "arrow.clockwise")
-                                        .font(.caption.weight(.bold))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .foregroundStyle(.black)
-                                        .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 12))
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            if brew.rating == nil {
-                                NavigationLink {
-                                    BrewHistoryDetailView(brew: brew)
-                                } label: {
-                                    Label("Rate cup", systemImage: "star")
-                                        .font(.caption.weight(.bold))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                                }
-                                .buttonStyle(.plain)
-                            }
+                            .foregroundStyle(StudioTheme.mint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(lastCup.changes, id: \.self) { change in
+                            Label(change, systemImage: "arrow.turn.down.right")
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    .padding(14)
-                    .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(.white.opacity(0.07), lineWidth: 1)
-                    }
-                }
-            }
 
-            NavigationLink {
-                HistoryView()
-            } label: {
-                Text("View full brew history")
-                    .font(.subheadline.weight(.semibold))
+                    NavigationLink {
+                        RecipeDetailView(stored: lastCup.stored, recipe: lastCup.recipe)
+                    } label: {
+                        Label("Brew it again", systemImage: "arrow.clockwise")
+                            .font(.subheadline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .foregroundStyle(.black)
+                            .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.chip))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .studioCard()
             }
         }
     }
 
-    private func recipeForBrew(_ brew: StoredBrew) -> StoredRecipe? {
-        guard let id = brew.recipeID ?? brew.entry?.recipeID else { return nil }
-        return recentRecipeLookup[id]
+    private func makeLastCup(
+        recipes: [UUID: StoredRecipe],
+        beans: [UUID: BeanProfile],
+        history: [StoredBrew]
+    ) -> HomeLastCup? {
+        guard let brew = history.first(where: { ($0.recipeID ?? $0.entry?.recipeID) != nil }),
+              let id = brew.recipeID ?? brew.entry?.recipeID,
+              let stored = recipes[id],
+              let recipe = stored.recipe
+        else { return nil }
+
+        var changes: [String] = []
+        if let then = brew.entry?.recipeSnapshot {
+            if abs(then.dose - recipe.dose) >= 0.1 {
+                changes.append(String(format: "Dose is %.1f g now, was %.1f g", recipe.dose, then.dose))
+            }
+            if then.grindSize != recipe.grindSize {
+                changes.append("Grind is \(recipe.grindSize) now, was \(then.grindSize)")
+            }
+            if then.totalWater != recipe.totalWater {
+                changes.append("Water is \(recipe.totalWater) ml now, was \(then.totalWater) ml")
+            }
+        }
+        if let bean = recipe.beanID.flatMap({ beans[$0] }) {
+            if bean.remainingWeightGrams < recipe.dose {
+                changes.append(
+                    String(
+                        format: "%@ has %.0f g left — short of the %.1f g this wants",
+                        bean.name,
+                        bean.remainingWeightGrams,
+                        recipe.dose
+                    )
+                )
+            } else {
+                let doses = Int(floor(bean.remainingWeightGrams / max(1, recipe.dose)))
+                changes.append(
+                    String(
+                        format: "%@ has %.0f g left — about %d more cups",
+                        bean.name,
+                        bean.remainingWeightGrams,
+                        doses
+                    )
+                )
+            }
+            if let roastDate = bean.roastDate {
+                let days = max(0, Calendar.current.dateComponents([.day], from: roastDate, to: Date()).day ?? 0)
+                changes.append("Those beans are \(days) days off roast now")
+            }
+        }
+        if brew.rating == nil {
+            changes.append("You never rated that cup")
+        }
+
+        return HomeLastCup(
+            stored: stored,
+            recipe: recipe,
+            brewedAt: brew.completedAt,
+            // ponytail: a fixed cap keeps the card short; rank them if it ever
+            // matters which four survive.
+            changes: Array(changes.prefix(4))
+        )
     }
 
     private func makeNextCup(
@@ -567,7 +576,7 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .appCard()
+            .studioCard()
         }
         .buttonStyle(.plain)
     }
@@ -583,7 +592,7 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
     }
 
     private var machineSubtitle: String {
@@ -609,15 +618,15 @@ struct HomeView: View {
         case .testing:
             Label("Sending a safe movement test…", systemImage: "antenna.radiowaves.left.and.right")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.crema)
+                .foregroundStyle(StudioTheme.crema)
         case .passed:
             Label("Machine responded — command channel verified.", systemImage: "checkmark.seal.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Color(red: 0.53, green: 0.93, blue: 0.68))
+                .foregroundStyle(StudioTheme.mint)
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
-                .foregroundStyle(Color(red: 1, green: 0.67, blue: 0.60))
+                .foregroundStyle(StudioTheme.danger)
         }
     }
 
