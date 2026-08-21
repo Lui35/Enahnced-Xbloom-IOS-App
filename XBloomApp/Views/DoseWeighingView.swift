@@ -38,33 +38,98 @@ struct DoseWeighingView: View {
     /// goes to the machine has to be held separately.
     @State private var confirmedDose: Double = 0
 
+    /// An empty pan means the beans are off the scale, not that the dose is
+    /// zero. Lifting the container to look at it — or tipping it early — used
+    /// to drop the reading to 0.0 g, which put the dose under the machine's
+    /// 5 g floor and killed the Continue button with the coffee already
+    /// weighed. The last real reading since the tare is held instead.
+    @State private var heldWeight: Double = 0
+
     private var target: Double { recipe.dose }
+
+    private var liveWeight: Double { max(0, machine.telemetry.weight ?? 0) }
 
     /// What will actually be used. Normally the live scale reading; a manual
     /// entry takes over if the user has corrected it.
     private var measured: Double {
-        manualAdjustment ?? max(0, machine.telemetry.weight ?? 0)
+        if let manualAdjustment { return manualAdjustment }
+        return liveWeight >= DoseFit.emptyPanThreshold ? liveWeight : heldWeight
+    }
+
+    /// The scale is empty but a dose was weighed on it, so the figure on
+    /// screen is remembered rather than live.
+    private var isHoldingReading: Bool {
+        manualAdjustment == nil
+            && liveWeight < DoseFit.emptyPanThreshold
+            && heldWeight >= DoseFit.emptyPanThreshold
     }
 
     private var difference: Double { measured - target }
 
-    /// Anything inside a tenth of a gram is as close as this scale resolves.
-    private var isOnTarget: Bool { abs(difference) <= 0.15 }
-    private var isClose: Bool { abs(difference) <= 0.6 }
+    /// How the weighed dose sits against the recipe's target. The bands and
+    /// their margins live in `XBloomCore`; the colour and wording are this
+    /// screen's business.
+    private var band: DoseFit { DoseFit(measured: measured, recipe: recipe) }
+
+    /// What the brew will actually run at with the coffee that is really in
+    /// the container.
+    private var projectedRatio: Double { recipe.ratio(atDose: measured) }
+
+    private var isOnTarget: Bool { band == .onTarget }
 
     private var tint: Color {
-        if isOnTarget { return StudioTheme.mint }
-        if isClose { return .orange }
-        return measured > target ? .red : StudioTheme.muted
+        switch band {
+        case .empty, .short: StudioTheme.muted
+        case .close: StudioTheme.warning
+        case .onTarget: StudioTheme.mint
+        case .thin, .over: StudioTheme.danger
+        }
     }
 
     private var guidance: String {
         if !hasTared { return "Put your container on the scale, then tare" }
-        if isOnTarget { return "On target" }
-        if difference < 0 {
-            return String(format: "Add %.1f g", -difference)
+        switch band {
+        case .empty:
+            return "Add your beans"
+        case .onTarget:
+            return "On target"
+        case .close:
+            let direction = difference < 0 ? "under" : "over"
+            return String(
+                format: "%.1f g \(direction) — fine, the brew will use %.1f g",
+                abs(difference),
+                measured
+            )
+        case .short:
+            return String(format: "%.1f g under — a little weaker, still good", -difference)
+        case .thin:
+            return String(format: "%.1f g under — much weaker than the recipe", -difference)
+        case .over:
+            return String(format: "%.1f g over — stronger than the recipe", difference)
         }
-        return String(format: "%.1f g over — brewing will use the real weight", difference)
+    }
+
+    private var guidanceColor: Color {
+        switch band {
+        case .empty, .short: .white
+        case .close: StudioTheme.warning
+        case .onTarget: StudioTheme.mint
+        case .thin, .over: StudioTheme.danger
+        }
+    }
+
+    /// Shown whenever the dose is not the recipe's, because the number that
+    /// changes is not the dose the user is looking at — it is the strength of
+    /// what comes out.
+    private var ratioNote: String? {
+        guard band != .empty, band != .onTarget, recipe.totalWater > 0, projectedRatio > 0 else {
+            return nil
+        }
+        return String(
+            format: "Brews at 1:%.1f instead of the recipe's 1:%.1f",
+            projectedRatio,
+            recipe.ratio
+        )
     }
 
     var body: some View {
@@ -106,6 +171,10 @@ struct DoseWeighingView: View {
             .safeAreaInset(edge: .bottom) { confirmBar }
             .task { await openScale() }
             .onDisappear { Task { await machine.closeScale() } }
+            .onChange(of: machine.telemetry.weight) { _, _ in
+                guard stage == .weighing, liveWeight >= DoseFit.emptyPanThreshold else { return }
+                heldWeight = liveWeight
+            }
             .onChange(of: isOnTarget) { _, onTarget in
                 guard stage == .weighing, onTarget, hasTared, !reachedTargetOnce else { return }
                 reachedTargetOnce = true
@@ -140,8 +209,21 @@ struct DoseWeighingView: View {
 
             Text(guidance)
                 .font(.title3.weight(.bold))
-                .foregroundStyle(isOnTarget ? StudioTheme.mint : .white)
+                .foregroundStyle(guidanceColor)
                 .multilineTextAlignment(.center)
+
+            if isHoldingReading {
+                Label("Holding the last reading — the scale is empty", systemImage: "lock.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(StudioTheme.muted)
+            }
+
+            if let ratioNote {
+                Text(ratioNote)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(StudioTheme.muted)
+                    .multilineTextAlignment(.center)
+            }
 
             if let name = recipe.roaster.isEmpty ? nil : recipe.roaster {
                 Text(name)
@@ -181,7 +263,7 @@ struct DoseWeighingView: View {
                     .foregroundStyle(.black)
                     .padding(.horizontal, 17)
                     .padding(.vertical, 13)
-                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!machine.isConnected || isWorking)
@@ -189,8 +271,8 @@ struct DoseWeighingView: View {
 
                 stepRow(
                     number: 2,
-                    title: "Add beans until the ring turns green",
-                    done: reachedTargetOnce
+                    title: "Add beans — a gram either way is fine",
+                    done: hasTared && isDoseBrewable
                 )
                 stepRow(
                     number: 3,
@@ -257,7 +339,8 @@ struct DoseWeighingView: View {
                 Text(
                     "This exact figure is sent to the machine, saved with the "
                         + "brew, and taken off your bean bag — not the recipe's "
-                        + "rounded target."
+                        + "rounded target. Brew short if that is all the bag "
+                        + "has; the ring only says how the cup will change."
                 )
                 .font(.caption)
                 .foregroundStyle(StudioTheme.muted)
@@ -316,7 +399,7 @@ struct DoseWeighingView: View {
                         .frame(width: 50, height: 50)
                         .background(
                             (beansLifted ? StudioTheme.mint : StudioTheme.accent).opacity(0.14),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
                         )
                     VStack(alignment: .leading, spacing: 3) {
                         Text(beansLifted ? "Beans are off the scale" : "Waiting for the scale to clear")
@@ -369,9 +452,9 @@ struct DoseWeighingView: View {
         case .weighing:
             VStack(spacing: 8) {
                 if measured > 0, !isDoseBrewable {
-                    Text("The machine accepts 5–30 g. Adjust the dose to continue.")
+                    Text("The machine only grinds 5–30 g. Set a dose in that range to continue.")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(StudioTheme.warning)
                 }
                 Button {
                     confirmedDose = measured
@@ -469,6 +552,7 @@ struct DoseWeighingView: View {
                 hasTared = true
                 reachedTargetOnce = false
                 manualAdjustment = nil
+                heldWeight = 0
                 MachineFeedback.acknowledged()
                 status = .succeeded("Tared — now add your beans")
             } else {

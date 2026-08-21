@@ -64,9 +64,7 @@ public enum RecipeValidator {
             }
         }
 
-        let recommendedRatio: ClosedRange<Double> = recipe.brewStyle == .hot
-            ? 14.5...18.5
-            : 7.5...15
+        let recommendedRatio = recommendedRatio(for: recipe.brewStyle)
         if !recommendedRatio.contains(recipe.ratio) {
             issues.append(
                 .init(
@@ -82,6 +80,15 @@ public enum RecipeValidator {
             )
         }
         return issues
+    }
+
+    /// The water-to-coffee range a style is expected to brew in.
+    ///
+    /// Exposed because the dose that actually goes in is rarely the dose the
+    /// recipe asks for, and the screen that weighs it needs the same notion of
+    /// "off" that validation uses rather than a second copy of these numbers.
+    public static func recommendedRatio(for style: BrewStyle) -> ClosedRange<Double> {
+        style == .hot ? 14.5...18.5 : 7.5...15
     }
 
     public static func requireSafe(_ recipe: Recipe) throws {
