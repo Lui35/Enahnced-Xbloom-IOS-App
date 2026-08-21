@@ -325,7 +325,7 @@ struct BrewView: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(StudioTheme.accent)
                 .frame(width: 34, height: 34)
-                .background(StudioTheme.accent.opacity(0.11), in: RoundedRectangle(cornerRadius: 11))
+                .background(StudioTheme.accent.opacity(0.11), in: RoundedRectangle(cornerRadius: StudioTheme.Radius.chip))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.headline)
@@ -411,10 +411,10 @@ struct BrewView: View {
                 if recipe.brewStyle == .iced {
                     Label("\(recipe.iceGrams) g ice", systemImage: "snowflake")
                         .font(.caption.weight(.bold).monospacedDigit())
-                        .foregroundStyle(.cyan)
+                        .foregroundStyle(StudioTheme.iced)
                         .padding(.horizontal, 11)
                         .padding(.vertical, 7)
-                        .background(.cyan.opacity(0.10), in: Capsule())
+                        .background(StudioTheme.iced.opacity(0.10), in: Capsule())
                 }
 
                 if recipe.generatedByAI, let description = recipe.aiDescription, !description.isEmpty {
@@ -471,11 +471,19 @@ struct BrewView: View {
                     .foregroundStyle(.black)
                     .padding(.horizontal, 17)
                     .padding(.vertical, 13)
-                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    /// A brew card's accent. It used to run off the number of pours, in two
+    /// colours written out at this call site — so a four-pour recipe was teal
+    /// and a five-pour one was tan, for no reason a drinker would recognise.
+    /// What the card is about is the drink.
+    private func tint(for recipe: Recipe) -> Color {
+        recipe.brewStyle == .iced ? StudioTheme.iced : StudioTheme.crema
     }
 
     private func compactMetric(_ value: String, _ title: String) -> some View {
@@ -488,15 +496,7 @@ struct BrewView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(11)
-        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-    }
-
-    private func tint(for recipe: Recipe) -> Color {
-        switch recipe.pours.count {
-        case 0...3: Color(red: 0.64, green: 0.73, blue: 0.86)
-        case 4: StudioTheme.accent
-        default: Color(red: 0.82, green: 0.72, blue: 0.48)
-        }
+        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: StudioTheme.Radius.chip, style: .continuous))
     }
 }
 
@@ -541,12 +541,15 @@ struct BrewSessionView: View {
     @State private var finished = false
     @State private var lastSampleAt: TimeInterval = -.infinity
     @State private var weightBaseline: Double?
+    /// Whether the preview has already run its grinding segment, so the wait
+    /// before the first pour can be named for what follows it.
+    @State private var hasLeftGrinding = false
     @State private var waterBaseline: Double?
     @State private var reconnectAttempted = false
     @State private var confirmingStop = false
     @State private var confirmingLeave = false
     @State private var waterTracker: BrewDeliveryTracker
-    @State private var weightTracker: BrewDeliveryTracker
+    @State private var weightTracker: ScaleYieldTracker
     @State private var liveTicker: Task<Void, Never>?
     /// When the poured-volume counter last moved. The machine announces the
     /// start of each pour but never its end, so a stalled counter is what marks
@@ -596,11 +599,8 @@ struct BrewSessionView: View {
             )
         )
         _weightTracker = State(
-            initialValue: BrewDeliveryTracker(
-                target: max(1, Double(recipe.totalWater) - recipe.dose * 2),
-                maximumRate: maximumFlowRate,
-                allowsCounterReset: false,
-                headroom: 80
+            initialValue: ScaleYieldTracker(
+                expectedYield: recipe.expectedYield
             )
         )
     }
@@ -647,11 +647,22 @@ struct BrewSessionView: View {
         return recipe.pours[activePourIndex]
     }
 
-    private var expectedCupYield: Double {
-        // A practical pour-over estimate: roughly 2 g of water remains in the
-        // coffee bed for every gram of dry coffee.
-        max(1, Double(recipe.totalWater) - (recipe.dose * 2))
+    /// Whether the scale has actually weighed any coffee this session.
+    private var hasYieldSignal: Bool {
+        mode == .simulation || weightTracker.hasMeasuredYield
     }
+
+    /// Extraction has been running long enough that a working scale would have
+    /// something to say by now, and it has said nothing.
+    private var scaleIsSilent: Bool {
+        mode == .live && extractionStartedAt != nil && extractionElapsed > 25 && !hasYieldSignal
+    }
+
+    private var expectedCupYield: Double { recipe.expectedYield }
+
+    /// The estimate is an estimate. Scaling the curve by it alone pinned a
+    /// brew that beat it flat against the top of the chart.
+    private var yieldScale: Double { max(expectedCupYield, weight) }
 
     private var isSessionLocked: Bool {
         mode == .live
@@ -697,10 +708,10 @@ struct BrewSessionView: View {
                     if let machineWarning {
                         Label(machineWarning, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(StudioTheme.warning)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(14)
-                            .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .background(StudioTheme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
                     }
                     // The pours are what you are following while a brew runs;
                     // the curve is what you read afterwards.
@@ -828,7 +839,7 @@ struct BrewSessionView: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
-                        .background(Color.red, in: Capsule())
+                        .background(StudioTheme.danger, in: Capsule())
                 }
                 .buttonStyle(.plain)
             } else {
@@ -846,7 +857,7 @@ struct BrewSessionView: View {
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
-                        .background(Color.orange, in: Capsule())
+                        .background(StudioTheme.warning, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .disabled(
@@ -914,10 +925,10 @@ struct BrewSessionView: View {
                     title: finished ? "Completed in" : "Elapsed",
                     value: durationText(
                         finished
-                            ? extractionElapsed
+                            ? brewElapsed
                             : mode == .simulation
                                 ? extractionElapsed
-                                : extractionStartedAt.map { max(0, context.date.timeIntervalSince($0)) } ?? 0
+                                : brewingStartedAt.map { max(0, context.date.timeIntervalSince($0)) } ?? 0
                     ),
                     icon: "timer"
                 )
@@ -942,15 +953,15 @@ struct BrewSessionView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
     }
 
     private var reconnectCard: some View {
-        StudioCard(accent: .orange) {
+        StudioCard(accent: StudioTheme.warning) {
             VStack(alignment: .leading, spacing: 12) {
                 Label("Live monitoring disconnected", systemImage: "antenna.radiowaves.left.and.right.slash")
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(StudioTheme.warning)
                 Text("The xBloom recipe keeps running on the machine. Reconnecting only attaches to telemetry — it will not stop the brew or send the recipe again.")
                     .font(.subheadline)
                     .foregroundStyle(StudioTheme.muted)
@@ -965,13 +976,14 @@ struct BrewSessionView: View {
                     .font(.title2.weight(.bold))
                     .foregroundStyle(phaseTint)
                     .frame(width: 58, height: 58)
-                    .background(phaseTint.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(phaseTint.opacity(0.14), in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
+                // The hero above already names the phase and draws this icon.
+                // Repeating "Grinding beans" here made the viewport say it
+                // three times; the card's job is the detail underneath it.
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(stage)
-                        .font(.title3.weight(.bold))
                     Text(preparationDetail)
-                        .font(.caption)
-                        .foregroundStyle(StudioTheme.muted)
+                        .font(.subheadline.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 ProgressView()
@@ -1016,7 +1028,7 @@ struct BrewSessionView: View {
                         .frame(width: 36, height: 36)
                         .background(
                             StudioTheme.mint.opacity(0.13),
-                            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.chip, style: .continuous)
                         )
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Extraction curve")
@@ -1049,8 +1061,8 @@ struct BrewSessionView: View {
                             x: .value("Time", sample.elapsed),
                             y: .value(
                                 "Coffee collected",
-                                expectedCupYield > 0
-                                    ? min(100, sample.coffeeWeight / expectedCupYield * 100)
+                                yieldScale > 0
+                                    ? min(100, sample.coffeeWeight / yieldScale * 100)
                                     : 0
                             ),
                             series: .value("Metric", "Cup yield")
@@ -1141,7 +1153,7 @@ struct BrewSessionView: View {
                 .chartPlotStyle { plot in
                     plot
                         .background(.black.opacity(0.16))
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
                 }
 
                 HStack(spacing: 10) {
@@ -1152,9 +1164,24 @@ struct BrewSessionView: View {
                     )
                     chartLegend(
                         "Cup yield",
-                        value: "\(Int(weight.rounded())) / \(Int(expectedCupYield.rounded())) g",
-                        color: StudioTheme.mint
+                        value: hasYieldSignal
+                            ? "\(Int(weight.rounded())) / \(Int(expectedCupYield.rounded())) g"
+                            : "no reading",
+                        color: hasYieldSignal ? StudioTheme.mint : StudioTheme.muted
                     )
+                }
+
+                if scaleIsSilent {
+                    // Better to say the scale is not reporting than to draw a
+                    // flat line at zero and call it a measurement.
+                    Label(
+                        "The machine's scale is not reporting the cup. Check that the "
+                            + "cup is on the scale plate and that nothing is leaning on it.",
+                        systemImage: "scalemass"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(StudioTheme.warning)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 HStack(spacing: 12) {
@@ -1190,7 +1217,7 @@ struct BrewSessionView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.chip, style: .continuous))
     }
 
     private enum LivePourState {
@@ -1255,31 +1282,24 @@ struct BrewSessionView: View {
         let tint: Color = switch state {
         case .done: StudioTheme.mint
         case .active: StudioTheme.accent
-        case .upcoming: StudioTheme.muted
+        case .upcoming: StudioTheme.muted.opacity(0.9)
         }
 
         return VStack(spacing: 12) {
-            HStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(index == 0 ? "Bloom" : "Pour \(index + 1)")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
-                    HStack(alignment: .lastTextBaseline, spacing: 2) {
-                        Text("\(share)")
-                            .font(.system(size: 34, weight: .light, design: .rounded))
-                            .monospacedDigit()
-                        Text("%")
-                            .font(.subheadline.weight(.bold))
-                    }
-                }
-                .frame(width: 66, alignment: .leading)
+            HStack(spacing: 13) {
+                // The share of total water used to be set at 34pt in a fixed
+                // 66pt column — the biggest number on the brew screen, for the
+                // fact that matters least, squeezing the pattern and flow rate
+                // into "Spiral p…". It is a caption now, and it says what it is.
+                PourPatternMark(pattern: pour.pattern, color: tint, size: 30)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 9) {
-                        PourPatternMark(pattern: pour.pattern, color: tint, size: 26)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 7) {
+                        Text(index == 0 ? "Bloom" : "Pour \(index + 1)")
+                            .font(.subheadline.weight(.bold))
                         Text("\(pour.volume) ml · \(pour.temperature)°C")
                             .font(.subheadline.weight(.semibold).monospacedDigit())
-                        Spacer()
+                            .foregroundStyle(.white.opacity(0.78))
                     }
                     HStack(spacing: 8) {
                         Text(patternTitle(pour.pattern))
@@ -1293,8 +1313,14 @@ struct BrewSessionView: View {
                     .font(.caption)
                     .foregroundStyle(StudioTheme.muted)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .minimumScaleFactor(0.85)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(
+                    "\(index == 0 ? "Bloom" : "Pour \(index + 1)"), \(pour.volume) millilitres at "
+                        + "\(pour.temperature) degrees, \(share) percent of the water, "
+                        + "\(patternTitle(pour.pattern))"
+                )
 
                 Spacer(minLength: 0)
 
@@ -1341,10 +1367,10 @@ struct BrewSessionView: View {
         .padding(14)
         .background(
             state == .active ? StudioTheme.raised : StudioTheme.panel,
-            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                 .stroke(
                     state == .active ? tint : .white.opacity(0.08),
                     lineWidth: state == .active ? 2 : 1
@@ -1367,7 +1393,7 @@ struct BrewSessionView: View {
             water = restoredWater ?? 0
             weight = restoredWeight ?? 0
             waterTracker.restore(delivered: water, baseline: restoredWaterBaseline)
-            weightTracker.restore(delivered: weight, baseline: restoredWeightBaseline)
+            weightTracker.restore(yield: weight, baseline: restoredWeightBaseline)
             temperature = restoredTemperature
             activePourIndex = restoredActivePourIndex ?? 0
             currentPhase = restoredPhase ?? .preparing
@@ -1395,7 +1421,7 @@ struct BrewSessionView: View {
             weightBaseline = machine.telemetry.weight
             waterBaseline = machine.telemetry.waterVolume
             waterTracker.seedBaseline(waterBaseline, at: sessionStartedAt)
-            weightTracker.seedBaseline(weightBaseline, at: sessionStartedAt)
+            weightTracker.seedBaseline(weightBaseline)
             brewSession.markStarted(
                 at: sessionStartedAt,
                 weightBaseline: weightBaseline,
@@ -1454,15 +1480,17 @@ struct BrewSessionView: View {
                 recipe: recipe,
                 elapsed: elapsed,
                 grindingDuration: recipe.useGrinder ? 22 : 0,
-                heatingDuration: recipe.useGrinder ? 13 : 15
+                settlingDuration: recipe.useGrinder ? 13 : 15
             )
             water = estimate.water
             progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
             weight = expectedCupYield * pow(progress, 1.12)
-            temperature = estimate.phase == .heating
-                ? 72 + min(1, elapsed / 15) * 20
-                : activePour?.temperature.doubleValue
+            temperature = activePour?.temperature.doubleValue
             activePourIndex = estimate.stepIndex
+            if estimate.phase == .grinding { hasLeftGrinding = false }
+            else if currentPhase == .grinding || estimate.phase != .preparing {
+                hasLeftGrinding = true
+            }
             currentPhase = estimate.phase
             stage = stageTitle(for: estimate.phase)
             extractionElapsed = max(0, elapsed - firstPourProgramStart)
@@ -1491,6 +1519,7 @@ struct BrewSessionView: View {
         }
         elapsed = estimatedDuration
         extractionElapsed = estimatedExtractionDuration
+        brewElapsed = estimatedExtractionDuration
         water = Double(recipe.totalWater)
         weight = expectedCupYield
         progress = 1
@@ -1611,7 +1640,7 @@ struct BrewSessionView: View {
 
         // Extraction begins when the machine reports its first watering phase.
         // Water starting to move is kept as a fallback for firmware that does
-        // not send that event, which otherwise left the session in "heating"
+        // not send that event, which otherwise left the session in preparation
         // right through a pour.
         if extractionStartedAt == nil {
             if let machineStart = machineProgress.extractionStartedAt {
@@ -1619,7 +1648,16 @@ struct BrewSessionView: View {
             } else if water > 0.5 {
                 extractionStartedAt = Date()
             }
-            if extractionStartedAt != nil { lastSampleAt = -.infinity }
+            if extractionStartedAt != nil {
+                lastSampleAt = -.infinity
+                // Zero the scale on the cup as it stands now. The session
+                // baseline was taken before grinding, when the cup was not
+                // necessarily on the machine yet — so anything put in place
+                // during preparation counted as coffee.
+                weightTracker.rebaselineAtExtractionStart()
+                weight = weightTracker.yield
+                weightBaseline = weightTracker.currentBaseline
+            }
         }
 
         if let extractionStartedAt {
@@ -1642,7 +1680,7 @@ struct BrewSessionView: View {
             }
             progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
         } else {
-            // Grinding and heating are preparation, not pour time.
+            // Grinding is preparation, not pour time.
             extractionElapsed = 0
             activePourIndex = 0
             progress = 0
@@ -1693,9 +1731,11 @@ struct BrewSessionView: View {
     private func completeLiveSession() {
         liveTicker?.cancel()
         liveTicker = nil
+        let endedAt = machine.brewProgress.completedAt ?? Date()
         if let extractionStartedAt {
-            extractionElapsed = max(0, Date().timeIntervalSince(extractionStartedAt))
+            extractionElapsed = max(0, endedAt.timeIntervalSince(extractionStartedAt))
         }
+        brewElapsed = brewingStartedAt.map { max(0, endedAt.timeIntervalSince($0)) } ?? extractionElapsed
         finished = true
         progress = 1
         currentPhase = .complete
@@ -1707,7 +1747,7 @@ struct BrewSessionView: View {
         }
         recordCompletedSession(
             telemetry: machine.telemetry,
-            durationOverride: extractionElapsed
+            durationOverride: brewElapsed
         )
     }
 
@@ -1789,7 +1829,7 @@ struct BrewSessionView: View {
         // Extraction has already begun. A reconnect clears the machine-side
         // tracker, so never fall back to a preparation phase the brew has left.
         switch machinePhase {
-        case .preparing, .grinding, .heating:
+        case .preparing, .grinding:
             return activePourIndex == 0 ? .blooming : .pouring
         case .blooming, .pouring:
             // The machine says when a pour starts but not when it ends. Once
@@ -1854,9 +1894,8 @@ struct BrewSessionView: View {
 
     private func stageTitle(for phase: BrewProgramPhase) -> String {
         switch phase {
-        case .preparing: "Preparing brewer"
+        case .preparing: hasGroundBeans ? "Getting ready to pour" : "Preparing brewer"
         case .grinding: "Grinding beans"
-        case .heating: "Heating water"
         case .blooming: "Blooming"
         case .pouring: "Pour \(activePourIndex + 1)"
         case .resting: activePourIndex == 0 ? "Bloom rest" : "Rest after pour \(activePourIndex + 1)"
@@ -1868,9 +1907,8 @@ struct BrewSessionView: View {
     private var phaseIcon: String {
         if finished { return "checkmark" }
         return switch currentPhase {
-        case .preparing: "cup.and.saucer.fill"
+        case .preparing: hasGroundBeans ? "arrow.down.to.line" : "cup.and.saucer.fill"
         case .grinding: "circle.grid.cross.fill"
-        case .heating: "thermometer.high"
         case .blooming: "drop.circle.fill"
         case .pouring: "water.waves"
         case .resting: "pause.fill"
@@ -1881,20 +1919,41 @@ struct BrewSessionView: View {
 
     private var phaseTint: Color {
         return switch currentPhase {
-        case .grinding: Color(red: 0.80, green: 0.61, blue: 0.43)
-        case .heating: .orange
+        case .grinding: StudioTheme.crema
         case .blooming, .pouring: StudioTheme.accent
-        case .resting: Color(red: 0.66, green: 0.72, blue: 0.94)
+        case .resting: StudioTheme.muted
         case .complete: StudioTheme.mint
-        case .error: .red
+        case .error: StudioTheme.danger
         case .preparing: StudioTheme.muted
         }
     }
 
+    /// True once the beans are ground and the machine is working towards the
+    /// first pour.
+    private var hasGroundBeans: Bool {
+        if mode == .live { return machine.brewProgress.grinderFinishedAt != nil }
+        return hasLeftGrinding
+    }
+
+    /// Zero on the brew clock.
+    ///
+    /// The machine's own brew begins when the grinder stops: it agitates and
+    /// pours from there, with no heating step in between. The clock used to
+    /// wait for the first pour event, so it sat at 0:00 through everything
+    /// that had already started happening.
+    private var brewingStartedAt: Date? {
+        guard mode == .live else { return nil }
+        return machine.brewProgress.recipeAcceptedAt ?? extractionStartedAt
+    }
+
+    /// What the machine's own display reads. Kept separate from
+    /// `extractionElapsed`, which is the chart's zero and has to stay on the
+    /// first pour so the recipe markers line up with the data.
+    @State private var brewElapsed: TimeInterval = 0
+
     private var preparationDetail: String {
         return switch currentPhase {
         case .grinding: "Grinding \(Int(recipe.dose.rounded())) g at \(recipe.rpm.rawValue) RPM"
-        case .heating: "Bringing the brewer to the first pour temperature"
         case .resting: "Letting the coffee bed drain before the next pour"
         case .error: "Check the machine display before restarting"
         default: mode == .live

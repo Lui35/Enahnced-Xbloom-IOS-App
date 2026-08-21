@@ -156,6 +156,63 @@ machine has already demonstrably understood.
 `40506 grinder_doing` and `40505 device_gears` are parsed and displayed raw. Their
 units are unknown, so neither is presented as grams.
 
+## Second recording — 2026-08-21, iced, grinder off
+
+Recipe: **Chelchele Berry & Cream Iced Brew**, grinder off, 3 pours, 168 ml,
+16 g dose. 1255 frames over 138 s, brewed to completion.
+
+Three things in it contradict the first recording, and one confirms it.
+
+### 9. The scale measures the cup, and it is good
+
+`20501 weight_realTime` is not a dead stream. It tracked the cup from 0 g to
+**155.8 g** across the three pours, holding steady at 36.9 g through the bloom
+rest and 101.6 g through the second. This is a real yield curve.
+
+Two hazards in it:
+
+- It **drops to exactly 0.0** several times during the first pour — at 19.18,
+  20.94 — between readings that are climbing normally. Last zero is 20.94; it
+  never does it again.
+- A hand resting on the machine reads **3471.9 g for four frames** (125.16 to
+  125.77) and then returns. Anything that latches on the maximum keeps that
+  number forever.
+
+The app reads it as the lowest value in a 1.6 s trailing window, which ignores
+both.
+
+### 10. `device_watering_finish` and `take_cup` do exist
+
+The first recording was stopped by hand, so the end of the recipe was never
+seen. Brewed to completion, this machine sends both:
+
+```
+122.80  40511  device_watering_finish
+131.06  40512  take_cup
+135.50   8023  page 36
+```
+
+`take_cup` is a real completion event. The page-change backstop is no longer
+the only end-of-recipe signal, though it still covers a brew that is stopped
+early.
+
+### 11. `pour_first_vibration_before` (40527) marks the machine getting to work
+
+```
+  6.45  40502  brewer_start
+  7.45  40527  pour_first_vibration_before
+ 14.45  40510  watering_phase 0
+```
+
+One second after accepting the recipe and seven seconds before the first pour.
+On a grinding recipe it can only come after the grinder has stopped, so the
+brew clock starts here.
+
+### 12. Still no temperature, still no heating
+
+`8108` did not appear in these 1255 frames either. Two recordings, 2343 frames,
+zero temperature readings. The heating phase is gone from the app.
+
 ## Still unverified
 
 - Grinder-on behaviour. Needs a capture with the grinder enabled — and that

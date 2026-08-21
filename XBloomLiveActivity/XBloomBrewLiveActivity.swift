@@ -209,7 +209,6 @@ private func stageSymbol(_ phase: BrewProgramPhase) -> String {
     switch phase {
     case .preparing: "cup.and.saucer.fill"
     case .grinding: "gearshape.2.fill"
-    case .heating: "flame.fill"
     case .blooming: "drop.circle.fill"
     case .pouring: "water.waves"
     case .resting: "pause.fill"
@@ -222,7 +221,6 @@ private func phaseColor(_ phase: BrewProgramPhase) -> Color {
     switch phase {
     case .preparing: Color(red: 0.70, green: 0.73, blue: 0.72)
     case .grinding: Color(red: 0.84, green: 0.65, blue: 0.43)
-    case .heating: .orange
     case .blooming, .pouring: Color(red: 0.50, green: 0.84, blue: 0.81)
     case .resting: Color(red: 0.54, green: 0.69, blue: 0.91)
     case .complete: Color(red: 0.39, green: 0.87, blue: 0.65)

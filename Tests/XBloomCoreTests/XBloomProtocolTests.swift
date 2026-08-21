@@ -60,7 +60,7 @@ import Testing
         recipe: recipe,
         elapsed: 21,
         grindingDuration: 22,
-        heatingDuration: 10
+        settlingDuration: 10
     )
     #expect(duringGrinding.phase == .grinding)
     #expect(duringGrinding.water == 0)
@@ -70,7 +70,7 @@ import Testing
         recipe: recipe,
         elapsed: 22 + 10 + 5 + 15,
         grindingDuration: 22,
-        heatingDuration: 10
+        settlingDuration: 10
     )
     #expect(firstPourWait.phase == .resting)
     #expect(firstPourWait.water == 45)
@@ -110,7 +110,7 @@ import Testing
             PourStep(volume: 90, temperature: 91, flowRate: 3, pauseAfter: 0),
         ]
     )
-    let events = Brewing.timelineEvents(recipe: recipe, grindingDuration: 22, heatingDuration: 13)
+    let events = Brewing.timelineEvents(recipe: recipe, grindingDuration: 22, settlingDuration: 13)
 
     #expect(events.count == 3)
     #expect(events[0].title == "Bloom")
@@ -319,7 +319,7 @@ import Testing
 
     // Recipe accepted. Nothing has been poured yet.
     tracker.ingest(command: 40502, value: 0, at: start)
-    #expect(tracker.phase == .heating)
+    #expect(tracker.phase == .preparing)
     #expect(!tracker.isExtracting)
 
     tracker.ingest(command: 8023, value: 35, at: start.addingTimeInterval(0.4))
@@ -572,7 +572,7 @@ import Testing
     tracker.ingest(command: 8004, value: 0, at: at(10.91))  // recipe ack
     tracker.ingest(command: 8002, value: 0, at: at(11.96))  // marking ack
     tracker.ingest(command: 40502, value: 0, at: at(11.99)) // brewer start
-    #expect(tracker.phase == .heating)
+    #expect(tracker.phase == .preparing)
     #expect(!tracker.isExtracting)
 
     tracker.ingest(command: 8023, value: 35, at: at(12.39)) // brewing screen
@@ -818,4 +818,267 @@ import Testing
     recipe.useGrinder = false
     recipe.rpm = .off
     #expect(recipe.programRPM == .off)
+}
+
+/// A dose that misses the recipe's target is the normal case, not a fault. The
+/// bands say how the cup changes; none of them is a refusal to brew.
+@Test func aDoseShortOfTheTargetIsStillABrewableDose() {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.brewStyle = .hot
+    recipe.dose = 16
+    recipe.pours = [PourStep(volume: 250, temperature: 93, flowRate: 3.2)]
+
+    // Nothing weighed yet.
+    #expect(DoseFit(measured: 0, recipe: recipe) == .empty)
+    #expect(DoseFit(measured: 0.4, recipe: recipe) == .empty)
+
+    // The tenth of a gram the scale resolves to is the target.
+    #expect(DoseFit(measured: 16, recipe: recipe) == .onTarget)
+    #expect(DoseFit(measured: 15.9, recipe: recipe) == .onTarget)
+
+    // The gram either way a bag realistically lands in.
+    #expect(DoseFit(measured: 15.5, recipe: recipe) == .close)
+    #expect(DoseFit(measured: 15.0, recipe: recipe) == .close)
+    #expect(DoseFit(measured: 16.8, recipe: recipe) == .close)
+    #expect(DoseFit(measured: 15.5, recipe: recipe).isNominal)
+
+    // Past a gram the cup is weaker, but 1:17.6 is still a hot pour-over.
+    #expect(DoseFit(measured: 14.2, recipe: recipe) == .short)
+    // Past the style's ratio range it is a different drink, and says so.
+    #expect(DoseFit(measured: 12, recipe: recipe) == .thin)
+    // Over cannot be undone, so it is called out either way.
+    #expect(DoseFit(measured: 17.5, recipe: recipe) == .over)
+
+    // The dose the machine is given is the weighed one, and the water does not
+    // move with it — which is the whole reason a short dose brews weaker.
+    #expect(recipe.ratio(atDose: 16) == 250.0 / 16)
+    #expect(recipe.ratio(atDose: 15) > recipe.ratio)
+    #expect(recipe.ratio(atDose: 0) == 0)
+
+    // Iced is judged against its own, stronger range rather than the hot one.
+    var iced = recipe
+    iced.brewStyle = .iced
+    iced.dose = 20
+    iced.pours = [PourStep(volume: 200, temperature: 93, flowRate: 3.2)]
+    // 200 ml over 16 g is 1:12.5 — light for an iced brew but still an iced brew.
+    #expect(RecipeValidator.recommendedRatio(for: .iced).contains(iced.ratio(atDose: 16)))
+    #expect(DoseFit(measured: 16, recipe: iced) == .short)
+    // The same 1:16.7 that passes for a hot pour-over does not pass here.
+    #expect(DoseFit(measured: 12, recipe: iced) == .thin)
+}
+
+/// The scale is a measurement, not a counter. Read through the monotonic
+/// delivery tracker, one hand resting on the machine ratcheted the yield above
+/// the real weight and every later, correct reading was rejected as a
+/// regression — which is why the cup-yield curve stayed flat while water
+/// climbed, and why pressing the plate was the only thing that ever moved it.
+@Test func aHandOnTheScaleDoesNotBecomeCupYield() {
+    var tracker = ScaleYieldTracker(expectedYield: 250, window: 1.0)
+    let start = Date()
+    func at(_ seconds: Double) -> Date { start.addingTimeInterval(seconds) }
+
+    // An empty cup and dripper are already on the plate.
+    tracker.seedBaseline(412)
+    #expect(tracker.yield == 0)
+    #expect(!tracker.hasMeasuredYield)
+
+    // Coffee arriving: the reading holds its new level, so it counts.
+    for step in stride(from: 0.0, through: 6.0, by: 0.2) {
+        tracker.ingest(rawValue: 412 + step * 10, at: at(step))
+    }
+    #expect(tracker.hasMeasuredYield)
+    #expect(tracker.yield > 40)
+    let beforeThePress = tracker.yield
+
+    // A hand leaning on the machine for half a second, then off again. The
+    // real weight on the plate is 60 g; the press reports 860. The tracked
+    // value may still be catching up to the 60 it lagged behind, but none of
+    // the 800 may reach it.
+    for step in stride(from: 6.2, through: 6.6, by: 0.2) {
+        tracker.ingest(rawValue: 412 + 60 + 800, at: at(step))
+    }
+    #expect(tracker.yield >= beforeThePress)
+    #expect(tracker.yield <= 60.001)
+
+    // ...and the real weight is still believed afterwards.
+    for step in stride(from: 6.8, through: 9.0, by: 0.2) {
+        tracker.ingest(rawValue: 412 + 60 + (step - 6.8) * 10, at: at(step))
+    }
+    #expect(tracker.yield > beforeThePress)
+
+    // Lifting the cup is a real change, not a transient, so it is reported.
+    for step in stride(from: 9.2, through: 11.0, by: 0.2) {
+        tracker.ingest(rawValue: 0, at: at(step))
+    }
+    #expect(tracker.yield == 0)
+}
+
+/// The session baseline is taken before grinding, when the cup may not be on
+/// the machine at all. Whatever is put in place during preparation must not be
+/// served as coffee.
+@Test func theCupIsZeroedWhenPouringStartsNotWhenTheSessionDoes() {
+    var tracker = ScaleYieldTracker(expectedYield: 250, window: 1.0)
+    let start = Date()
+    func at(_ seconds: Double) -> Date { start.addingTimeInterval(seconds) }
+
+    tracker.seedBaseline(0)
+    // The cup and dripper go on during grinding: 380 g that is not coffee.
+    for step in stride(from: 0.0, through: 3.0, by: 0.2) {
+        tracker.ingest(rawValue: 380, at: at(step))
+    }
+    #expect(tracker.yield > 300)
+
+    tracker.rebaselineAtExtractionStart()
+    #expect(tracker.yield == 0)
+    #expect(!tracker.hasMeasuredYield)
+
+    for step in stride(from: 3.2, through: 8.0, by: 0.2) {
+        tracker.ingest(rawValue: 380 + (step - 3.2) * 12, at: at(step))
+    }
+    #expect(tracker.yield > 30)
+    #expect(tracker.yield < 60)
+}
+
+/// This machine has no heating step. It never sends a heating event and never
+/// reports water temperature — 8108 did not appear once in a 1088-frame
+/// recording — so the app had invented a state and shown it as a reading.
+@Test func thereIsNoHeatingPhaseBetweenTheGrinderAndTheFirstPour() {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.useGrinder = true
+
+    // Every phase the estimator can produce is one the machine can be in.
+    let phases = stride(from: 0.0, through: 400.0, by: 1.0).map {
+        Brewing.estimateProgram(recipe: recipe, elapsed: $0).phase
+    }
+    #expect(!phases.isEmpty)
+    #expect(phases.contains(.grinding))
+    #expect(phases.contains(.blooming))
+    #expect(phases.allSatisfy { $0.rawValue != "heating" })
+
+    // A session saved by a build that still had the phase resumes cleanly.
+    let decoded = try? JSONDecoder().decode(BrewProgramPhase.self, from: Data("\"heating\"".utf8))
+    #expect(decoded == .preparing)
+
+    // The brew clock starts when the grinder stops. This firmware sends no
+    // grinder events, so the first pour has to stand in for it.
+    var tracker = BrewProgressTracker()
+    let start = Date()
+    tracker.ingest(command: XBloomNotification.brewerStart.rawValue, value: nil, at: start)
+    #expect(tracker.phase == .preparing)
+    #expect(tracker.recipeAcceptedAt == start)
+    #expect(tracker.grinderFinishedAt == nil)
+
+    let firstPour = start.addingTimeInterval(24)
+    tracker.ingest(command: XBloomNotification.wateringPhase.rawValue, value: 0, at: firstPour)
+    #expect(tracker.grinderFinishedAt == firstPour)
+    #expect(tracker.extractionStartedAt == firstPour)
+    #expect(tracker.phase == .blooming)
+}
+
+/// Replays the scale readings from the 2026-08-21 recording of a real iced
+/// brew (grinder off, 3 pours, 168 ml, 16 g). The machine streams a perfectly
+/// usable curve — 0 g to 155.8 g — with two things in it that broke naive
+/// readings: it drops to exactly 0.0 several times during the first pour, and
+/// a hand on the machine at t=125 reads 3471.9 g for four frames.
+@Test func theRecordedBrewProducesACupYieldCurve() {
+    var tracker = ScaleYieldTracker(expectedYield: 136)
+    let start = Date()
+    func send(_ t: Double, _ grams: Double) {
+        tracker.ingest(rawValue: grams, at: start.addingTimeInterval(t))
+    }
+
+    // Idle before the first pour.
+    for t in stride(from: 0.0, through: 14.4, by: 0.2) { send(t, 0) }
+    tracker.rebaselineAtExtractionStart()
+
+    // First pour: the reading climbs but keeps snapping back to zero.
+    var t = 14.6
+    for grams in [0, 1.1, 1.5, 2.4, 2.9, 3.7, 4.5, 0, 1.3, 2.1, 2.8, 3.8, 4.5, 0, 1.4] as [Double] {
+        send(t, grams)
+        t += 0.28
+    }
+    // ...and then climbs for real.
+    for grams in stride(from: 2.2, through: 36.9, by: 1.1) {
+        send(t, grams)
+        t += 0.28
+    }
+    #expect(tracker.hasMeasuredYield)
+    #expect(tracker.yield > 25)
+
+    // The bloom sits at 36.9 g for half a minute.
+    while t < 63 { send(t, 36.9); t += 0.2 }
+    #expect(abs(tracker.yield - 36.9) < 0.5)
+
+    // Pours two and three.
+    for grams in stride(from: 37.0, through: 155.8, by: 1.2) {
+        send(t, grams)
+        t += 0.2
+    }
+    while t < 125 { send(t, 155.8); t += 0.2 }
+    let beforeThePress = tracker.yield
+    #expect(beforeThePress > 150)
+
+    // A hand on the machine: four frames at 3471.9 g, then gone.
+    for _ in 0..<4 { send(t, 3471.9); t += 0.2 }
+    #expect(abs(tracker.yield - beforeThePress) < 0.5)
+
+    while t < 137 { send(t, 155.8); t += 0.2 }
+    #expect(abs(tracker.yield - 155.8) < 0.5)
+}
+
+/// The 2026-08-21 recording is the only brew whose yield has actually been
+/// weighed: 168 ml over a 16 g dose delivered 155.8 g.
+@Test func theYieldEstimateMatchesTheOneBrewThatWasMeasured() {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.dose = 16
+    recipe.pours = [
+        PourStep(volume: 60, temperature: 93, flowRate: 3),
+        PourStep(volume: 54, temperature: 93, flowRate: 3),
+        PourStep(volume: 54, temperature: 93, flowRate: 3),
+    ]
+    #expect(recipe.totalWater == 168)
+    #expect(abs(recipe.expectedYield - 155.8) < 5)
+
+    // The old 2 g/gram figure was out by four times that.
+    #expect(abs((Double(recipe.totalWater) - recipe.dose * 2) - 155.8) > 15)
+
+    // A dose big enough to drink the whole recipe still leaves a usable scale.
+    var absurd = recipe
+    absurd.dose = 400
+    #expect(absurd.expectedYield == 1)
+}
+
+/// The machine's clock runs from brewer_start to take_cup. Both timings in the
+/// 2026-08-21 10:58 recording are exact: the app was starting one second late
+/// on pour_first_vibration_before, and then reporting the finished figure from
+/// the first pour, which lost another seven.
+@Test func theBrewClockAgreesWithTheMachineDisplay() throws {
+    var tracker = BrewProgressTracker()
+    let zero = Date()
+    func at(_ seconds: Double) -> Date { zero.addingTimeInterval(seconds) }
+
+    tracker.ingest(command: 40502, value: nil, at: at(13.11))   // brewer start
+    tracker.ingest(command: 8023, value: 35, at: at(13.51))     // brewing screen
+    tracker.ingest(command: 40527, value: nil, at: at(14.11))   // first agitation
+    tracker.ingest(command: 40510, value: 0, at: at(21.11))     // pour 1
+    tracker.ingest(command: 40510, value: 1, at: at(69.83))     // pour 2
+    tracker.ingest(command: 40510, value: 2, at: at(109.84))    // pour 3
+    tracker.ingest(command: 40511, value: nil, at: at(129.23))  // watering finish
+    tracker.ingest(command: 40512, value: nil, at: at(139.49))  // take cup
+
+    let accepted = try #require(tracker.recipeAcceptedAt)
+    let completed = try #require(tracker.completedAt)
+    let extraction = try #require(tracker.extractionStartedAt)
+
+    // 2:06 on the machine.
+    #expect(Int(completed.timeIntervalSince(accepted).rounded()) == 126)
+    // The old figure, measured from the first pour: 1:58.
+    #expect(Int(completed.timeIntervalSince(extraction).rounded()) == 118)
+    // The agitation event is one second past the machine's zero, which is
+    // exactly the gap that showed while the brew was running.
+    let agitation = try #require(tracker.grinderFinishedAt)
+    #expect(Int(agitation.timeIntervalSince(accepted).rounded()) == 1)
+
+    #expect(tracker.phase == .complete)
+    #expect(tracker.pourIndex == 2)
 }

@@ -19,8 +19,15 @@ import Foundation
 public struct BrewProgressTracker: Equatable, Sendable {
     public private(set) var phase: BrewProgramPhase = .preparing
     /// When the machine began the first pour. Nil until it does, so the
-    /// extraction clock and chart cannot start during grinding or heating.
+    /// extraction chart cannot start while the machine is still grinding.
     public private(set) var extractionStartedAt: Date?
+    /// When the machine accepted the recipe. For a recipe that does not grind,
+    /// this is also when brewing begins.
+    public private(set) var recipeAcceptedAt: Date?
+    /// When the grinder reported that it had finished. On this firmware the
+    /// grinder events have never been seen, so this is usually nil and the
+    /// brew clock falls back to the first pour.
+    public private(set) var grinderFinishedAt: Date?
     /// The pour the machine says it is on, taken from `wateringPhase`.
     public private(set) var pourIndex = 0
     /// True once a `wateringPhase` has arrived, meaning the pour index comes
@@ -55,7 +62,8 @@ public struct BrewProgressTracker: Equatable, Sendable {
         case .brewerStart, .recipeMarking:
             // The recipe has been accepted. Nothing has been poured yet.
             recipeAccepted = true
-            if !isExtracting { phase = .heating }
+            if recipeAcceptedAt == nil { recipeAcceptedAt = date }
+            if !isExtracting { phase = .preparing }
 
         case .wateringPhase:
             beginPour(index: value.map(Int.init), at: date)
@@ -67,8 +75,13 @@ public struct BrewProgressTracker: Equatable, Sendable {
             if !isExtracting { phase = .grinding }
 
         case .deviceGrinderFinish, .deviceOutGrinder, .deviceInBrewer,
-             .deviceInScale, .deviceOutScale, .deviceBeginBrewer:
-            if !isExtracting { phase = .heating }
+             .deviceInScale, .deviceOutScale, .deviceBeginBrewer,
+             .pourFirstVibrationBefore:
+            // The grinder is done and the machine is on its way to pouring.
+            // It is not heating: this firmware has no heating state and never
+            // reports water temperature.
+            if grinderFinishedAt == nil { grinderFinishedAt = date }
+            if !isExtracting { phase = .preparing }
 
         case .deviceBrewerPass, .deviceWateringFinish:
             if isExtracting { phase = .resting }
@@ -99,6 +112,8 @@ public struct BrewProgressTracker: Equatable, Sendable {
 
     private mutating func beginPour(index: Int?, at date: Date) {
         hasObservedPourEvents = true
+        // A pour is proof the grinder is done, whether or not it said so.
+        if grinderFinishedAt == nil { grinderFinishedAt = date }
         lastPourStartedAt = date
         if extractionStartedAt == nil { extractionStartedAt = date }
 
