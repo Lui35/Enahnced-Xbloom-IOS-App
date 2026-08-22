@@ -251,8 +251,9 @@ struct GrinderView: View {
         isWorking = true
         defer { isWorking = false }
         do {
-            let configured = try await machine.prepareGrinder(size: size, speed: Int(rpm.rounded()))
-            let started = try await machine.startGrinding()
+            let speed = Int(rpm.rounded())
+            let configured = try await machine.prepareGrinder(size: size, speed: speed)
+            let started = try await machine.startGrinding(size: size, speed: speed)
             guard started else {
                 status = .unacknowledged("The machine did not acknowledge the grind command.")
                 return

@@ -281,31 +281,40 @@ final class XBloomBLEClient: NSObject {
 
     /// Opens the grinder screen and applies a size and speed.
     @discardableResult
+    /// Opens the grinder screen with a setting on it. `8006` is not a bare
+    /// page-open: the vendor's app puts the size and speed in it and re-sends
+    /// the whole command whenever either changes.
     func prepareGrinder(size: Int, speed: Int) async throws -> Bool {
         trafficLog.note("Grinder prepared · size \(size) · speed \(speed)")
         openPages.grinder = true
-        _ = try await send(.inGrinderPage)
-        let sizeAccepted = try await send(.grinderSize, values: [UInt32(max(0, size))])
-        let speedAccepted = try await send(.grinderSpeed, values: [UInt32(max(0, speed))])
-        return sizeAccepted && speedAccepted
+        return try await send(
+            .inGrinderPage,
+            values: [UInt32(max(0, size)), UInt32(max(0, speed))]
+        )
     }
 
+    /// Starts the burrs. Every `device_gears` frame in a capture of the
+    /// vendor's app follows this command; nothing follows `3503 grind_begin`,
+    /// which this app used to send and the vendor never does.
     @discardableResult
-    func startGrinding() async throws -> Bool {
-        trafficLog.note("Grind start requested")
-        return try await send(.grindBegin)
+    func startGrinding(size: Int, speed: Int) async throws -> Bool {
+        trafficLog.note("Grind start requested · size \(size) · speed \(speed)")
+        return try await send(
+            .grindAdjust,
+            values: [1000, UInt32(max(0, size)), UInt32(max(0, speed))]
+        )
     }
 
     @discardableResult
     func stopGrinding() async throws -> Bool {
         trafficLog.note("Grind stop requested")
-        return try await send(.grindEnd)
+        return try await send(.grindPause)
     }
 
     func closeGrinder() async {
         guard openPages.grinder else { return }
         openPages.grinder = false
-        _ = try? await send(.outGrinderPage, awaitingAcknowledgement: false)
+        _ = try? await send(.grindEnd, awaitingAcknowledgement: false)
     }
 
     /// Runs a single pour with no recipe behind it. It travels the same
@@ -423,6 +432,12 @@ final class XBloomBLEClient: NSObject {
                 MachineFeedback.machineConnected()
                 return
             }
+            // The vendor's app opens with this and nothing else, and the
+            // machine shows itself as paired afterwards. This app never sent
+            // it, which is the difference the owner noticed on the machine's
+            // own display.
+            try await write(XBloomProtocol.command(.mtuNegotiate, values: [185, 1]))
+            try await Task.sleep(for: .milliseconds(300))
             try await write(XBloomProtocol.command(.recipeStop))
             try await Task.sleep(for: .milliseconds(500))
             try await write(XBloomProtocol.command(.outBrewerPage))

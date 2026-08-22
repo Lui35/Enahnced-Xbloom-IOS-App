@@ -234,7 +234,8 @@ import Testing
         XBloomCommand.outGrinderPage, .outBrewerPage, .recipeSendAuto, .recipeExecute,
         .recipeSendManual, .setBypass, .setCup, .recipeStop, .deviceCurrentPage,
         .deviceNoSleep, .inScalePage, .outScalePage, .weightCleared,
-        .inGrinderPage, .grinderSize, .grinderSpeed, .grindBegin, .grindEnd,
+        .inGrinderPage, .grindAdjust, .grindPause, .grindEnd,
+        .recipePause, .recipeResume, .mtuNegotiate,
     ] {
         #expect(XBloomNotification(rawValue: command.rawValue) != nil)
     }
@@ -731,14 +732,15 @@ import Testing
         | UInt32(packets[0][21]) << 24
     #expect(bypassDose == 17)
 
-    // The cup minimum separates a grinding program from a manual one.
+    // The cup pair separates a grinding program from a manual one, and the
+    // figures come from the vendor's own frame rather than from invention.
     let cupMinimum = Float(
         bitPattern: UInt32(packets[1][14])
             | UInt32(packets[1][15]) << 8
             | UInt32(packets[1][16]) << 16
             | UInt32(packets[1][17]) << 24
     )
-    #expect(cupMinimum == 40)
+    #expect(cupMinimum == 80)
 
     let payload = try XBloomProtocol.recipePayload(for: recipe)
     #expect(payload[payload.count - 2] == UInt8(recipe.grindSize))
@@ -1117,4 +1119,39 @@ import Testing
     ground.ingest(command: 40510, value: 0, at: start.addingTimeInterval(20))
     #expect(ground.observedGrinding)
     #expect(ground.grinderFinishedAt == start.addingTimeInterval(18))
+}
+
+/// Every frame here was read out of an HCI capture of the vendor's own app on
+/// 2026-08-22 — its real writes, not the echoes a second connection can see.
+@Test func theVendorsFramesAreReproducedByteForByte() throws {
+    func frame(_ command: XBloomCommand, _ values: [UInt32] = []) -> String {
+        XBloomProtocol.command(command, values: values).hexString
+    }
+
+    // Connect. The machine shows itself as paired after this one.
+    #expect(frame(.mtuNegotiate, [185, 1]) == "580101a41f14000000 01b9000000010000 00bdd1".replacingOccurrences(of: " ", with: ""))
+
+    // Pause, resume and stop are bare commands, and already matched.
+    #expect(frame(.recipePause) == "58010146 9e0c000000 0180a1".replacingOccurrences(of: " ", with: ""))
+    #expect(frame(.recipeResume) == "5801014c9e0c00000001d748")
+    #expect(frame(.recipeStop) == "580101479e0c00000001553e")
+
+    // The grinder, which this app had entirely wrong: 8006 carries the setting,
+    // 3500 starts the burrs, 8018 stops them, 3505 leaves.
+    #expect(frame(.inGrinderPage, [53, 100]) == "58010146 1f1400000001 350000006400 0000c4af".replacingOccurrences(of: " ", with: ""))
+    #expect(frame(.grindAdjust, [1000, 53, 100]) == "580101ac0d1800000001e8030000350000006400 0000d863".replacingOccurrences(of: " ", with: ""))
+    #expect(frame(.grindPause) == "58010152 1f0c0000 0001b67a".replacingOccurrences(of: " ", with: ""))
+    #expect(frame(.grindEnd) == "580101b10d0c00000001a6ba")
+
+    // And the recipe's cup frame, which is why a grinding recipe never ground.
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.useGrinder = true
+    let cup = try XBloomProtocol.brewSequence(for: recipe)[1]
+    #expect(cup.hexString.hasPrefix("580101a81f1400000001"))
+    #expect(cup.hexString.contains("00004843"))   // 200.0
+    #expect(cup.hexString.contains("0000a042"))   // 80.0
+}
+
+private extension Data {
+    var hexString: String { map { String(format: "%02x", $0) }.joined() }
 }

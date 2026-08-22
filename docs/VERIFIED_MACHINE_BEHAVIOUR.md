@@ -315,6 +315,51 @@ official  58 01 01 47 9E 0C 00 00 00 01 55 3E   (40519, sent on stop)
 
 Identical to what this app now emits for both.
 
+## The vendor's frames, in full — 2026-08-22 13:00, PacketLogger
+
+A second HCI trace, this time reaching the bytes. Every frame below is the
+official app's own write.
+
+```
+8100  58 01 01 a4 1f 14 …  (185, 1)              once, on connect
+8102  58 01 01 a6 1f 18 …  (0, 0, 22)            dose 22 g — same shape as ours
+8104  58 01 01 a8 1f 14 …  (200.0, 80.0)         ← ours sent (90.0, 40.0)
+8001  58 01 01 41 1f 2f …  recipe                same encoding as ours
+8002  58 01 01 42 1f 0c …  bare
+40518 58 01 01 46 9e 0c …  pause                 identical to ours
+40524 58 01 01 4c 9e 0c …  resume                identical to ours
+40519 58 01 01 47 9e 0c …  stop                  identical to ours
+```
+
+### 20. `8104` is why a grinding recipe never ground
+
+Both floats were invented here. The vendor sends **200.0 and 80.0**; this app
+sent 90.0 and 40.0 — telling a machine about to pour 168 ml that the cup tops
+out at 90. The burr never moved. A grinder-off recipe keeps the pair this
+machine has already been recorded brewing with.
+
+### 21. The grinder screen used three commands the vendor never sends
+
+```
+8006  58 01 01 46 1f 14 …  (size, speed)     opens the screen *with* the setting
+8006  58 01 01 46 1f 14 …  (53, 100)         re-sent whenever the size changes
+3500  58 01 01 ac 0d 18 …  (1000, size, speed)   ← starts the burrs
+8018  58 01 01 52 1f 0c …  bare                  ← stops them
+3505  58 01 01 b1 0d 0c …  bare                  ← leaves the screen
+```
+
+`8105 device_grinder_size`, `8106 device_grinder_speed` and `3503 grind_begin`
+— the three this app was built on — do not appear once. `8006` is not a bare
+page-open: it carries the setting. Every `device_gears` frame follows `3500`,
+so that is the start. The leading `1000` is copied as captured; its meaning is
+not established.
+
+### 22. `8100` is the pairing handshake
+
+The vendor's app opens with `8100 (185, 1)` before anything else, and the
+machine shows itself as paired afterwards. This app never sent it, which is the
+difference visible on the machine's own display.
+
 ## Still unverified
 
 - Grinder-on behaviour. Needs a capture with the grinder enabled — and that

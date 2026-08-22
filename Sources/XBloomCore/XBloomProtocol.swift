@@ -15,6 +15,9 @@ public enum XBloomCommand: UInt16, Sendable {
     /// so the machine does act on the pause half.
     case recipePause = 40518
     case recipeResume = 40524
+    /// Sent once on connect by the vendor's app, before anything else. The
+    /// machine shows itself as paired afterwards; this app never sent it.
+    case mtuNegotiate = 8100
     /// Asks the machine which screen it is on — a read-only probe that moves no
     /// mechanism, so it is safe to use as a connection test.
     case deviceCurrentPage = 8023
@@ -34,10 +37,25 @@ public enum XBloomCommand: UInt16, Sendable {
     case outBrewerPage = 8013
 
     // MARK: Grinder
+    //
+    // A capture of the vendor's app grinding uses only the three below. The
+    // 8105/8106/3503 trio this app was built on — size, speed, begin — does
+    // not appear once, which is why the grinder screen never turned a burr.
+
+    /// Opens the grinder screen *and* carries the setting: `(size, speed)`.
+    /// Not the bare page-open this app assumed. Re-sent on every change.
     case inGrinderPage = 8006
-    case grinderSize = 8105
-    case grinderSpeed = 8106
-    case grindBegin = 3503
+    /// Starts the burr moving: `(1000, size, speed)`. The vendor's table calls
+    /// 3500 "adjust" and PyBloom calls it start; the capture settles it, since
+    /// every `device_gears` frame follows this command.
+    ///
+    /// ponytail: the leading 1000 is copied from the capture and its meaning is
+    /// unknown — plausibly a dose in centigrams. Revisit if the amount ground
+    /// turns out to be wrong.
+    case grindAdjust = 3500
+    /// Stops a running grind. The vendor sends this, not `grind_end`.
+    case grindPause = 8018
+    /// Leaves the grinder. Sent when the vendor's app closes the screen.
     case grindEnd = 3505
 }
 
@@ -193,8 +211,13 @@ public enum XBloomProtocol {
 
     public static func brewSequence(for recipe: Recipe) throws -> [Data] {
         let payload = try recipePayload(for: recipe)
-        let cupMaximum: Float = 90
-        let cupMinimum: Float = recipe.useGrinder ? 40 : 0
+        // Read straight off the vendor's own frame for a grinding recipe:
+        // 8104 carries (200.0, 80.0). This app sent (90.0, 40.0) — both
+        // invented — and the machine, told the cup tops out at 90 for a recipe
+        // pouring 168 ml, never moved the burr. A grinder-off brew is left on
+        // the pair this machine has already been recorded brewing with.
+        let cupMaximum: Float = recipe.useGrinder ? 200 : 90
+        let cupMinimum: Float = recipe.useGrinder ? 80 : 0
         // The reference implementation always sends the bean weight here, even
         // when it is not grinding. Sending zero looks like an invalid dose to
         // the machine, which is the likeliest reason a grinder-off recipe was
