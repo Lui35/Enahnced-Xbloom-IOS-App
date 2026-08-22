@@ -213,6 +213,63 @@ brew clock starts here.
 `8108` did not appear in these 1255 frames either. Two recordings, 2343 frames,
 zero temperature readings. The heating phase is gone from the app.
 
+## What a real grind looks like — 2026-08-22, official app
+
+Captured by leaving this app connected and recording in the background while
+the brew was started from the vendor's own app. Only its *echoes* are visible,
+never its payloads, but the echoes carry the identifiers.
+
+### 13. The official app sends the same four commands, in the same order
+
+```
+13.44  8102  recipe_bypass       echo
+13.85  8104  device_pod_type     echo
+14.25  8001  recipe_send_cmd     echo   ← the grinding opcode, same as ours
+15.42  8002  recipe_marking      echo
+15.44 40502  brewer_start
+```
+
+So the opcode is not the difference, and neither is the order or the count.
+Whatever makes the machine grind is **inside the payload bytes**, which an
+echo does not carry.
+
+One visible difference: its four setup commands are ~0.4 s apart. This app
+waits a full second between them.
+
+### 14. Grinding announces itself loudly, and we have never seen any of it
+
+```
+15.58 40505  device_gears  92     ← burr carrier moving, one frame per step
+15.83 40505  device_gears  91
+ ...                       ...    counting down to 82
+17.90 40526  gear_reset_zero  81
+18.52  8023  device_current_page  34
+18.57 40506  grinder_doing
+19.43 40507  device_grinder_finish
+```
+
+The machine walks the burr gear to the recipe's setting, zeroes it, switches to
+screen 34, grinds, and reports finishing. **Not one `40505` has appeared in any
+recording of a brew this app started** — it never begins positioning the
+grinder at all.
+
+Screens also differ: a brew from the official app sits on 31, 30, then 34 while
+grinding. A brew from this app goes to 35 and pours.
+
+### 15. `40518 brew_flow_pause` is real
+
+It arrived mid-brew when the recipe was paused from the official app. The
+vendor's table pairs it with `40524 brew_flow_resume`. Both are now sent by
+this app.
+
+### 16. The prime suspect is `8104 device_pod_type`
+
+The vendor calls it *pod type*. This app sends two float32 cup weights into it
+(90.0, and 40.0 or 0.0 depending on the grinder switch), which was always a
+guess — it sits under "Still unverified" below. A machine told the coffee is
+already ground has no reason to move a burr, whatever the recipe opcode says.
+Its real payload is one of the three still missing.
+
 ## Still unverified
 
 - Grinder-on behaviour. Needs a capture with the grinder enabled — and that

@@ -178,6 +178,25 @@ final class XBloomBLEClient: NSObject {
         diagnosticState = .passed
     }
 
+    /// Holds the machine mid-recipe. Unlike a stop, the program stays loaded
+    /// and `resumeBrew` picks it up.
+    func pauseBrew() throws {
+        try writeSimple(.recipePause, note: "Pause requested from the app")
+    }
+
+    func resumeBrew() throws {
+        try writeSimple(.recipeResume, note: "Resume requested from the app")
+    }
+
+    private func writeSimple(_ command: XBloomCommand, note: String) throws {
+        guard isConnected, let peripheral, let writeCharacteristic else { throw MachineError.notConnected }
+        let packet = XBloomProtocol.command(command)
+        peripheral.writeValue(packet, for: writeCharacteristic, type: .withoutResponse)
+        sentPacketCount += 1
+        trafficLog.note(note)
+        trafficLog.record(direction: .sent, command: command.rawValue, detail: "", payload: packet)
+    }
+
     func stopBrew() throws {
         guard isConnected, let peripheral, let writeCharacteristic else { throw MachineError.notConnected }
         let packet = XBloomProtocol.command(.recipeStop)

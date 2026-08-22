@@ -10,6 +10,11 @@ public enum XBloomCommand: UInt16, Sendable {
     case setBypass = 8102
     case setCup = 8104
     case recipeStop = 40519
+    /// Pause and resume a running recipe. The vendor's table pairs them, and a
+    /// recording of the official app grinding shows `40518` arriving mid-brew,
+    /// so the machine does act on the pause half.
+    case recipePause = 40518
+    case recipeResume = 40524
     /// Asks the machine which screen it is on — a read-only probe that moves no
     /// mechanism, so it is safe to use as a connection test.
     case deviceCurrentPage = 8023

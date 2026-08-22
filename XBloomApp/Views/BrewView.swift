@@ -547,6 +547,9 @@ struct BrewSessionView: View {
     @State private var waterBaseline: Double?
     @State private var reconnectAttempted = false
     @State private var confirmingStop = false
+    /// Held mid-recipe. The machine keeps the program loaded, so this is a
+    /// hold rather than the stop that ends a session.
+    @State private var isPaused = false
     @State private var confirmingLeave = false
     @State private var waterTracker: BrewDeliveryTracker
     @State private var weightTracker: ScaleYieldTracker
@@ -879,18 +882,50 @@ struct BrewSessionView: View {
                 // screen said so.
                 if confirmingStop {
                     stopConfirmation
-                } else {
+                } else if isPaused {
                     Button {
-                        withAnimation(.snappy(duration: 0.22)) { confirmingStop = true }
+                        resumeLiveBrew()
                     } label: {
-                        Label("Stop brewing", systemImage: "stop.fill")
+                        Label("Resume brewing", systemImage: "play.fill")
                             .font(.headline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(StudioTheme.background)
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
-                            .background(StudioTheme.danger, in: Capsule())
+                            .background(StudioTheme.accent, in: Capsule())
                     }
                     .buttonStyle(.plain)
+
+                    Button("Stop instead") {
+                        withAnimation(.snappy(duration: 0.22)) { confirmingStop = true }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(StudioTheme.danger)
+                } else {
+                    HStack(spacing: 10) {
+                        Button {
+                            pauseLiveBrew()
+                        } label: {
+                            Label("Pause", systemImage: "pause.fill")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(StudioTheme.raised, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            withAnimation(.snappy(duration: 0.22)) { confirmingStop = true }
+                        } label: {
+                            Label("Stop", systemImage: "stop.fill")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(StudioTheme.danger, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             } else {
                 // Nothing can be sent while the link is down, so there is no
@@ -1787,6 +1822,27 @@ struct BrewSessionView: View {
             return
         }
         completeLiveSession()
+    }
+
+    @MainActor
+    private func pauseLiveBrew() {
+        do {
+            try machine.pauseBrew()
+            withAnimation(.snappy(duration: 0.22)) { isPaused = true }
+            stage = "Paused"
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func resumeLiveBrew() {
+        do {
+            try machine.resumeBrew()
+            withAnimation(.snappy(duration: 0.22)) { isPaused = false }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     @MainActor
