@@ -270,6 +270,51 @@ guess — it sits under "Still unverified" below. A machine told the coffee is
 already ground has no reason to move a burr, whatever the recipe opcode says.
 Its real payload is one of the three still missing.
 
+## The official app's own frames — 2026-08-22, PacketLogger
+
+An HCI trace of the vendor's app running a grinding recipe, captured with the
+Bluetooth logging profile. These are its real writes, not echoes.
+
+### 17. The recipe encoding is right
+
+```
+official  58 01 01 41 1F 2F 00 00 00 01 | 20 [32B body] 33 4B | ED C1
+ours      58 01 01 41 1F 27 00 00 00 01 | 18 [24B body] 26 AA | 2F 8E
+```
+
+Same opcode, same shape: a length byte, 8-byte pour blocks, then grind size,
+then one footer byte. Decoding its body against this app's own reader gives
+four clean pours — 40 ml/90 °C/spiral/30 s rest, RPM 60 in the first pour's
+seventh byte, flow 3.0 — and grind size 51. Every field lands where this app
+puts it. The pour encoding, the RPM slot, the negative pause byte and the grind
+size are now verified against the vendor rather than inferred from PyBloom.
+
+### 18. Two fields do not match, and one of them is why nothing grinds
+
+**`8104 device_pod_type`.** The vendor sends `00 00 48 43` as its first
+float32 — **200.0**. This app sends 90.0, with a second float of 40.0 or 0.0
+depending on the grinder switch. Those numbers were invented; the vendor's name
+for the command is *pod type*, and a machine told what kind of coffee is loaded
+is exactly what would decide whether a burr needs to turn.
+
+**The recipe footer.** The vendor's recipe totals 165 ml and its footer byte is
+**75**. This app writes `round(total/10)*10`, which for a 168 ml recipe is 170.
+75 is not 165, nor 165/10, nor anything derived from it — but 240 − 165 = 75,
+and the vendor's editor has a bypass control (`addBypassLabel`,
+`bypassInfoView`). The footer is more likely **bypass water** than total water,
+which would mean this app has been asking for 170 ml of bypass on every brew.
+
+Both need the untruncated frames to settle.
+
+### 19. Pause is byte-for-byte correct
+
+```
+official  58 01 01 46 9E 0C 00 00 00 01 80 A1   (40518, sent on pause)
+official  58 01 01 47 9E 0C 00 00 00 01 55 3E   (40519, sent on stop)
+```
+
+Identical to what this app now emits for both.
+
 ## Still unverified
 
 - Grinder-on behaviour. Needs a capture with the grinder enabled — and that
