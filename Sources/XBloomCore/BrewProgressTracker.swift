@@ -21,13 +21,15 @@ public struct BrewProgressTracker: Equatable, Sendable {
     /// When the machine began the first pour. Nil until it does, so the
     /// extraction chart cannot start while the machine is still grinding.
     public private(set) var extractionStartedAt: Date?
-    /// When the machine accepted the recipe. For a recipe that does not grind,
-    /// this is also when brewing begins.
+    /// When the machine accepted the recipe. This is deliberately distinct
+    /// from `brewerStartedAt`: an `8002` echo does not mean a mechanism moved.
     public private(set) var recipeAcceptedAt: Date?
-    /// When the grinder reported that it had finished. On this firmware the
-    /// grinder events have never been seen, so this is usually nil and the
-    /// brew clock falls back to the first pour.
+    /// When the grinder reported that it had finished. Firmware that omits the
+    /// event falls back to the first brewer-side lifecycle frame.
     public private(set) var grinderFinishedAt: Date?
+    /// The machine's brewer-start event, kept separate from the `8002` echo.
+    /// The echo says the execute command arrived; this says a program began.
+    public private(set) var brewerStartedAt: Date?
     /// Whether the machine ever said it was grinding. A recipe that grinds and
     /// reaches its first pour without this is a recipe that poured over dry
     /// beans — the failure this machine gives no error for.
@@ -41,8 +43,7 @@ public struct BrewProgressTracker: Equatable, Sendable {
     public private(set) var completedAt: Date?
     public private(set) var errorCommand: UInt16?
     public private(set) var lastEventAt: Date?
-    /// The screen the machine was showing while it brewed. A later change away
-    /// from it means the recipe is over.
+    /// The first screen the machine reported after accepting the recipe.
     public private(set) var brewingPage: UInt32?
     public private(set) var currentPage: UInt32?
     /// Set once the machine acknowledges the recipe, which is when its screen
@@ -62,15 +63,23 @@ public struct BrewProgressTracker: Equatable, Sendable {
     }
 
     public mutating func ingest(command: UInt16, value: UInt32?, at date: Date = Date()) {
-        guard let notification = XBloomNotification(rawValue: command),
-              !notification.isMeasurement else { return }
+        guard let notification = XBloomNotification(rawValue: command) else { return }
+        // Gear movement is streamed like a measurement, but in an automatic
+        // recipe it is also the earliest proof that the grinder branch won.
+        if notification.isMeasurement, notification != .deviceGears { return }
         lastEventAt = date
 
         switch notification {
-        case .brewerStart, .recipeMarking:
+        case .recipeMarking:
             // The recipe has been accepted. Nothing has been poured yet.
             recipeAccepted = true
             if recipeAcceptedAt == nil { recipeAcceptedAt = date }
+            if !isExtracting { phase = .preparing }
+
+        case .brewerStart:
+            recipeAccepted = true
+            if recipeAcceptedAt == nil { recipeAcceptedAt = date }
+            if brewerStartedAt == nil { brewerStartedAt = date }
             if !isExtracting { phase = .preparing }
 
         case .wateringPhase:
@@ -79,7 +88,7 @@ public struct BrewProgressTracker: Equatable, Sendable {
         case .deviceInGrinder:
             if !isExtracting { phase = .preparing }
 
-        case .deviceBeginGrinder, .grinderDoing, .grindBegin:
+        case .deviceBeginGrinder, .grinderDoing, .grindBegin, .deviceGears:
             observedGrinding = true
             if !isExtracting { phase = .grinding }
 
@@ -88,8 +97,13 @@ public struct BrewProgressTracker: Equatable, Sendable {
             if grinderFinishedAt == nil { grinderFinishedAt = date }
             if !isExtracting { phase = .preparing }
 
+        case .deviceBeginBrewer:
+            if brewerStartedAt == nil { brewerStartedAt = date }
+            if grinderFinishedAt == nil { grinderFinishedAt = date }
+            if !isExtracting { phase = .preparing }
+
         case .deviceOutGrinder, .deviceInBrewer,
-             .deviceInScale, .deviceOutScale, .deviceBeginBrewer,
+             .deviceInScale, .deviceOutScale,
              .pourFirstVibrationBefore:
             // The grinder is done and the machine is on its way to pouring.
             // It is not heating: this firmware has no heating state and never
@@ -126,6 +140,7 @@ public struct BrewProgressTracker: Equatable, Sendable {
 
     private mutating func beginPour(index: Int?, at date: Date) {
         hasObservedPourEvents = true
+        if brewerStartedAt == nil { brewerStartedAt = date }
         // A pour is proof the grinder is done, whether or not it said so.
         if grinderFinishedAt == nil { grinderFinishedAt = date }
         lastPourStartedAt = date

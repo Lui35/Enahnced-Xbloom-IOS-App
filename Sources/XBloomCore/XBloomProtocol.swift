@@ -169,6 +169,12 @@ public enum XBloomProtocol {
         return packet
     }
 
+    /// Final recipe byte: water-to-coffee ratio in tenths.
+    public static func recipeRatioByte(for recipe: Recipe) -> UInt8 {
+        let ratioTenths = Int((recipe.ratio * 10).rounded(.toNearestOrEven))
+        return UInt8(min(255, max(0, ratioTenths)))
+    }
+
     public static func recipePayload(for recipe: Recipe) throws -> Data {
         try RecipeValidator.requireSafe(recipe)
         var body = Data()
@@ -199,13 +205,11 @@ public enum XBloomProtocol {
         result.append(body)
         result.append(UInt8(recipe.grindSize))
 
-        // The existing desktop server passes round(total ml / 10), and PyBloom
-        // writes that value multiplied by ten into the one-byte recipe footer.
-        // The field therefore tops out at 250 ml; truncating instead of
-        // clamping turned a 300 ml recipe into a declared 44 ml.
-        // 250 is the highest multiple of ten the byte can hold.
-        let waterUnits = Int((Double(recipe.totalWater) / 10).rounded(.toNearestOrEven))
-        result.append(UInt8(min(250, max(0, waterUnits * 10))))
+        // PyBloom calls this `total_water`, but the vendor capture settles the
+        // field: its recipe pours 165 ml with a 22 g dose and ends in byte 75.
+        // 165 / 22 * 10 is exactly 75. Sending the poured volume here is the
+        // strongest remaining explanation for the intermittent no-grinder path.
+        result.append(recipeRatioByte(for: recipe))
         return result
     }
 

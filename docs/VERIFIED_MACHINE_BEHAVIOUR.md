@@ -11,7 +11,8 @@ vendor binary), because it is the only source describing *this* machine.
 - Recipe: **Chelchele Berry Sweetness**, grinder **off**, 3 pours, 240 ml,
   15 g dose.
 - Recipe payload actually sent: pours of **45 ml @ 93 °C**, **95 ml @ 92 °C**,
-  **100 ml @ 91 °C**; grind size 42; water footer 240.
+  **100 ml @ 91 °C**; grind size 42; legacy footer 240 (later proved to
+  be the wrong encoding; see 18).
 - 1088 frames over 118 s. The brew was stopped by hand during the rest after
   pour 2.
 
@@ -107,8 +108,8 @@ reading", and only shows a number as a measurement when one actually arrives.
 `8004 recipe_send_cmd_nogrinder` was acknowledged and the machine brewed. This
 capture was taken after three changes that were made on suspicion — sending the
 real dose with `recipe_bypass` instead of zero, spacing all four setup commands
-1 s apart instead of 300 ms, and clamping the water footer instead of letting it
-wrap. Which of them mattered, if any, is **not established**; the failure was
+1 s apart instead of 300 ms, and preventing the then-misidentified footer from
+wrapping. Which of them mattered, if any, is **not established**; the failure was
 intermittent and has not been reproduced since.
 
 ### 8. A brew started from the weighing sheet did not grind
@@ -297,20 +298,12 @@ depending on the grinder switch. Those numbers were invented; the vendor's name
 for the command is *pod type*, and a machine told what kind of coffee is loaded
 is exactly what would decide whether a burr needs to turn.
 
-**The recipe footer.** The vendor's recipe totals 165 ml and its footer byte is
-**75**. This app writes `round(total/10)*10`, which for a 168 ml recipe is 170.
-So the footer is **not** total water: 75 is not 165, nor 165/10, nor anything
-derived from it.
-
-Bypass water is the leading guess — 240 − 165 = 75, and the vendor's editor has
-a bypass control (`addBypassLabel`, `bypassInfoView`,
-`RecipeEditBypassTableViewCell`) that this app does not. But the measured yield
-argues against the machine reading ours that way: a 168 ml brew that asked for
-170 ml of bypass would put well over 300 g in the cup, and the 2026-08-21
-recording ended at 155.8 g. Either the field is ignored, or it means something
-else. Unresolved, and harmless in practice so far.
-
-Both need the untruncated frames to settle.
+**The recipe footer.** The vendor's recipe totals 165 ml, carries a 22 g dose in
+`8102`, and ends in byte **75**. This is exact protocol evidence for ratio in
+tenths: `165 / 22 * 10 = 75`. PyBloom's `total_water` name was misleading, and
+this app inherited it by writing the poured volume instead. The encoder now
+writes `round(recipe ratio × 10)`; for the failed 150 ml / 16 g diagnostic that
+changes the byte from 150 to 94.
 
 ### 19. Pause is byte-for-byte correct
 
@@ -404,8 +397,9 @@ same value on the next telemetry frame put it straight back on screen.
 ```
 
 Then silence until the brew. This app followed `8100` with a stop and two page
-exits 300 ms later, over the top of the machine's own pairing announcement.
-The housekeeping now waits 2.5 s for it to finish.
+exits over the top of the machine's own pairing announcement. It now mirrors
+the vendor connection: await the `8100` echo, let the machine return home, and
+send no unsolicited stop or page-exit commands.
 
 ### 25. Leaving the grinder takes two commands, not one
 
@@ -464,21 +458,31 @@ failed 12:43   brewer_start → page 35 → watering_phase
 ```
 
 The machine picked its no-grind program within 400 ms of accepting the recipe.
-Nothing in the bytes accounts for it; the difference is not on the app's side
-of the link. **Unresolved.**
+The later 13:43 diagnostic reproduced it and exposed a remaining bad field—the
+strongest protocol-level cause found so far:
+the app sent footer 150 for a 150 ml / 16 g recipe, while the vendor's formula
+requires ratio byte 94. The command opcode, dose, cup pair, RPM, grind size and
+one-second cadence were otherwise correct.
+
+An attempted safety gate treated page 35 as proof that grinding had been
+skipped and immediately sent `40519`. That was wrong: a page report is not
+strong enough evidence to cancel a physical program, and it caused Start Brew
+to stop the machine itself. The replacement interlock ignores page 35. It sends
+`40519` only if the machine emits an actual `40510 watering_phase` before any
+page-34, gear, or grinder evidence. This limits wasted water without cancelling
+a program merely because its display changed.
 
 ## Still unverified
 
-- Grinder-on behaviour. Needs a capture with the grinder enabled — and that
-  capture is now the way to settle whether the scale-page exit was what skipped
-  the grind (see 8 above).
+- Whether the corrected ratio footer is sufficient to make every grinder-on
+  recipe choose the grinding branch. This needs one attended hardware brew.
 - Whether `40511 device_watering_finish` appears on any firmware. It did not
   here, so the end of a pour is inferred from the volume counter going still.
 - `device_pod_type` (8104) payload shape. The app sends two float32 cup weights;
   the vendor treats this as a pod/cup type.
 - `8023` page numbers beyond 35 (brewing) and 1 (home).
-- Whether the `recipeStop` → `brewerQuit` → `grinderQuit` sequence the app sends
-  on connect matches what the vendor does.
+- Whether any firmware omits all page-34, gear, and grinder notifications after
+  physically grinding; the captured successful run reported them.
 
 ## How to add to this document
 

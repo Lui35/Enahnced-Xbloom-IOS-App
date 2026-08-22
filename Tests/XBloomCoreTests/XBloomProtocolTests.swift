@@ -167,21 +167,66 @@ import Testing
     #expect(bypassDose == UInt32(recipe.dose.rounded(.towardZero)))
 }
 
-@Test func recipeFooterClampsWaterInsteadOfWrappingThroughTheByte() throws {
+@Test func recipeFooterCarriesRatioTenthsFromTheVendorCapture() throws {
     let recipe = Recipe(
-        name: "Large batch",
-        dose: 20,
+        name: "Vendor captured iced recipe",
+        dose: 22,
         pours: [
-            PourStep(volume: 100, temperature: 93, flowRate: 3),
-            PourStep(volume: 100, temperature: 93, flowRate: 3),
-            PourStep(volume: 100, temperature: 93, flowRate: 3),
+            PourStep(volume: 40, temperature: 90, flowRate: 3),
+            PourStep(volume: 40, temperature: 90, flowRate: 3),
+            PourStep(volume: 40, temperature: 90, flowRate: 3),
+            PourStep(volume: 45, temperature: 90, flowRate: 3),
         ]
     )
-    #expect(recipe.totalWater == 300)
+    #expect(recipe.totalWater == 165)
+    #expect(recipe.ratio == 7.5)
 
     let payload = try XBloomProtocol.recipePayload(for: recipe)
-    // Truncating 300 through the one-byte footer declared 44 ml to the machine.
-    #expect(payload[payload.count - 1] == 250)
+    // The official 165 ml / 22 g recipe ends in 0x4B, decimal 75.
+    #expect(payload[payload.count - 1] == 75)
+}
+
+@Test func failedDiagnosticRecipeNowEncodesItsRatioInsteadOfItsWater() throws {
+    let recipe = Recipe(
+        name: "Iced Chelchele Berry & Lychee Flash",
+        grindSize: 38,
+        rpm: .rpm90,
+        dose: 16,
+        useGrinder: true,
+        pours: [
+            PourStep(volume: 45, temperature: 92, flowRate: 3.2),
+            PourStep(volume: 55, temperature: 92, flowRate: 3.2),
+            PourStep(volume: 50, temperature: 90, flowRate: 3.2),
+        ]
+    )
+
+    let payload = try XBloomProtocol.recipePayload(for: recipe)
+    #expect(recipe.totalWater == 150)
+    #expect(payload[payload.count - 1] == 94) // round(150 / 16 * 10)
+    #expect(payload[payload.count - 1] != 150) // byte in the failed recording
+}
+
+@Test func brewCommandPlanOwnsTheTransportIndependentCadence() throws {
+    let plan = try BrewCommandPlan(recipe: RecipeLibrary.defaults[0])
+    #expect(plan.steps.map(\.kind) == [.configureDose, .configureCup, .uploadRecipe, .execute])
+    #expect(plan.steps.map(\.settleAfter) == [1, 1, 1, 0])
+    #expect(plan.steps.map { UInt16($0.packet[3]) | UInt16($0.packet[4]) << 8 } == [8102, 8104, 8001, 8002])
+}
+
+@Test func grinderInterlockStopsOnlyWhenWaterActuallyStartsWithoutGrinding() {
+    var interlock = BrewGrinderInterlock(requiresGrinding: true)
+
+    // Page 35 caused the previous false stop. It is diagnostic only.
+    #expect(interlock.ingest(command: 8023, value: 35) == .observing)
+    #expect(interlock.ingest(command: 40502, value: nil) == .observing)
+    #expect(interlock.ingest(command: 40510, value: 0) == .stopUnexpectedPour)
+
+    var ground = BrewGrinderInterlock(requiresGrinding: true)
+    #expect(ground.ingest(command: 8023, value: 34) == .grindingConfirmed)
+    #expect(ground.ingest(command: 40510, value: 0) == .pourAllowed)
+
+    var manual = BrewGrinderInterlock(requiresGrinding: false)
+    #expect(manual.ingest(command: 40510, value: 0) == .observing)
 }
 
 @Test func trafficLogSummarisesWhatTheMachineActuallySent() {

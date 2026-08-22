@@ -67,6 +67,9 @@ final class XBloomBLEClient: NSObject {
     @ObservationIgnored private var lastBrewActivityAt: Date?
     @ObservationIgnored private var resumeConnectionRequested = false
     @ObservationIgnored private var acknowledgements: [UInt16: Date] = [:]
+    /// Armed only after `8002` goes out. It is a core state machine so the BLE
+    /// delegate merely transports its decision instead of inventing brew rules.
+    @ObservationIgnored private var grinderInterlock: BrewGrinderInterlock?
     /// Machine screens this app has opened and not yet given back. A brew
     /// cannot start on top of one, so `startBrew` leaves them first.
     @ObservationIgnored private var openPages = MachinePages()
@@ -139,11 +142,13 @@ final class XBloomBLEClient: NSObject {
         await pendingScreenWork?.value
         pendingScreenWork = nil
         try RecipeValidator.requireSafe(recipe)
-        let packets = try XBloomProtocol.brewSequence(for: recipe)
+        let plan = try BrewCommandPlan(recipe: recipe)
         brewProgress.reset()
+        grinderInterlock = nil
         trafficLog.note(
             "Brew start · \(recipe.name) · grinder \(recipe.useGrinder ? "on" : "off") · "
-                + "\(recipe.pours.count) pours · \(recipe.totalWater) ml · dose \(recipe.dose) g"
+                + "\(recipe.pours.count) pours · \(recipe.totalWater) ml · dose \(recipe.dose) g · "
+                + "ratio 1:\(String(format: "%.1f", recipe.ratio)) · footer \(XBloomProtocol.recipeRatioByte(for: recipe))"
         )
         isSendingRecipe = true
         defer { isSendingRecipe = false }
@@ -151,23 +156,29 @@ final class XBloomBLEClient: NSObject {
         let packetCountBeforeBrew = receivedPacketCount
         var executeSentAt = Date.distantPast
 
-        for (index, packet) in packets.enumerated() {
-            if index == packets.count - 1 {
+        // This layer only transports the core plan. Packet order, timing, and
+        // grinder-first policy live in XBloomCore where recordings can test them.
+        for step in plan.steps {
+            if step.kind == .execute {
                 executeSentAt = Date()
+                grinderInterlock = recipe.useGrinder
+                    ? BrewGrinderInterlock(requiresGrinding: true)
+                    : nil
             }
-            try await write(packet)
-            if index < packets.count - 1 {
-                // The reference implementation waits a full second between all
-                // four setup commands. The shortened 300 ms gap used for
-                // grinder-off recipes is the other likely reason they never
-                // started: the machine had not finished with one command before
-                // the next arrived.
-                try await Task.sleep(for: .seconds(1))
+            do {
+                try await write(step.packet)
+            } catch {
+                if step.kind == .execute { grinderInterlock = nil }
+                throw error
+            }
+            if step.settleAfter > 0 {
+                try await Task.sleep(for: .seconds(step.settleAfter))
             }
         }
 
         let deadline = Date().addingTimeInterval(10)
         while lastBrewActivityAt.map({ $0 < executeSentAt }) ?? true, Date() < deadline {
+            try Task.checkCancellation()
             try await Task.sleep(for: .milliseconds(100))
         }
         guard lastBrewActivityAt.map({ $0 >= executeSentAt }) == true else {
@@ -207,6 +218,7 @@ final class XBloomBLEClient: NSObject {
     }
 
     func stopBrew() throws {
+        grinderInterlock = nil
         guard isConnected, let peripheral, let writeCharacteristic else { throw MachineError.notConnected }
         let packet = XBloomProtocol.command(.recipeStop)
         peripheral.writeValue(packet, for: writeCharacteristic, type: .withoutResponse)
@@ -229,17 +241,42 @@ final class XBloomBLEClient: NSObject {
         awaitingAcknowledgement: Bool = true,
         timeout: TimeInterval = 2
     ) async throws -> Bool {
+        try await sendPacket(
+            XBloomProtocol.command(command, values: values),
+            command: command.rawValue,
+            awaitingAcknowledgement: awaitingAcknowledgement,
+            timeout: timeout
+        )
+    }
+
+    /// Sends either a regular command or a raw recipe packet and waits for the
+    /// matching machine echo. Recipe uploads cannot use `send(_:values:)`
+    /// because their payload is byte-oriented rather than UInt32 fields.
+    private func sendPacket(
+        _ packet: Data,
+        command: UInt16,
+        awaitingAcknowledgement: Bool = true,
+        timeout: TimeInterval = 3
+    ) async throws -> Bool {
         guard isConnected else { throw MachineError.notConnected }
         let sentAt = Date()
-        try await write(XBloomProtocol.command(command, values: values))
+        try await write(packet)
         guard awaitingAcknowledgement else { return true }
+        return try await waitForAcknowledgement(command, sentAt: sentAt, timeout: timeout)
+    }
 
+    private func waitForAcknowledgement(
+        _ command: UInt16,
+        sentAt: Date,
+        timeout: TimeInterval
+    ) async throws -> Bool {
         let deadline = sentAt.addingTimeInterval(timeout)
         while Date() < deadline {
-            if let acknowledged = acknowledgements[command.rawValue], acknowledged >= sentAt {
+            if let acknowledged = acknowledgements[command], acknowledged >= sentAt {
                 return true
             }
-            try await Task.sleep(for: .milliseconds(60))
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(50))
         }
         return false
     }
@@ -259,8 +296,8 @@ final class XBloomBLEClient: NSObject {
         trafficLog.note("Releasing machine screens before the recipe")
         for exit in exits {
             try? await write(XBloomProtocol.command(exit))
-            // The same one-second gap the setup commands use. The machine is
-            // changing screens here, which is not faster than accepting one.
+            // Screen transitions need the same full settling interval as recipe
+            // setup. Missing an exit echo must never cancel a requested brew.
             try? await Task.sleep(for: .seconds(1))
         }
     }
@@ -430,6 +467,7 @@ final class XBloomBLEClient: NSObject {
         // clearing the tracker here only discards machine state that no longer
         // applies; it never rewinds a brew that is still running.
         brewProgress.reset()
+        grinderInterlock = nil
         lastPacketAt = nil
         sentPacketCount = 0
         receivedPacketCount = 0
@@ -459,25 +497,21 @@ final class XBloomBLEClient: NSObject {
                 MachineFeedback.machineConnected()
                 return
             }
-            // The vendor's app opens with this and nothing else, and the
-            // machine shows itself as paired afterwards. This app never sent
-            // it, which is the difference the owner noticed on the machine's
-            // own display.
+            // Match the vendor connection exactly. It sends 8100 and then lets
+            // the machine announce pairing and return home. Unconditional stop
+            // and page-exit commands here could perturb the next recipe or stop
+            // a program that was already running on the machine.
+            let handshakeSentAt = Date()
             try await write(XBloomProtocol.command(.mtuNegotiate, values: [185, 1]))
-            // The vendor's app sends this and then nothing at all — the
-            // machine chimes, shows itself paired, and reports its model and
-            // firmware in its own time. Cleaning up stale state 300 ms later
-            // talked over that; the housekeeping below can wait for it.
-            try await Task.sleep(for: .seconds(2.5))
-            try await write(XBloomProtocol.command(.recipeStop))
-            try await Task.sleep(for: .milliseconds(500))
-            try await write(XBloomProtocol.command(.outBrewerPage))
-            try await write(XBloomProtocol.command(.outGrinderPage))
+            guard try await waitForAcknowledgement(
+                XBloomCommand.mtuNegotiate.rawValue,
+                sentAt: handshakeSentAt,
+                timeout: 3
+            ) else {
+                throw MachineError.commandNotAcknowledged(XBloomCommand.mtuNegotiate.rawValue)
+            }
+            try await Task.sleep(for: .seconds(1))
             openPages = MachinePages()
-            // The machine has an explicit keep-awake command, which is a better
-            // answer than telling the user to keep prodding it.
-            try await write(XBloomProtocol.command(.deviceNoSleep))
-            try await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             connectionWatchdogTask?.cancel()
             connectionWatchdogTask = nil
@@ -580,10 +614,11 @@ final class XBloomBLEClient: NSObject {
         // whose payload shape has not been verified.
         acknowledgements[command] = Date()
         brewProgress.ingest(command: command, value: update.eventValue, at: Date())
+        enforceGrinderInterlock(command: command, value: update.eventValue)
 
         switch XBloomNotification(rawValue: command) {
         case .deviceInGrinder, .deviceInBrewer, .deviceBeginGrinder, .deviceBeginBrewer,
-             .brewerStart, .wateringPhase, .recipeMarking:
+             .deviceGears, .grinderDoing, .brewerStart, .wateringPhase:
             lastBrewActivityAt = Date()
         default:
             break
@@ -603,11 +638,41 @@ final class XBloomBLEClient: NSObject {
         }
     }
 
+    private func enforceGrinderInterlock(command: UInt16, value: UInt32?) {
+        guard var interlock = grinderInterlock else { return }
+        let decision = interlock.ingest(command: command, value: value)
+        grinderInterlock = interlock
+
+        switch decision {
+        case .pourAllowed:
+            grinderInterlock = nil
+        case .stopUnexpectedPour:
+            grinderInterlock = nil
+            diagnosticState = .failed(
+                "The machine began pouring without running the grinder. The recipe was stopped at the first water event."
+            )
+            lastError = "The grinder did not run, so the app stopped the unexpected pour."
+            do {
+                try writeSimple(
+                    .recipeStop,
+                    note: "Safety interlock · watering started before grinding · stop sent"
+                )
+            } catch {
+                trafficLog.note("Safety interlock could not send stop · \(error.localizedDescription)")
+            }
+        case .grindingConfirmed:
+            trafficLog.note("Grinder-first interlock satisfied · grinder path observed")
+        case .observing:
+            break
+        }
+    }
+
     enum MachineError: LocalizedError {
         case notConnected
         case commandChannelUnavailable
         case packetTooLarge(Int)
         case noMachineResponse
+        case commandNotAcknowledged(UInt16)
         case unsafeManualPour(String)
 
         var errorDescription: String? {
@@ -620,6 +685,8 @@ final class XBloomBLEClient: NSObject {
                 "The recipe packet is \(size) bytes and exceeds the negotiated Bluetooth limit."
             case .noMachineResponse:
                 "The recipe was sent but the xBloom did not respond. Check whether it started before retrying, then disconnect and reconnect if needed."
+            case .commandNotAcknowledged(let command):
+                "The xBloom did not acknowledge command \(command), so the recipe was not executed. Reconnect and try again."
             case .unsafeManualPour(let reason):
                 reason
             }
