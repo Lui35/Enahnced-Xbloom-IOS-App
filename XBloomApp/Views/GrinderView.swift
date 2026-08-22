@@ -46,7 +46,13 @@ struct GrinderView: View {
         .onDisappear {
             ticker?.cancel()
             ticker = nil
-            Task { await machine.closeGrinder() }
+            // Walking away from a running grinder has to stop it first, the
+            // same order the vendor's app uses: pause, end, then leave.
+            let wasGrinding = isGrinding
+            Task {
+                if wasGrinding { _ = try? await machine.stopGrinding() }
+                await machine.closeGrinder()
+            }
         }
         .onChange(of: machine.telemetry.state) { _, state in
             if isGrinding, state == .idle {

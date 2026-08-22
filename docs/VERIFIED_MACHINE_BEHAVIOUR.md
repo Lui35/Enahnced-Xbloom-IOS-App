@@ -407,6 +407,31 @@ Then silence until the brew. This app followed `8100` with a stop and two page
 exits 300 ms later, over the top of the machine's own pairing announcement.
 The housekeeping now waits 2.5 s for it to finish.
 
+### 25. Leaving the grinder takes two commands, not one
+
+Captured from the vendor's app on 2026-08-22:
+
+```
+APP →   3500  grind_adjust  (1000, 15, 100)
+←       8023  page 34                        grinding
+←      40506  grinder_doing
+APP →   8018  grind_pause                    the user stops it
+←      40507  device_grinder_finish
+←       8023  page 2
+APP →   3505  grind_end
+←      40507  device_grinder_finish
+APP →   8012  out_grinder_page
+←       8023  page 1                         ← home
+```
+
+`3505` ends the grind; **`8012` is what sends the machine home**. This app sent
+only `3505`, so the phone left the screen and the machine stayed on its
+grinding page. Both go now, and walking away from a running grinder stops it
+first — pause, end, leave, in that order.
+
+Screens seen so far: **1** home, **2** after a grind ends, **15** the fault
+alert, **34** grinding, **35** brewing, **29–31** around a brew starting.
+
 ## Still unverified
 
 - Grinder-on behaviour. Needs a capture with the grinder enabled — and that

@@ -311,10 +311,15 @@ final class XBloomBLEClient: NSObject {
         return try await send(.grindPause)
     }
 
+    /// Leaves the grinder, in the two steps the vendor's app uses. `3505` ends
+    /// the grind and `8012` closes the screen; sending only the first left the
+    /// machine sitting on its grinding page after the phone had walked away.
     func closeGrinder() async {
         guard openPages.grinder else { return }
         openPages.grinder = false
         _ = try? await send(.grindEnd, awaitingAcknowledgement: false)
+        try? await Task.sleep(for: .milliseconds(400))
+        _ = try? await send(.outGrinderPage, awaitingAcknowledgement: false)
     }
 
     /// Runs a single pour with no recipe behind it. It travels the same
