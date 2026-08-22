@@ -872,17 +872,22 @@ struct BrewSessionView: View {
                 // and the machine disagree about whether coffee was being made
                 // — the session closed, the xBloom kept pouring, and nothing on
                 // screen said so.
-                // Two controls, both circles, because a running brew has
-                // exactly two things you can do to it and neither needs a word
-                // to explain the symbol.
-                HStack(spacing: 22) {
+                // Two controls, both circles, one at each margin: a running
+                // brew has exactly two things you can do to it and neither
+                // needs a word to explain the symbol. The space between them
+                // is where the brew says something back.
+                HStack(spacing: 12) {
                     circleControl(
                         systemImage: isPaused ? "play.fill" : "pause.fill",
                         tint: StudioTheme.accent,
                         label: isPaused ? "Resume brewing" : "Pause brewing"
                     ) {
-                        isPaused ? resumeLiveBrew() : pauseLiveBrew()
+                        withAnimation(.snappy(duration: 0.2)) {
+                            isPaused ? resumeLiveBrew() : pauseLiveBrew()
+                        }
                     }
+
+                    Spacer(minLength: 12)
 
                     circleControl(
                         systemImage: "stop.fill",
@@ -892,7 +897,15 @@ struct BrewSessionView: View {
                         confirmingStop = true
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .overlay {
+                    if isPaused {
+                        Text("Holding — the machine is waiting")
+                            .font(.caption)
+                            .foregroundStyle(StudioTheme.muted)
+                            .multilineTextAlignment(.center)
+                            .transition(.opacity)
+                    }
+                }
             } else {
                 // Nothing can be sent while the link is down, so there is no
                 // stop to offer. Reconnecting is the way back to one — but a

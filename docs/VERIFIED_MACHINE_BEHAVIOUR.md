@@ -357,8 +357,15 @@ machine has already been recorded brewing with.
 `8105 device_grinder_size`, `8106 device_grinder_speed` and `3503 grind_begin`
 — the three this app was built on — do not appear once. `8006` is not a bare
 page-open: it carries the setting. Every `device_gears` frame follows `3500`,
-so that is the start. The leading `1000` is copied as captured; its meaning is
-not established.
+so that is the start.
+
+Confirmed on hardware 2026-08-22: the grinder screen runs, and the machine's
+own display shows the grind size and the speed the app sent. The second value
+in `8006` and the third in `3500` are therefore the speed, which was inferred
+from the capture and is now read back off the machine.
+
+The leading `1000` in `3500` is still copied as captured and its meaning is not
+established. The amount ground has not been weighed.
 
 ### 22. `8100` is the pairing handshake
 
