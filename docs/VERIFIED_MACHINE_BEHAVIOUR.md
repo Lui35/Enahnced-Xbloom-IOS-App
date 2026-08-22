@@ -299,10 +299,16 @@ is exactly what would decide whether a burr needs to turn.
 
 **The recipe footer.** The vendor's recipe totals 165 ml and its footer byte is
 **75**. This app writes `round(total/10)*10`, which for a 168 ml recipe is 170.
-75 is not 165, nor 165/10, nor anything derived from it — but 240 − 165 = 75,
-and the vendor's editor has a bypass control (`addBypassLabel`,
-`bypassInfoView`). The footer is more likely **bypass water** than total water,
-which would mean this app has been asking for 170 ml of bypass on every brew.
+So the footer is **not** total water: 75 is not 165, nor 165/10, nor anything
+derived from it.
+
+Bypass water is the leading guess — 240 − 165 = 75, and the vendor's editor has
+a bypass control (`addBypassLabel`, `bypassInfoView`,
+`RecipeEditBypassTableViewCell`) that this app does not. But the measured yield
+argues against the machine reading ours that way: a 168 ml brew that asked for
+170 ml of bypass would put well over 300 g in the cup, and the 2026-08-21
+recording ended at 155.8 g. Either the field is ignored, or it means something
+else. Unresolved, and harmless in practice so far.
 
 Both need the untruncated frames to settle.
 
