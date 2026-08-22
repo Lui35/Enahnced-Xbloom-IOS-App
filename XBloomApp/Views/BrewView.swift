@@ -550,6 +550,10 @@ struct BrewSessionView: View {
     /// Held mid-recipe. The machine keeps the program loaded, so this is a
     /// hold rather than the stop that ends a session.
     @State private var isPaused = false
+    /// The fault the user has already dismissed. Without it the alert came
+    /// back on the next telemetry frame, because the fault itself had not
+    /// changed and never will until the next brew.
+    @State private var acknowledgedFault: UInt16?
     @State private var confirmingLeave = false
     @State private var waterTracker: BrewDeliveryTracker
     @State private var weightTracker: ScaleYieldTracker
@@ -753,6 +757,16 @@ struct BrewSessionView: View {
         .safeAreaInset(edge: .bottom) { sessionControls }
         .interactiveDismissDisabled(isSessionLocked)
         .confirmationDialog(
+            "Stop this brew?",
+            isPresented: $confirmingStop,
+            titleVisibility: .visible
+        ) {
+            Button("Confirm", role: .destructive) { stopLiveBrew() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The machine stops pouring straight away. What is already in the cup stays in your history.")
+        }
+        .confirmationDialog(
             "Close without stopping the machine?",
             isPresented: $confirmingLeave,
             titleVisibility: .visible
@@ -791,7 +805,10 @@ struct BrewSessionView: View {
             }
         }
         .alert("Brew error", isPresented: .constant(errorMessage != nil)) {
-            Button("OK") { errorMessage = nil }
+            Button("OK") {
+                acknowledgedFault = machine.brewProgress.errorCommand
+                errorMessage = nil
+            }
         } message: {
             Text(errorMessage ?? "")
         }
@@ -802,50 +819,25 @@ struct BrewSessionView: View {
     /// the end of the scrolling content, below the chart and every pour card,
     /// while the toolbar's close button was hidden for the duration of a live
     /// brew — so there was no visible way out of a running session.
-    /// The stop confirmation, in the bar the question was asked from.
-    ///
-    /// It used to be a system dialog thrown over the running brew, which reads
-    /// as an interruption from somewhere else rather than the second half of
-    /// the tap you just made. Here the consequence is a line of text you can
-    /// read while the machine is still pouring, with the two answers under it.
-    private var stopConfirmation: some View {
-        VStack(spacing: 10) {
-            Text("The machine stops pouring straight away. What is already in the cup stays in your history.")
-                .font(.subheadline)
-                .foregroundStyle(StudioTheme.muted)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 10) {
-                Button {
-                    withAnimation(.snappy(duration: 0.22)) { confirmingStop = false }
-                } label: {
-                    Text("Keep brewing")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(StudioTheme.raised, in: Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    confirmingStop = false
-                    stopLiveBrew()
-                } label: {
-                    Label("Stop the brew", systemImage: "stop.fill")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(StudioTheme.danger, in: Capsule())
-                }
-                .buttonStyle(.plain)
-            }
+    /// One control, one shape. The icon carries the meaning: a pause bar
+    /// while the brew runs, a play triangle while it holds, a square to stop.
+    private func circleControl(
+        systemImage: String,
+        tint: Color,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 68, height: 68)
+                .background(tint.opacity(0.16), in: Circle())
+                .overlay { Circle().stroke(tint.opacity(0.55), lineWidth: 2) }
+                .contentTransition(.symbolEffect(.replace))
         }
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     @ViewBuilder
@@ -880,53 +872,27 @@ struct BrewSessionView: View {
                 // and the machine disagree about whether coffee was being made
                 // — the session closed, the xBloom kept pouring, and nothing on
                 // screen said so.
-                if confirmingStop {
-                    stopConfirmation
-                } else if isPaused {
-                    Button {
-                        resumeLiveBrew()
-                    } label: {
-                        Label("Resume brewing", systemImage: "play.fill")
-                            .font(.headline)
-                            .foregroundStyle(StudioTheme.background)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
-                            .background(StudioTheme.accent, in: Capsule())
+                // Two controls, both circles, because a running brew has
+                // exactly two things you can do to it and neither needs a word
+                // to explain the symbol.
+                HStack(spacing: 22) {
+                    circleControl(
+                        systemImage: isPaused ? "play.fill" : "pause.fill",
+                        tint: StudioTheme.accent,
+                        label: isPaused ? "Resume brewing" : "Pause brewing"
+                    ) {
+                        isPaused ? resumeLiveBrew() : pauseLiveBrew()
                     }
-                    .buttonStyle(.plain)
 
-                    Button("Stop instead") {
-                        withAnimation(.snappy(duration: 0.22)) { confirmingStop = true }
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(StudioTheme.danger)
-                } else {
-                    HStack(spacing: 10) {
-                        Button {
-                            pauseLiveBrew()
-                        } label: {
-                            Label("Pause", systemImage: "pause.fill")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
-                                .background(StudioTheme.raised, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            withAnimation(.snappy(duration: 0.22)) { confirmingStop = true }
-                        } label: {
-                            Label("Stop", systemImage: "stop.fill")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
-                                .background(StudioTheme.danger, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
+                    circleControl(
+                        systemImage: "stop.fill",
+                        tint: StudioTheme.danger,
+                        label: "Stop brewing"
+                    ) {
+                        confirmingStop = true
                     }
                 }
+                .frame(maxWidth: .infinity)
             } else {
                 // Nothing can be sent while the link is down, so there is no
                 // stop to offer. Reconnecting is the way back to one — but a
@@ -1720,8 +1686,19 @@ struct BrewSessionView: View {
             )
         }
 
-        if machine.telemetry.state == .error, errorMessage == nil {
+        if machine.telemetry.state == .error,
+           errorMessage == nil,
+           acknowledgedFault != machine.brewProgress.errorCommand {
             errorMessage = machineErrorMessage
+        }
+
+        // The machine stops itself on an empty grinder — it reports the fault,
+        // finishes the grind and returns to its alert screen. The session was
+        // left running against a machine that had already given up, offering
+        // Pause and Stop for a brew that was over.
+        if machine.brewProgress.errorCommand == XBloomNotification.grinderEmptyAbnormal.rawValue,
+           !finished {
+            abandonLiveSession(reason: "The grinder found no beans, so the machine stopped.")
         }
 
         finishIfMachineReportsCompletion()
@@ -1822,6 +1799,23 @@ struct BrewSessionView: View {
             return
         }
         completeLiveSession()
+    }
+
+    /// Ends a session the machine has abandoned. No coffee was made, so
+    /// nothing is written to history — unlike `completeLiveSession`, which
+    /// records the cup.
+    @MainActor
+    private func abandonLiveSession(reason: String) {
+        liveTicker?.cancel()
+        liveTicker = nil
+        isPaused = false
+        finished = true
+        currentPhase = .error
+        stage = reason
+        brewSession.markCompleted()
+        Task {
+            await BrewLiveActivityManager.shared.end(with: activityState(phase: .error), success: false)
+        }
     }
 
     @MainActor

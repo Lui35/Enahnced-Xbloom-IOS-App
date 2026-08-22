@@ -437,7 +437,11 @@ final class XBloomBLEClient: NSObject {
             // it, which is the difference the owner noticed on the machine's
             // own display.
             try await write(XBloomProtocol.command(.mtuNegotiate, values: [185, 1]))
-            try await Task.sleep(for: .milliseconds(300))
+            // The vendor's app sends this and then nothing at all — the
+            // machine chimes, shows itself paired, and reports its model and
+            // firmware in its own time. Cleaning up stale state 300 ms later
+            // talked over that; the housekeeping below can wait for it.
+            try await Task.sleep(for: .seconds(2.5))
             try await write(XBloomProtocol.command(.recipeStop))
             try await Task.sleep(for: .milliseconds(500))
             try await write(XBloomProtocol.command(.outBrewerPage))

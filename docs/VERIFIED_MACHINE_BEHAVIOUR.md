@@ -360,6 +360,40 @@ The vendor's app opens with `8100 (185, 1)` before anything else, and the
 machine shows itself as paired afterwards. This app never sent it, which is the
 difference visible on the machine's own display.
 
+### 23. A grinding recipe works, and the empty grinder ends it
+
+Confirmed on hardware 2026-08-22 10:19 with the corrected `8104`: the machine
+grinds before the pours. With no beans in it:
+
+```
+11.14  40506  grinder_doing
+15.38  40517  grinder_empty_abnormal
+15.49  40507  device_grinder_finish
+15.64   8023  page 15                ← its own alert screen
+```
+
+The machine gives up on its own — it reports the fault, finishes the grind and
+leaves the brewing screen. There is nothing for the app to stop, so the session
+ends rather than sitting there offering Pause and Stop for a brew that is over.
+
+The fault also has to be dismissible. It arrives once and `errorCommand` never
+changes again until the next brew, so clearing the alert and then reading the
+same value on the next telemetry frame put it straight back on screen.
+
+### 24. The vendor sends nothing else on connect
+
+```
+15.381  8100  (185, 1)
+15.480  8100  echo
+15.616  8011  device_wakeup_sleep     ← the machine, unprompted
+16.059  8023  page 29
+16.103 40521  device_sync_info        "J15B01G634033 … V12.0D.500"
+```
+
+Then silence until the brew. This app followed `8100` with a stop and two page
+exits 300 ms later, over the top of the machine's own pairing announcement.
+The housekeeping now waits 2.5 s for it to finish.
+
 ## Still unverified
 
 - Grinder-on behaviour. Needs a capture with the grinder enabled — and that
