@@ -1082,3 +1082,39 @@ import Testing
     #expect(tracker.phase == .complete)
     #expect(tracker.pourIndex == 2)
 }
+
+/// A recipe that grinds still sends 8001 with a real grind size and speed —
+/// nothing about the visual pass or the clock work touched the decision. What
+/// was missing is any way to notice the machine ignoring it: it accepts the
+/// recipe, skips the burrs, and pours over dry beans without an error.
+@Test func aGrindingRecipeThatNeverGroundIsNoticed() throws {
+    var recipe = RecipeLibrary.defaults[0]
+    recipe.useGrinder = true
+    recipe.rpm = .rpm80
+
+    let packets = try XBloomProtocol.brewSequence(for: recipe)
+    #expect(packets.map { UInt16($0[3]) | UInt16($0[4]) << 8 } == [8102, 8104, 8001, 8002])
+
+    // Grinder off takes the other opcode, and only that.
+    var manual = recipe
+    manual.useGrinder = false
+    let manualPackets = try XBloomProtocol.brewSequence(for: manual)
+    #expect(manualPackets.map { UInt16($0[3]) | UInt16($0[4]) << 8 } == [8102, 8104, 8004, 8002])
+
+    // A brew that pours without a single grinder frame.
+    var silent = BrewProgressTracker()
+    let start = Date()
+    silent.ingest(command: 40502, value: nil, at: start)
+    silent.ingest(command: 40510, value: 0, at: start.addingTimeInterval(20))
+    #expect(silent.isExtracting)
+    #expect(!silent.observedGrinding)
+
+    // ...against one where the machine says it ground.
+    var ground = BrewProgressTracker()
+    ground.ingest(command: 40502, value: nil, at: start)
+    ground.ingest(command: 40506, value: 1, at: start.addingTimeInterval(3))   // grinder_doing
+    ground.ingest(command: 40507, value: nil, at: start.addingTimeInterval(18)) // grinder_finish
+    ground.ingest(command: 40510, value: 0, at: start.addingTimeInterval(20))
+    #expect(ground.observedGrinding)
+    #expect(ground.grinderFinishedAt == start.addingTimeInterval(18))
+}

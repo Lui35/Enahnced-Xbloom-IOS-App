@@ -28,6 +28,10 @@ public struct BrewProgressTracker: Equatable, Sendable {
     /// grinder events have never been seen, so this is usually nil and the
     /// brew clock falls back to the first pour.
     public private(set) var grinderFinishedAt: Date?
+    /// Whether the machine ever said it was grinding. A recipe that grinds and
+    /// reaches its first pour without this is a recipe that poured over dry
+    /// beans — the failure this machine gives no error for.
+    public private(set) var observedGrinding = false
     /// The pour the machine says it is on, taken from `wateringPhase`.
     public private(set) var pourIndex = 0
     /// True once a `wateringPhase` has arrived, meaning the pour index comes
@@ -72,9 +76,15 @@ public struct BrewProgressTracker: Equatable, Sendable {
             if !isExtracting { phase = .preparing }
 
         case .deviceBeginGrinder, .grinderDoing, .grindBegin:
+            observedGrinding = true
             if !isExtracting { phase = .grinding }
 
-        case .deviceGrinderFinish, .deviceOutGrinder, .deviceInBrewer,
+        case .deviceGrinderFinish:
+            observedGrinding = true
+            if grinderFinishedAt == nil { grinderFinishedAt = date }
+            if !isExtracting { phase = .preparing }
+
+        case .deviceOutGrinder, .deviceInBrewer,
              .deviceInScale, .deviceOutScale, .deviceBeginBrewer,
              .pourFirstVibrationBefore:
             // The grinder is done and the machine is on its way to pouring.

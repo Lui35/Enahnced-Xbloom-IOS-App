@@ -647,6 +647,16 @@ struct BrewSessionView: View {
         return recipe.pours[activePourIndex]
     }
 
+    /// A grinding recipe that reached its first pour without the machine ever
+    /// saying it ground. Nothing else in the system notices this: the recipe is
+    /// accepted, water is poured, and every reading looks normal.
+    private var pouredWithoutGrinding: Bool {
+        mode == .live
+            && recipe.useGrinder
+            && extractionStartedAt != nil
+            && !machine.brewProgress.observedGrinding
+    }
+
     /// Whether the scale has actually weighed any coffee this session.
     private var hasYieldSignal: Bool {
         mode == .simulation || weightTracker.hasMeasuredYield
@@ -1169,6 +1179,18 @@ struct BrewSessionView: View {
                             : "no reading",
                         color: hasYieldSignal ? StudioTheme.mint : StudioTheme.muted
                     )
+                }
+
+                if pouredWithoutGrinding {
+                    Label(
+                        "This recipe grinds, but the machine never reported grinding — "
+                            + "it went straight to pouring. Check the grinder before "
+                            + "you drink this one.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(StudioTheme.danger)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if scaleIsSilent {
