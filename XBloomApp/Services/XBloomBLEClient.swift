@@ -135,6 +135,9 @@ final class XBloomBLEClient: NSObject {
 
     func startBrew(_ recipe: Recipe) async throws {
         guard isConnected else { throw MachineError.notConnected }
+        // Nothing may be mid-flight when the recipe goes out.
+        await pendingScreenWork?.value
+        pendingScreenWork = nil
         try RecipeValidator.requireSafe(recipe)
         let packets = try XBloomProtocol.brewSequence(for: recipe)
         brewProgress.reset()
@@ -195,6 +198,12 @@ final class XBloomBLEClient: NSObject {
         sentPacketCount += 1
         trafficLog.note(note)
         trafficLog.record(direction: .sent, command: command.rawValue, detail: "", payload: packet)
+    }
+
+    /// Puts a line in the traffic log from the app's own side, so a recording
+    /// shows what the app decided as well as what the machine said.
+    func noteSessionEvent(_ text: String) {
+        trafficLog.note(text)
     }
 
     func stopBrew() throws {
@@ -317,10 +326,23 @@ final class XBloomBLEClient: NSObject {
     func closeGrinder() async {
         guard openPages.grinder else { return }
         openPages.grinder = false
-        _ = try? await send(.grindEnd, awaitingAcknowledgement: false)
-        try? await Task.sleep(for: .milliseconds(400))
-        _ = try? await send(.outGrinderPage, awaitingAcknowledgement: false)
+        let work = Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = try? await self.send(.grindEnd, awaitingAcknowledgement: false)
+            try? await Task.sleep(for: .milliseconds(400))
+            _ = try? await self.send(.outGrinderPage, awaitingAcknowledgement: false)
+        }
+        pendingScreenWork = work
+        await work.value
     }
+
+    /// Screen changes the app has asked for and not yet seen finish.
+    ///
+    /// A recipe must never be uploaded while one is in flight. Leaving the
+    /// grinder sends two commands 400 ms apart, and a brew started in that gap
+    /// dropped an `out_grinder_page` into the middle of the four setup
+    /// commands — which is the failure finding 8 already records for the scale.
+    private var pendingScreenWork: Task<Void, Never>?
 
     /// Runs a single pour with no recipe behind it. It travels the same
     /// encoding path a normal brew does, which is the only one verified against

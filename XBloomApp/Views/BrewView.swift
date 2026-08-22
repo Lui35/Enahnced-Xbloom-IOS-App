@@ -1705,14 +1705,6 @@ struct BrewSessionView: View {
             errorMessage = machineErrorMessage
         }
 
-        // The machine stops itself on an empty grinder — it reports the fault,
-        // finishes the grind and returns to its alert screen. The session was
-        // left running against a machine that had already given up, offering
-        // Pause and Stop for a brew that was over.
-        if machine.brewProgress.errorCommand == XBloomNotification.grinderEmptyAbnormal.rawValue,
-           !finished {
-            abandonLiveSession(reason: "The grinder found no beans, so the machine stopped.")
-        }
 
         finishIfMachineReportsCompletion()
     }
@@ -1806,29 +1798,17 @@ struct BrewSessionView: View {
         // machine's previous cycle, not to this brew. Honouring it ended the
         // session seconds after it started, with every pour marked done.
         guard extractionStartedAt != nil else { return }
-        guard machine.brewProgress.completedAt != nil
-                || machine.telemetry.state == .complete
-                || hasDrainedAfterFinalPour else {
+        let reason: String
+        if machine.brewProgress.completedAt != nil {
+            reason = "machine reported completion"
+        } else if machine.telemetry.state == .complete {
+            reason = "telemetry state is complete"
+        } else if hasDrainedAfterFinalPour {
+            reason = "bed drained after the final pour"
+        } else {
             return
         }
-        completeLiveSession()
-    }
-
-    /// Ends a session the machine has abandoned. No coffee was made, so
-    /// nothing is written to history — unlike `completeLiveSession`, which
-    /// records the cup.
-    @MainActor
-    private func abandonLiveSession(reason: String) {
-        liveTicker?.cancel()
-        liveTicker = nil
-        isPaused = false
-        finished = true
-        currentPhase = .error
-        stage = reason
-        brewSession.markCompleted()
-        Task {
-            await BrewLiveActivityManager.shared.end(with: activityState(phase: .error), success: false)
-        }
+        completeLiveSession(reason: reason)
     }
 
     @MainActor
@@ -1853,7 +1833,8 @@ struct BrewSessionView: View {
     }
 
     @MainActor
-    private func completeLiveSession() {
+    private func completeLiveSession(reason: String = "unspecified") {
+        machine.noteSessionEvent("App ended the session · \(reason)")
         liveTicker?.cancel()
         liveTicker = nil
         let endedAt = machine.brewProgress.completedAt ?? Date()
