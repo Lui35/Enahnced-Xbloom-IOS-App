@@ -432,6 +432,41 @@ first — pause, end, leave, in that order.
 Screens seen so far: **1** home, **2** after a grind ends, **15** the fault
 alert, **34** grinding, **35** brewing, **29–31** around a brew starting.
 
+### 26. The machine changes screens constantly, so a screen change is not the end
+
+2026-08-22 12:43, pressing pause mid-pour:
+
+```
+ 7.89   8023  page 35        brewing
+ 8.50  40510  watering_phase 0
+12.27  40518  pause sent
+12.70  40515  brewer_start_stop
+13.09   8023  page 31        ← the machine's paused screen
+13.10   note  App ended the session
+```
+
+The backstop treated any change away from the recorded brewing screen as the
+end of the recipe. Watched properly, this machine moves screens all the time:
+**30** and **34** while it grinds, **2** after a grind, **15** on a fault, and
+**31** the instant a brew pauses. Only **1**, home, has ever been seen at the
+end of one — and only for a brew stopped by hand, since a natural finish sends
+`take_cup` and needs no backstop at all.
+
+### 27. A correct grinding recipe was refused
+
+Same recording. Everything the app sent matches the run that ground an hour
+earlier: `8001`, cup `(200.0, 80.0)`, dose 16, grind size 36, RPM 90 in the
+first pour's seventh byte, the four setup commands a second apart.
+
+```
+worked 10:19   brewer_start → page 30 → page 34 → grinder_doing
+failed 12:43   brewer_start → page 35 → watering_phase
+```
+
+The machine picked its no-grind program within 400 ms of accepting the recipe.
+Nothing in the bytes accounts for it; the difference is not on the app's side
+of the link. **Unresolved.**
+
 ## Still unverified
 
 - Grinder-on behaviour. Needs a capture with the grinder enabled — and that

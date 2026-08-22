@@ -49,6 +49,10 @@ public struct BrewProgressTracker: Equatable, Sendable {
     /// becomes meaningful as a progress signal.
     public private(set) var recipeAccepted = false
 
+    /// The machine's home screen. Seen at the end of a brew that was stopped
+    /// by hand, and never once during one.
+    static let homePage: UInt32 = 1
+
     public init() {}
 
     public var isExtracting: Bool { extractionStartedAt != nil }
@@ -142,13 +146,25 @@ public struct BrewProgressTracker: Equatable, Sendable {
 
         // The machine reports its screen shortly after accepting the recipe,
         // before the first pour. That screen is the brewing screen.
-        guard let brewingPage else {
+        guard brewingPage != nil else {
             brewingPage = page
             return
         }
-        // Leaving it is the only completion signal this firmware gives when it
-        // sends no finish event at all.
-        if page != brewingPage, isExtracting, completedAt == nil {
+
+        // Only going home ends a recipe.
+        //
+        // This used to treat *any* change away from the brewing screen as the
+        // end, which was wrong the moment the machine was watched properly: it
+        // moves between screens constantly while brewing — 30 and 34 while it
+        // grinds, 15 on a fault, 2 after a grind, and 31 the instant a brew is
+        // paused. A 2026-08-22 12:43 recording ends the session one frame after
+        // the pause, because page 35 became page 31 and the app called that a
+        // finished cup.
+        //
+        // This machine sends `take_cup` at a real finish anyway; the page is
+        // only a backstop for firmware that does not, so it is worth nothing if
+        // it cannot be trusted.
+        if page == Self.homePage, isExtracting, completedAt == nil {
             completedAt = date
             phase = .complete
         }

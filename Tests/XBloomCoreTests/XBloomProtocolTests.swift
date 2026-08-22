@@ -1155,3 +1155,44 @@ import Testing
 private extension Data {
     var hexString: String { map { String(format: "%02x", $0) }.joined() }
 }
+
+/// Replays the 2026-08-22 12:43 recording, where pressing pause ended the
+/// session. The machine changes screens when it pauses — page 35 becomes page
+/// 31 — and the page backstop read any change away from the brewing screen as
+/// a finished cup.
+@Test func pausingABrewDoesNotFinishIt() throws {
+    var tracker = BrewProgressTracker()
+    let zero = Date()
+    func at(_ s: Double) -> Date { zero.addingTimeInterval(s) }
+
+    tracker.ingest(command: 40502, value: nil, at: at(7.49))   // brewer start
+    tracker.ingest(command: 8023, value: 35, at: at(7.89))     // brewing screen
+    tracker.ingest(command: 40510, value: 0, at: at(8.50))     // first pour
+    #expect(tracker.isExtracting)
+
+    tracker.ingest(command: 40518, value: nil, at: at(12.67))  // pause echo
+    tracker.ingest(command: 40515, value: nil, at: at(12.70))  // brewer_start_stop
+    tracker.ingest(command: 8023, value: 31, at: at(13.09))    // screen changes
+    #expect(tracker.completedAt == nil)
+    #expect(tracker.phase != .complete)
+
+    // Resuming and running on is still a live brew.
+    tracker.ingest(command: 40524, value: nil, at: at(20))
+    tracker.ingest(command: 8023, value: 35, at: at(21))
+    #expect(tracker.completedAt == nil)
+
+    // Going home ends it, which is what a hand-stopped brew does.
+    tracker.ingest(command: 8023, value: 1, at: at(60))
+    #expect(tracker.completedAt == at(60))
+    #expect(tracker.phase == .complete)
+
+    // And take_cup still ends it outright, which is what this firmware sends.
+    var natural = BrewProgressTracker()
+    natural.ingest(command: 40502, value: nil, at: at(0))
+    natural.ingest(command: 8023, value: 35, at: at(1))
+    natural.ingest(command: 40510, value: 0, at: at(2))
+    natural.ingest(command: 8023, value: 34, at: at(3))   // grinding, mid-brew
+    #expect(natural.completedAt == nil)
+    natural.ingest(command: 40512, value: nil, at: at(90))
+    #expect(natural.completedAt == at(90))
+}
