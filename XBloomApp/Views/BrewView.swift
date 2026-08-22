@@ -750,16 +750,6 @@ struct BrewSessionView: View {
         .safeAreaInset(edge: .bottom) { sessionControls }
         .interactiveDismissDisabled(isSessionLocked)
         .confirmationDialog(
-            "Stop this brew?",
-            isPresented: $confirmingStop,
-            titleVisibility: .visible
-        ) {
-            Button("Stop brewing", role: .destructive) { stopLiveBrew() }
-            Button("Keep brewing", role: .cancel) {}
-        } message: {
-            Text("The machine stops pouring straight away. What has already been extracted is kept in your history.")
-        }
-        .confirmationDialog(
             "Close without stopping the machine?",
             isPresented: $confirmingLeave,
             titleVisibility: .visible
@@ -809,6 +799,52 @@ struct BrewSessionView: View {
     /// the end of the scrolling content, below the chart and every pour card,
     /// while the toolbar's close button was hidden for the duration of a live
     /// brew — so there was no visible way out of a running session.
+    /// The stop confirmation, in the bar the question was asked from.
+    ///
+    /// It used to be a system dialog thrown over the running brew, which reads
+    /// as an interruption from somewhere else rather than the second half of
+    /// the tap you just made. Here the consequence is a line of text you can
+    /// read while the machine is still pouring, with the two answers under it.
+    private var stopConfirmation: some View {
+        VStack(spacing: 10) {
+            Text("The machine stops pouring straight away. What is already in the cup stays in your history.")
+                .font(.subheadline)
+                .foregroundStyle(StudioTheme.muted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button {
+                    withAnimation(.snappy(duration: 0.22)) { confirmingStop = false }
+                } label: {
+                    Text("Keep brewing")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(StudioTheme.raised, in: Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    confirmingStop = false
+                    stopLiveBrew()
+                } label: {
+                    Label("Stop the brew", systemImage: "stop.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(StudioTheme.danger, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+
     @ViewBuilder
     private var sessionControls: some View {
         VStack(spacing: 10) {
@@ -841,17 +877,21 @@ struct BrewSessionView: View {
                 // and the machine disagree about whether coffee was being made
                 // — the session closed, the xBloom kept pouring, and nothing on
                 // screen said so.
-                Button {
-                    confirmingStop = true
-                } label: {
-                    Label("Stop brewing", systemImage: "stop.fill")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(StudioTheme.danger, in: Capsule())
+                if confirmingStop {
+                    stopConfirmation
+                } else {
+                    Button {
+                        withAnimation(.snappy(duration: 0.22)) { confirmingStop = true }
+                    } label: {
+                        Label("Stop brewing", systemImage: "stop.fill")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .background(StudioTheme.danger, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             } else {
                 // Nothing can be sent while the link is down, so there is no
                 // stop to offer. Reconnecting is the way back to one — but a
