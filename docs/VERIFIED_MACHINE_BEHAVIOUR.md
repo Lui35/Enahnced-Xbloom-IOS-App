@@ -502,9 +502,26 @@ a reference (80 in both traces, whether it started at 57 or 92), `40526` zeroes
 it there, and `40506 grinder_doing` is the only frame that means the grind has
 begun. The app timed from the acknowledgement, so a 2 s grind read as 8 s.
 
-The gear numbers are **not** grind size: a move to size 50 walked 57 → 80, and
-a move to size 53 walked 81 → 83. Nothing maps them onto the 1–80 dial, so the
-app shows "setting the burrs" rather than inventing a step count.
+### 28a. The gear stream *is* the dial, offset by thirty
+
+The gear numbers looked unrelated to grind size until the endpoints were lined
+up. Every travel ends at **the requested size plus 30**:
+
+| Trace | Size asked for | Travel | `gear_reset_zero` |
+|---|---:|---|---:|
+| 13:36 | 50 | 57 → 79 | **80** |
+| 12:59 | 53 | 82 | **83** |
+| vendor recipe (finding 14) | 51 | 92 → 82 | **81** |
+
+So a `device_gears` frame is the dial position the burrs are passing through,
+`gear + 30`. The app reads them back with `XBloomProtocol.grindSize(atGear:)`
+and draws the real position on the grind-size dial as a second, grey bar, which
+moves because the machine moved. Readings outside 31–110 are refused rather
+than painted, since nothing has been recorded outside that span.
+
+The `3500` echo and `40526 gear_reset_zero` carry positions in the same units —
+the first the travel's start, the second its end — and are parsed alongside
+`40505`.
 
 ### 29. Nothing on the wire carries the machine's clock
 

@@ -1170,6 +1170,42 @@ import Testing
     #expect(silentAltogether.brewingScreenAt == at(19.0))
 }
 
+/// The gear stream is the dial, offset by thirty. Every pair below is the end
+/// of a real burr travel and the grind size the machine was asked for, from the
+/// three PacketLogger traces — so the app can show where the burrs actually
+/// are while they move instead of guessing at it.
+@Test func theGearStreamReadsBackAsAGrindSize() throws {
+    #expect(XBloomProtocol.grindSize(atGear: 80) == 50)   // 13:36, size 50
+    #expect(XBloomProtocol.grindSize(atGear: 83) == 53)   // 12:59, size 53
+    #expect(XBloomProtocol.grindSize(atGear: 81) == 51)   // vendor recipe, size 51
+
+    // Mid-travel, one step per frame.
+    #expect(XBloomProtocol.grindSize(atGear: 56) == 26)
+    #expect(XBloomProtocol.grindSize(atGear: 57) == 27)
+
+    // Off the dial in either direction is not a position.
+    #expect(XBloomProtocol.grindSize(atGear: 29) == nil)
+    #expect(XBloomProtocol.grindSize(atGear: 30) == nil)
+    #expect(XBloomProtocol.grindSize(atGear: 111) == nil)
+
+    // A grind command's echo carries the position the carrier starts from.
+    let echo = XBloomProtocol.command(.grindAdjust, values: [56])
+    #expect(try XBloomProtocol.parseNotification(echo).gearPosition == 56)
+
+    // And `gear_reset_zero` carries the position it finished at.
+    var payload = Data(count: 4)
+    payload[0] = 80
+    var resetZero = XBloomProtocol.rawCommand(.recipeStop, payload: payload)
+    resetZero[3] = 0x4E             // 40526 gear_reset_zero
+    resetZero[4] = 0x9E
+    let crc = XBloomProtocol.crc16(resetZero.dropLast(2))
+    resetZero[resetZero.count - 2] = UInt8(crc & 0xFF)
+    resetZero[resetZero.count - 1] = UInt8(crc >> 8)
+    let arrived = try XBloomProtocol.parseNotification(resetZero)
+    #expect(arrived.gearPosition == 80)
+    #expect(XBloomProtocol.grindSize(atGear: try #require(arrived.gearPosition)) == 50)
+}
+
 /// A recipe that grinds still sends 8001 with a real grind size and speed —
 /// nothing about the visual pass or the clock work touched the decision. What
 /// was missing is any way to notice the machine ignoring it: it accepts the

@@ -156,8 +156,13 @@ position, and the machine then walks the burr carrier one `40505 device_gears`
 step every ~200 ms before it grinds anything — 5.5 s for a 24-step move in the
 13:36 capture. The screen therefore shows "setting the burrs" from the
 acknowledgement, and only starts its elapsed clock on `40506 grinder_doing`.
-Gear numbers are not grind sizes (a move to size 50 walked 57 → 80), so nothing
-tries to render them as one. Closing the screen while a grind is running sends **pause, end, leave**
+
+Gear readings are dial positions offset by thirty — every recorded travel ends
+at the requested size + 30 (80 for size 50, 83 for 53, 81 for 51) — so
+`XBloomProtocol.grindSize(atGear:)` puts the burrs' real position on the
+grind-size dial as a grey bar that travels with them. The `3500` echo carries
+where the travel starts and `40526 gear_reset_zero` where it ends; a reading
+off the dial paints nothing. Closing the screen while a grind is running sends **pause, end, leave**
 in that order ([GrinderView.swift:46](XBloomApp/Views/GrinderView.swift:46)).
 
 `40506 grinder_doing` and `40505 device_gears` are displayed raw, never as

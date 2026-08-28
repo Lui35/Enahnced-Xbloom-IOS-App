@@ -261,7 +261,12 @@ public enum XBloomProtocol {
             // grams.
             result.grinderReport = result.eventValue
             result.state = .grinding
-        case .deviceGears:
+        case .deviceGears, .gearResetZero:
+            result.gearPosition = result.eventValue
+        case .grindAdjust:
+            // The echo of a grind command carries the position the burr carrier
+            // is starting from, which is the only way to know where it sits
+            // before it begins moving.
             result.gearPosition = result.eventValue
         case .deviceBeginGrinder:
             result.state = .grinding
@@ -313,6 +318,26 @@ public enum XBloomProtocol {
         let milliliters = rawValue / 1_000
         guard milliliters <= maximumPlausibleWaterVolume else { return nil }
         return milliliters
+    }
+
+    /// How far `device_gears` counts above the dial it is moving to.
+    ///
+    /// Three captures end the burr carrier's travel at the requested size plus
+    /// exactly thirty: 80 for size 50, 83 for size 53, 81 for size 51. The
+    /// offset is the only thing between the machine's gear stream and the
+    /// number on the app's own dial.
+    static let gearGrindSizeOffset: UInt32 = 30
+
+    /// The grind size the burrs are physically at, from a `device_gears`,
+    /// `gear_reset_zero`, or `grind_adjust` echo.
+    ///
+    /// Nil for a reading outside the dial: the units are only established
+    /// across the range three recordings covered, and a stray value must not
+    /// paint a position the machine is not at.
+    public static func grindSize(atGear gear: UInt32) -> Int? {
+        guard gear >= gearGrindSizeOffset else { return nil }
+        let size = Int(gear - gearGrindSizeOffset)
+        return GrindSizeGuide.fullRange.contains(size) ? size : nil
     }
 
     private static func vibrationByte(for pour: PourStep) -> UInt8 {

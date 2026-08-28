@@ -76,6 +76,10 @@ struct StudioDialBox: View {
     /// An optional label that changes with the value — what the current setting
     /// actually means, shown inside the box next to the number.
     var caption: String?
+    /// Where the machine physically is, when that is a different thing from
+    /// what the dial is set to. Drawn as a second, grey fill that travels to
+    /// the setting while the machine catches up.
+    var machineValue: Double?
 
     @State private var dragStart: Double?
     @State private var hapticTick = 0
@@ -83,6 +87,13 @@ struct StudioDialBox: View {
     private var progress: Double {
         guard range.upperBound > range.lowerBound else { return 0 }
         return (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+    }
+
+    /// The machine's own position on the same 0–1 scale as `progress`.
+    private var machineProgress: Double? {
+        guard let machineValue, range.upperBound > range.lowerBound else { return nil }
+        let fraction = (machineValue - range.lowerBound) / (range.upperBound - range.lowerBound)
+        return min(1, max(0, fraction))
     }
 
     private var formattedValue: String {
@@ -108,6 +119,26 @@ struct StudioDialBox: View {
                     .frame(width: min(available, max(8, available * clamped)))
                     .padding(inset)
                     .animation(.linear(duration: 0.06), value: value)
+
+                if let machineProgress {
+                    let machineWidth = min(available, max(3, available * machineProgress))
+                    // Over the tinted fill, not under it: the machine is
+                    // usually behind the setting, and a grey bar hidden beneath
+                    // the fill would show nothing at all while it travelled.
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
+                            .fill(StudioTheme.muted.opacity(0.22))
+                            .frame(width: machineWidth)
+                        Capsule()
+                            .fill(StudioTheme.muted)
+                            .frame(width: 2)
+                            .offset(x: max(0, machineWidth - 2))
+                    }
+                    .padding(inset)
+                    // Slow enough to read as travel. The machine steps one unit
+                    // every ~200 ms, so this just joins the steps up.
+                    .animation(.easeInOut(duration: 0.28), value: machineProgress)
+                }
             }
             .allowsHitTesting(false)
 
@@ -183,6 +214,7 @@ struct StudioDialBox: View {
         .accessibilityValue(
             [
                 "\(prefix)\(formattedValue) \(unit)",
+                machineValue.map { String(format: "machine at %.0f", $0) },
                 caption,
             ]
             .compactMap { $0 }

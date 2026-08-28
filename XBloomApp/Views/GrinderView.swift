@@ -93,7 +93,8 @@ struct GrinderView: View {
                 .font(.title2.weight(.bold))
             Text(
                 isPositioning
-                    ? "The machine is stepping to size \(size) — it grinds when it arrives"
+                    ? machinePosition.map { "Passing size \(Int($0)) on the way to \(size)" }
+                        ?? "Stepping to size \(size) — it grinds when it arrives"
                     : band.detail
             )
             .font(.subheadline)
@@ -117,7 +118,8 @@ struct GrinderView: View {
                     value: $grindSize,
                     range: 1...80,
                     tint: grindTint,
-                    caption: band.method
+                    caption: band.method,
+                    machineValue: machinePosition
                 )
                 .opacity(isBusy ? 0.45 : 1)
                 .allowsHitTesting(!isBusy)
@@ -260,6 +262,18 @@ struct GrinderView: View {
                 .foregroundStyle(StudioTheme.muted)
             }
         }
+    }
+
+    /// Where the burrs actually are, on the same 1–80 dial.
+    ///
+    /// `device_gears` counts in dial units offset by thirty, and the machine
+    /// streams one step every ~200 ms while it travels — so the grey bar moves
+    /// because the machine moved, not because a timer said it should have.
+    /// Nil until the machine has reported a position at all.
+    private var machinePosition: Double? {
+        machine.telemetry.gearPosition
+            .flatMap(XBloomProtocol.grindSize(atGear:))
+            .map(Double.init)
     }
 
     private var grindTint: Color { StudioTheme.crema }
