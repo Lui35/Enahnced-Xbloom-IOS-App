@@ -206,6 +206,21 @@ struct SettingsView: View {
                         Divider()
 
                         NavigationLink {
+                            MaintenanceView()
+                        } label: {
+                            settingsRow(
+                                icon: "wrench.and.screwdriver.fill",
+                                title: "Maintenance",
+                                subtitle: "Brush, tablets, calibration, and descaling",
+                                tint: StudioTheme.crema
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
+
+                        Divider()
+
+                        NavigationLink {
                             MachineDiagnosticsView()
                         } label: {
                             settingsRow(

@@ -28,6 +28,7 @@
 		B0A60BDF676E785964240882 /* XBloomBLEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */; };
 		BD9C9803957ED9CE8D985C7D /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7210B750C8D2A62B65AE67BC /* HistoryView.swift */; };
 		C68FE583E0B5EA6C84C64712 /* BrewLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */; };
+		C721A74853A10E8C0728007D /* MaintenanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCF63F274EB4F27608114CE /* MaintenanceView.swift */; };
 		C80FB84C74016044044272D1 /* StudioComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49321FCC4F76BECD12162693 /* StudioComponents.swift */; };
 		D33E678FD500A3F406E29343 /* CameraCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00067031474B071C240BD8D2 /* CameraCaptureView.swift */; };
 		D5808958217B7635A5CDB4ED /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE378BDE43EE3E266B604B87 /* HomeView.swift */; };
@@ -88,6 +89,7 @@
 		A208A223001D666B39B03708 /* DoseWeighingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoseWeighingView.swift; sourceTree = "<group>"; };
 		A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceModels.swift; sourceTree = "<group>"; };
 		A52D9466670E09651FD3349C /* XBloomBrewLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomBrewLiveActivity.swift; sourceTree = "<group>"; };
+		ABCF63F274EB4F27608114CE /* MaintenanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceView.swift; sourceTree = "<group>"; };
 		C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		CDB1FBD500EDF962502E6514 /* GrinderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrinderView.swift; sourceTree = "<group>"; };
 		D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomBLEClient.swift; sourceTree = "<group>"; };
@@ -165,6 +167,7 @@
 				7210B750C8D2A62B65AE67BC /* HistoryView.swift */,
 				DE378BDE43EE3E266B604B87 /* HomeView.swift */,
 				0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */,
+				ABCF63F274EB4F27608114CE /* MaintenanceView.swift */,
 				F44BF38C59DA5466E734084C /* ManualPourView.swift */,
 				D88E4B719592471EEF5650D3 /* RecipesView.swift */,
 				288AD2850F804ABEB0F63EC4 /* RootView.swift */,
@@ -344,6 +347,7 @@
 				DD735855BFE08C898D0C6C69 /* KeychainStore.swift in Sources */,
 				24AE48EB3F43420D8089A5A7 /* MachineDiagnosticsView.swift in Sources */,
 				2E0CBD06A36229067366FF2D /* MachineFeedback.swift in Sources */,
+				C721A74853A10E8C0728007D /* MaintenanceView.swift in Sources */,
 				DC7F97AC5464A229362ABA61 /* ManualPourView.swift in Sources */,
 				17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */,
 				629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */,

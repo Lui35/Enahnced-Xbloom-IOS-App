@@ -18,6 +18,8 @@ provider key is never shipped in the mobile app.
   brew command ordering.
 - Server-side Gemini coffee-bag import and structured recipe generation.
 - Swift Charts brew telemetry views.
+- Maintenance schedule counted from brew history: grinder brush, cleaning
+  tablets with calibration, and descaling, each with xBloom's own procedure.
 
 ## Requirements
 

@@ -1317,3 +1317,87 @@ private extension Data {
     natural.ingest(command: 40512, value: nil, at: at(90))
     #expect(natural.completedAt == at(90))
 }
+
+/// Maintenance is counted from what the machine has actually done, not from a
+/// calendar alone: a grinder that has not run needs no brush, and a machine
+/// that has not brewed is not three months overdue for a descale.
+@Test func maintenanceFallsDueOnUseRatherThanOnTheCalendarAlone() throws {
+    let now = Date()
+    func daysAgo(_ days: Int) -> Date { now.addingTimeInterval(-Double(days) * 86_400) }
+
+    // Brush: a fortnight since the last one, but the grinder has been idle.
+    let idle = Maintenance.status(
+        .grinderBrush,
+        usage: MaintenanceUsage(since: daysAgo(14), wasServiced: true),
+        now: now
+    )
+    #expect(!idle.isDue)
+    #expect(idle.isDormant)
+
+    // The same fortnight, with the grinder used in it.
+    let used = Maintenance.status(
+        .grinderBrush,
+        usage: MaintenanceUsage(
+            since: daysAgo(14),
+            wasServiced: true,
+            groundGrams: 90,
+            brews: 5,
+            lastGrinderUseAt: daysAgo(1)
+        ),
+        now: now
+    )
+    #expect(used.isDue)
+
+    // Three days in, it is not due yet.
+    let fresh = Maintenance.status(
+        .grinderBrush,
+        usage: MaintenanceUsage(
+            since: daysAgo(3),
+            wasServiced: true,
+            groundGrams: 54,
+            brews: 3,
+            lastGrinderUseAt: daysAgo(1)
+        ),
+        now: now
+    )
+    #expect(!fresh.isDue)
+    #expect(abs(fresh.progress - 3.0 / 7.0) < 0.01)
+
+    // Tablets: one kilogram of beans through the burrs.
+    let almost = Maintenance.status(
+        .grinderTablets,
+        usage: MaintenanceUsage(since: daysAgo(40), wasServiced: true, groundGrams: 620, brews: 34),
+        now: now
+    )
+    #expect(!almost.isDue)
+    #expect(abs(almost.progress - 0.62) < 0.001)
+    #expect(
+        Maintenance.status(
+            .grinderTablets,
+            usage: MaintenanceUsage(since: daysAgo(60), wasServiced: true, groundGrams: 1_000, brews: 55),
+            now: now
+        ).isDue
+    )
+
+    // Descale: either count reaching its limit is enough.
+    let byBrews = Maintenance.status(
+        .descale,
+        usage: MaintenanceUsage(since: daysAgo(20), wasServiced: true, groundGrams: 5_400, brews: 300),
+        now: now
+    )
+    #expect(byBrews.isDue)
+    let byTime = Maintenance.status(
+        .descale,
+        usage: MaintenanceUsage(since: daysAgo(95), wasServiced: true, groundGrams: 200, brews: 11),
+        now: now
+    )
+    #expect(byTime.isDue)
+    #expect(byTime.progress == 1)
+    #expect(
+        !Maintenance.status(
+            .descale,
+            usage: MaintenanceUsage(since: daysAgo(30), wasServiced: true, groundGrams: 900, brews: 50),
+            now: now
+        ).isDue
+    )
+}
