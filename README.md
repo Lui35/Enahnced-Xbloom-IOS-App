@@ -55,3 +55,15 @@ swift test
 
 The Bluetooth implementation is unofficial and derived from the MIT-licensed
 PyBloom interoperability project. See `THIRD_PARTY_NOTICES.md`.
+
+## Bluetooth documentation
+
+- `docs/APP_BLE_IMPLEMENTATION.md` — what this app sends: the brew sequence with
+  and without the grinder, the pre-brew scale, weighing and grinder screens, the
+  grinder interlock, and how a dose comes off the bean bag.
+- `docs/VERIFIED_MACHINE_BEHAVIOUR.md` — what the owner's machine actually does,
+  read out of traffic recordings. Takes precedence over everything else.
+- `docs/OFFICIAL_APP_BLE_COMPARISON.md` — the vendor's command table, extracted
+  from its shipped binary.
+- `docs/PYBLOOM_BLUETOOTH_API.md` — the third-party reference this app started
+  from. Describes different firmware in places; treat as background.
