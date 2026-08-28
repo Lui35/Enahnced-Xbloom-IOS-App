@@ -550,6 +550,12 @@ struct BrewSessionView: View {
     /// Held mid-recipe. The machine keeps the program loaded, so this is a
     /// hold rather than the stop that ends a session.
     @State private var isPaused = false
+    /// When the current pause began, and how long every earlier pause lasted.
+    /// The machine's program is stopped while it is paused and its own display
+    /// stops with it; a plain wall-clock delta does not, so the two readings
+    /// drift apart by the length of every pause and never come back.
+    @State private var pausedAt: Date?
+    @State private var pausedTotal: TimeInterval = 0
     /// The fault the user has already dismissed. Without it the alert came
     /// back on the next telemetry frame, because the fault itself had not
     /// changed and never will until the next brew.
@@ -992,7 +998,7 @@ struct BrewSessionView: View {
                             ? brewElapsed
                             : mode == .simulation
                                 ? extractionElapsed
-                                : brewingStartedAt.map { max(0, context.date.timeIntervalSince($0)) } ?? 0
+                                : brewingStartedAt.map { machineElapsed(since: $0, at: context.date) } ?? 0
                     ),
                     icon: "timer"
                 )
@@ -1740,7 +1746,7 @@ struct BrewSessionView: View {
         }
 
         if let extractionStartedAt {
-            extractionElapsed = max(0, Date().timeIntervalSince(extractionStartedAt))
+            extractionElapsed = machineElapsed(since: extractionStartedAt)
             // The machine names the pour it is on in every watering-phase
             // frame. Delivered water is only a fallback for firmware that
             // does not send them.
@@ -1815,6 +1821,7 @@ struct BrewSessionView: View {
     private func pauseLiveBrew() {
         do {
             try machine.pauseBrew()
+            pausedAt = Date()
             withAnimation(.snappy(duration: 0.22)) { isPaused = true }
             stage = "Paused"
         } catch {
@@ -1826,6 +1833,8 @@ struct BrewSessionView: View {
     private func resumeLiveBrew() {
         do {
             try machine.resumeBrew()
+            if let pausedAt { pausedTotal += max(0, Date().timeIntervalSince(pausedAt)) }
+            pausedAt = nil
             withAnimation(.snappy(duration: 0.22)) { isPaused = false }
         } catch {
             errorMessage = error.localizedDescription
@@ -1839,9 +1848,9 @@ struct BrewSessionView: View {
         liveTicker = nil
         let endedAt = machine.brewProgress.completedAt ?? Date()
         if let extractionStartedAt {
-            extractionElapsed = max(0, endedAt.timeIntervalSince(extractionStartedAt))
+            extractionElapsed = machineElapsed(since: extractionStartedAt, at: endedAt)
         }
-        brewElapsed = brewingStartedAt.map { max(0, endedAt.timeIntervalSince($0)) } ?? extractionElapsed
+        brewElapsed = brewingStartedAt.map { machineElapsed(since: $0, at: endedAt) } ?? extractionElapsed
         finished = true
         progress = 1
         currentPhase = .complete
@@ -2041,15 +2050,28 @@ struct BrewSessionView: View {
         return hasLeftGrinding
     }
 
-    /// Zero on the brew clock.
+    /// Zero on the brew clock: the moment the machine reached its brewing
+    /// screen, which is where its own display starts counting.
     ///
-    /// The machine's own brew begins when the grinder stops: it agitates and
-    /// pours from there, with no heating step in between. The clock used to
-    /// wait for the first pour event, so it sat at 0:00 through everything
-    /// that had already started happening.
+    /// This used to be the `8002` echo — the recipe being accepted. On a
+    /// grinder-off recipe the two are a second apart, but a grinding recipe
+    /// spends the whole grind on screens 30 and 34 before it pours, and the app
+    /// counted every one of those seconds. `BrewProgressTracker` falls back to
+    /// the pre-pour vibration and then to the first pour for firmware that does
+    /// not report its screen.
+    ///
+    /// ponytail: anchored on the pour rather than on the program. If the
+    /// machine's own display turns out to count the grind too, move this back
+    /// to `recipeAcceptedAt` — it is this one line.
     private var brewingStartedAt: Date? {
         guard mode == .live else { return nil }
-        return machine.brewProgress.recipeAcceptedAt ?? extractionStartedAt
+        return machine.brewProgress.brewingScreenAt ?? extractionStartedAt
+    }
+
+    /// Wall time since `start`, less every second the recipe spent paused.
+    private func machineElapsed(since start: Date, at now: Date = Date()) -> TimeInterval {
+        let paused = pausedTotal + (pausedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0)
+        return max(0, now.timeIntervalSince(start) - paused)
     }
 
     /// What the machine's own display reads. Kept separate from

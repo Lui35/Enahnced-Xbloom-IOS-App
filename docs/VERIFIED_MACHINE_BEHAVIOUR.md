@@ -472,6 +472,66 @@ to stop the machine itself. The replacement interlock ignores page 35. It sends
 page-34, gear, or grinder evidence. This limits wasted water without cancelling
 a program merely because its display changed.
 
+## Two more PacketLogger traces — 2026-08-22 12:59 and 13:36
+
+`~/22.08.2026 12.59.09 PM.pklg` (644 frames, the vendor's app) and
+`~/22.08.2026 1.36.15 PM.pklg` (27 197 frames, ~3 hours of this app).
+
+### 28. A grind starts several seconds after the command is acknowledged
+
+The burr carrier has to travel to the setting first, and every step of it is on
+the wire:
+
+```
+10541.241 APP→  3500  grind_adjust (1000, 50, 80)
+10541.645 ←     3500  echo → 56                 ← the CURRENT gear position
+10541.848 ←    40505  device_gears 57
+   …                  one frame per ~200 ms, 57 … 79
+10546.573 ←    40526  gear_reset_zero 80
+10547.115 ←     8023  page 34
+10547.181 ←    40506  grinder_doing             ← the burrs are turning NOW
+```
+
+**5.5 seconds** between the acknowledgement and any coffee being ground, for a
+24-step move. A move of one or two steps takes under a second — the vendor's own
+capture walks 81 → 83 and grinds 0.9 s after the command.
+
+So `3500` being acknowledged means *accepted*, not *grinding*. The echo's
+payload is the position the carrier is starting from; `40505` counts it toward
+a reference (80 in both traces, whether it started at 57 or 92), `40526` zeroes
+it there, and `40506 grinder_doing` is the only frame that means the grind has
+begun. The app timed from the acknowledgement, so a 2 s grind read as 8 s.
+
+The gear numbers are **not** grind size: a move to size 50 walked 57 → 80, and
+a move to size 53 walked 81 → 83. Nothing maps them onto the 1–80 dial, so the
+app shows "setting the burrs" rather than inventing a step count.
+
+### 29. Nothing on the wire carries the machine's clock
+
+`40515 brewer_start_stop` arrives on every pause with a four-byte payload, which
+looked like a candidate. It is the scale:
+
+```
+11092.932  40515  98 6e a6 40  → 5.201   scale reads 5.201 g
+11224.514  40515  b1 72 94 40  → 4.639   scale reads 4.639 g
+```
+
+Both match the `20501` reading of the same instant exactly. There is no timer
+frame in 27 197 frames, so the app's clock can only be anchored on a machine
+*event*. The one it uses is the machine reaching its brewing screen — page 35,
+which on a grinding recipe comes after pages 30 and 34, i.e. after the grind.
+
+### 30. The stop-on-page-35 gate is visible in this trace, doing harm
+
+```
+10483.999  ←   8023  page 35
+10484.027  APP→ 40519 stop          ← 28 ms later
+10484.584  ←  40510  watering_phase 0
+```
+
+Three brews in a row are cancelled by the app within 30 ms of the page report.
+This is the interlock defect finding 27 describes, recorded from the outside.
+
 ## Still unverified
 
 - Whether the corrected ratio footer is sufficient to make every grinder-on
@@ -483,6 +543,10 @@ a program merely because its display changed.
 - `8023` page numbers beyond 35 (brewing) and 1 (home).
 - Whether any firmware omits all page-34, gear, and grinder notifications after
   physically grinding; the captured successful run reported them.
+- **What the machine's own display counts from on a grinding recipe.** Nothing
+  on the wire says. The app now starts its brew clock when the machine reaches
+  page 35, which excludes the grind; if the machine's display turns out to
+  include it, the anchor moves back to `recipeAcceptedAt`.
 
 ## How to add to this document
 

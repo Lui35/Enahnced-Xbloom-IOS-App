@@ -625,9 +625,13 @@ final class XBloomBLEClient: NSObject {
         }
 
         switch XBloomNotification(rawValue: command) {
-        case .deviceBeginGrinder, .deviceBeginBrewer, .brewerStart, .wateringPhase,
-             .deviceBrewerPass, .deviceWateringFinish, .deviceGrinderFinish,
-             .takeCup, .brewerFinish, .grinderEmptyAbnormal:
+        // `grinderDoing` is the machine saying the burrs are actually turning.
+        // Without it the state never became `.grinding`, so the only thing a
+        // screen could time was "the command was acknowledged" — which is up
+        // to six seconds before any coffee is ground.
+        case .deviceBeginGrinder, .grinderDoing, .deviceBeginBrewer, .brewerStart,
+             .wateringPhase, .deviceBrewerPass, .deviceWateringFinish,
+             .deviceGrinderFinish, .takeCup, .brewerFinish, .grinderEmptyAbnormal:
             telemetry.state = update.state
         case .waterTankVolumeLow:
             // Only a non-zero level is a fault; the parser leaves the state

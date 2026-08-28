@@ -149,7 +149,15 @@ burr:
 Every one of these waits for the machine's echo (2 s) and reports honestly when
 it does not arrive; the payload shapes for `8006` and `3500` are confirmed by
 capture, but the leading `1000` in `3500` is copied verbatim and its meaning is
-unknown. Closing the screen while a grind is running sends **pause, end, leave**
+unknown.
+
+**The echo is not the grind.** `3500` is acknowledged with the *current* gear
+position, and the machine then walks the burr carrier one `40505 device_gears`
+step every ~200 ms before it grinds anything — 5.5 s for a 24-step move in the
+13:36 capture. The screen therefore shows "setting the burrs" from the
+acknowledgement, and only starts its elapsed clock on `40506 grinder_doing`.
+Gear numbers are not grind sizes (a move to size 50 walked 57 → 80), so nothing
+tries to render them as one. Closing the screen while a grind is running sends **pause, end, leave**
 in that order ([GrinderView.swift:46](XBloomApp/Views/GrinderView.swift:46)).
 
 `40506 grinder_doing` and `40505 device_gears` are displayed raw, never as
@@ -315,6 +323,13 @@ Two continuous streams, and nothing else:
   resting on the machine reads 3471.9 g. The app takes the **lowest value in a
   1.6 s trailing window**, which ignores both.
 
+The app's brew clock starts when the machine reaches its brewing screen
+(page 35), falling back to `40527 pour_first_vibration_before` and then to the
+first `watering_phase`. It used to start at the `8002` echo, which on a
+grinder-off recipe is within a second — but a grinding recipe spends the whole
+grind on pages 30 and 34 first, and the app counted all of it. No frame carries
+the machine's own clock, so this anchor is the closest observable to it.
+
 There is **no temperature**. `8108 device_brewer_temputer` has never appeared in
 any recording of this machine, and the phase machine has no heating state — the
 UI shows the running pour's recipe target, labelled as such.
@@ -335,7 +350,7 @@ signal; the pour index only ever clamps forward.
 
 | Action | Frame | Notes |
 |---|---|---|
-| Pause | `40518 brew_flow_pause` | Byte-identical to the vendor's. The machine moves to page 31. |
+| Pause | `40518 brew_flow_pause` | Byte-identical to the vendor's. The machine moves to page 31 and answers `40515` carrying the scale reading. Paused time is subtracted from both app clocks — the machine's program is stopped, and a wall-clock delta drifts by the length of every pause. |
 | Resume | `40524 brew_flow_resume` | |
 | Stop | `40519 brew_flow_stop` | Also what the interlock sends. |
 

@@ -1130,6 +1130,46 @@ import Testing
     #expect(tracker.pourIndex == 2)
 }
 
+/// The machine spends the whole grind on its own screens — 30 and 34 — and only
+/// reaches the pouring screen afterwards. Timing a brew from the moment the
+/// recipe was accepted therefore counts every second the burrs were turning,
+/// which is the gap between the app's clock and the machine's on any recipe
+/// that grinds. Timings are the 2026-08-22 hardware run.
+@Test func theBrewClockDoesNotCountTheGrind() throws {
+    var tracker = BrewProgressTracker()
+    let zero = Date()
+    func at(_ seconds: Double) -> Date { zero.addingTimeInterval(seconds) }
+
+    tracker.ingest(command: 8002, value: nil, at: at(0))        // recipe accepted
+    tracker.ingest(command: 40502, value: nil, at: at(0.4))     // brewer start
+    tracker.ingest(command: 8023, value: 30, at: at(0.8))
+    tracker.ingest(command: 40505, value: 57, at: at(1.2))      // burrs moving
+    tracker.ingest(command: 8023, value: 34, at: at(6.0))       // grinding screen
+    tracker.ingest(command: 40506, value: nil, at: at(6.1))     // grinder running
+    tracker.ingest(command: 40507, value: nil, at: at(11.4))    // grind finished
+    tracker.ingest(command: 8023, value: 35, at: at(13.0))      // pouring screen
+    tracker.ingest(command: 40510, value: 0, at: at(20.0))      // first pour
+
+    let accepted = try #require(tracker.recipeAcceptedAt)
+    let brewingScreen = try #require(tracker.brewingScreenAt)
+    #expect(brewingScreen.timeIntervalSince(accepted) == 13)
+    #expect(tracker.observedGrinding)
+
+    // Firmware that never reports page 35 still gets a zero, from the machine
+    // getting to work rather than from the recipe being accepted.
+    var silentScreen = BrewProgressTracker()
+    silentScreen.ingest(command: 8002, value: nil, at: at(0))
+    silentScreen.ingest(command: 40527, value: nil, at: at(12.0))
+    silentScreen.ingest(command: 40510, value: 0, at: at(19.0))
+    #expect(silentScreen.brewingScreenAt == at(12.0))
+
+    // And one that reports neither falls back to the pour itself.
+    var silentAltogether = BrewProgressTracker()
+    silentAltogether.ingest(command: 8002, value: nil, at: at(0))
+    silentAltogether.ingest(command: 40510, value: 0, at: at(19.0))
+    #expect(silentAltogether.brewingScreenAt == at(19.0))
+}
+
 /// A recipe that grinds still sends 8001 with a real grind size and speed —
 /// nothing about the visual pass or the clock work touched the decision. What
 /// was missing is any way to notice the machine ignoring it: it accepts the

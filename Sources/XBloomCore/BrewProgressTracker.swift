@@ -45,6 +45,11 @@ public struct BrewProgressTracker: Equatable, Sendable {
     public private(set) var lastEventAt: Date?
     /// The first screen the machine reported after accepting the recipe.
     public private(set) var brewingPage: UInt32?
+    /// When the machine reached its brewing screen — the zero its own display
+    /// counts from. A grinding recipe sits on 30 and 34 for the whole grind
+    /// first, so a clock anchored on the recipe being accepted runs ahead of
+    /// the machine's by every second the burrs were turning.
+    public private(set) var brewingScreenAt: Date?
     public private(set) var currentPage: UInt32?
     /// Set once the machine acknowledges the recipe, which is when its screen
     /// becomes meaningful as a progress signal.
@@ -53,6 +58,8 @@ public struct BrewProgressTracker: Equatable, Sendable {
     /// The machine's home screen. Seen at the end of a brew that was stopped
     /// by hand, and never once during one.
     static let homePage: UInt32 = 1
+    /// The screen the machine pours on. It reaches this *after* grinding.
+    static let brewingScreen: UInt32 = 35
 
     public init() {}
 
@@ -102,9 +109,17 @@ public struct BrewProgressTracker: Equatable, Sendable {
             if grinderFinishedAt == nil { grinderFinishedAt = date }
             if !isExtracting { phase = .preparing }
 
+        case .pourFirstVibrationBefore:
+            // The machine getting to work, one second after it accepts a recipe
+            // and seven before the first pour. On a grinding recipe it can only
+            // arrive once the burrs have stopped, so it stands in as the brew
+            // clock's zero when no page report does.
+            if brewingScreenAt == nil { brewingScreenAt = date }
+            if grinderFinishedAt == nil { grinderFinishedAt = date }
+            if !isExtracting { phase = .preparing }
+
         case .deviceOutGrinder, .deviceInBrewer,
-             .deviceInScale, .deviceOutScale,
-             .pourFirstVibrationBefore:
+             .deviceInScale, .deviceOutScale:
             // The grinder is done and the machine is on its way to pouring.
             // It is not heating: this firmware has no heating state and never
             // reports water temperature.
@@ -140,6 +155,9 @@ public struct BrewProgressTracker: Equatable, Sendable {
 
     private mutating func beginPour(index: Int?, at date: Date) {
         hasObservedPourEvents = true
+        // Last resort for the brew clock: a machine that reports neither its
+        // screen nor the pre-pour vibration is at least pouring.
+        if brewingScreenAt == nil { brewingScreenAt = date }
         if brewerStartedAt == nil { brewerStartedAt = date }
         // A pour is proof the grinder is done, whether or not it said so.
         if grinderFinishedAt == nil { grinderFinishedAt = date }
@@ -158,6 +176,7 @@ public struct BrewProgressTracker: Equatable, Sendable {
         guard let page else { return }
         currentPage = page
         guard recipeAccepted else { return }
+        if page == Self.brewingScreen, brewingScreenAt == nil { brewingScreenAt = date }
 
         // The machine reports its screen shortly after accepting the recipe,
         // before the first pour. That screen is the brewing screen.

@@ -14,6 +14,10 @@ struct GrinderView: View {
     @State private var status: MachineToolStatus = .idle
     @State private var isWorking = false
     @State private var isGrinding = false
+    /// The command landed, but the burrs are still being walked to the setting.
+    /// A capture of the machine moving from one size to another spends 5.5 s
+    /// here — 24 `device_gears` steps — before it grinds anything.
+    @State private var isPositioning = false
     @State private var startedAt: Date?
     @State private var elapsed: TimeInterval = 0
     @State private var ticker: Task<Void, Never>?
@@ -48,14 +52,16 @@ struct GrinderView: View {
             ticker = nil
             // Walking away from a running grinder has to stop it first, the
             // same order the vendor's app uses: pause, end, then leave.
-            let wasGrinding = isGrinding
+            let wasRunning = isGrinding || isPositioning
             Task {
-                if wasGrinding { _ = try? await machine.stopGrinding() }
+                if wasRunning { _ = try? await machine.stopGrinding() }
                 await machine.closeGrinder()
             }
         }
         .onChange(of: machine.telemetry.state) { _, state in
-            if isGrinding, state == .idle {
+            if isPositioning, state == .grinding {
+                beginGrinding()
+            } else if isGrinding, state == .idle {
                 finishGrinding(message: "The machine reported the grinder stopped")
             }
         }
@@ -76,18 +82,23 @@ struct GrinderView: View {
                         .font(.system(size: 40, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .contentTransition(.numericText())
-                    Text(isGrinding ? "seconds" : "grind")
+                    Text(isGrinding ? "seconds" : isPositioning ? "moving to" : "grind")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(StudioTheme.muted)
                 }
             }
             .frame(width: 138, height: 138)
 
-            Text(band.method)
+            Text(isPositioning ? "Setting the burrs" : band.method)
                 .font(.title2.weight(.bold))
-            Text(band.detail)
-                .font(.subheadline)
-                .foregroundStyle(StudioTheme.muted)
+            Text(
+                isPositioning
+                    ? "The machine is stepping to size \(size) — it grinds when it arrives"
+                    : band.detail
+            )
+            .font(.subheadline)
+            .foregroundStyle(StudioTheme.muted)
+            .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 10)
@@ -108,8 +119,8 @@ struct GrinderView: View {
                     tint: grindTint,
                     caption: band.method
                 )
-                .opacity(isGrinding ? 0.45 : 1)
-                .allowsHitTesting(!isGrinding)
+                .opacity(isBusy ? 0.45 : 1)
+                .allowsHitTesting(!isBusy)
 
                 StudioDialBox(
                     title: "Grinder speed",
@@ -119,8 +130,8 @@ struct GrinderView: View {
                     unit: "RPM",
                     tint: StudioTheme.accent
                 )
-                .opacity(isGrinding ? 0.45 : 1)
-                .allowsHitTesting(!isGrinding)
+                .opacity(isBusy ? 0.45 : 1)
+                .allowsHitTesting(!isBusy)
             }
         }
     }
@@ -168,11 +179,11 @@ struct GrinderView: View {
 
     private var actions: some View {
         VStack(spacing: 12) {
-            if isGrinding {
+            if isGrinding || isPositioning {
                 Button(role: .destructive) {
                     Task { await stop() }
                 } label: {
-                    Label("Stop grinding", systemImage: "stop.fill")
+                    Label(isPositioning ? "Cancel" : "Stop grinding", systemImage: "stop.fill")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
@@ -264,13 +275,15 @@ struct GrinderView: View {
                 status = .unacknowledged("The machine did not acknowledge the grind command.")
                 return
             }
-            isGrinding = true
-            startedAt = Date()
+            isPositioning = true
             elapsed = 0
-            startTicker()
             status = configured
-                ? .succeeded("Grinding · \(band.method) · size \(size), \(Int(rpm)) RPM")
+                ? .succeeded("Moving the burrs to size \(size) · \(Int(rpm)) RPM")
                 : .unacknowledged("Grinding started, but the size and speed were not acknowledged.")
+            // A machine already at the requested setting reports `grinder_doing`
+            // before this runs, and `onChange` never fires for a value that did
+            // not change.
+            if machine.telemetry.state == .grinding { beginGrinding() }
         } catch {
             status = .failed(error.localizedDescription)
         }
@@ -282,7 +295,11 @@ struct GrinderView: View {
         do {
             let stopped = try await machine.stopGrinding()
             let seconds = Int(elapsed.rounded())
-            finishGrinding(message: "Stopped after \(seconds) s")
+            finishGrinding(
+                message: isGrinding
+                    ? "Stopped after \(seconds) s"
+                    : "Cancelled before the burrs finished moving"
+            )
             if !stopped {
                 status = .unacknowledged("Stop was sent but not acknowledged — check the machine.")
             }
@@ -291,12 +308,29 @@ struct GrinderView: View {
         }
     }
 
+    /// The machine has reported `grinder_doing`. Everything before this was
+    /// the burr carrier travelling, and timing it as grind time is what made a
+    /// two-second grind read as eight.
+    private func beginGrinding() {
+        isPositioning = false
+        isGrinding = true
+        startedAt = Date()
+        elapsed = 0
+        startTicker()
+        status = .succeeded("Grinding · \(band.method) · size \(size), \(Int(rpm)) RPM")
+    }
+
     private func finishGrinding(message: String) {
         ticker?.cancel()
         ticker = nil
         isGrinding = false
+        isPositioning = false
         status = .succeeded(message)
     }
+
+    /// The machine is busy either way — moving the burrs or grinding — and the
+    /// dials must not send a new setting into the middle of it.
+    private var isBusy: Bool { isGrinding || isPositioning }
 
     private func startTicker() {
         ticker?.cancel()
