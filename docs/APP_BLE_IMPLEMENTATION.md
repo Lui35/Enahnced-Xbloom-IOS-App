@@ -159,8 +159,8 @@ acknowledgement, and only starts its elapsed clock on `40506 grinder_doing`.
 
 Gear readings are dial positions offset by thirty — every recorded travel ends
 at the requested size + 30 (80 for size 50, 83 for 53, 81 for 51) — so
-`XBloomProtocol.grindSize(atGear:)` puts the burrs' real position on the
-grind-size dial as a grey bar that travels with them. The `3500` echo carries
+`XBloomProtocol.grindSize(atGear:)` puts the burrs' real position on both the
+grind-size dial and the ring above it, as a grey fill that travels with them. The `3500` echo carries
 where the travel starts and `40526 gear_reset_zero` where it ends; a reading
 off the dial paints nothing. Closing the screen while a grind is running sends **pause, end, leave**
 in that order ([GrinderView.swift:46](XBloomApp/Views/GrinderView.swift:46)).

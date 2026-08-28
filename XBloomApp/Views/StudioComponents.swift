@@ -121,23 +121,16 @@ struct StudioDialBox: View {
                     .animation(.linear(duration: 0.06), value: value)
 
                 if let machineProgress {
-                    let machineWidth = min(available, max(3, available * machineProgress))
                     // Over the tinted fill, not under it: the machine is
                     // usually behind the setting, and a grey bar hidden beneath
                     // the fill would show nothing at all while it travelled.
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
-                            .fill(StudioTheme.muted.opacity(0.22))
-                            .frame(width: machineWidth)
-                        Capsule()
-                            .fill(StudioTheme.muted)
-                            .frame(width: 2)
-                            .offset(x: max(0, machineWidth - 2))
-                    }
-                    .padding(inset)
-                    // Slow enough to read as travel. The machine steps one unit
-                    // every ~200 ms, so this just joins the steps up.
-                    .animation(.easeInOut(duration: 0.28), value: machineProgress)
+                    RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
+                        .fill(StudioTheme.muted.opacity(0.22))
+                        .frame(width: min(available, max(3, available * machineProgress)))
+                        .padding(inset)
+                        // Slow enough to read as travel. The machine steps one
+                        // unit every ~200 ms, so this joins the steps up.
+                        .animation(.easeInOut(duration: 0.28), value: machineProgress)
                 }
             }
             .allowsHitTesting(false)

@@ -77,6 +77,16 @@ struct GrinderView: View {
                     .stroke(grindTint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.smooth(duration: 0.2), value: grindSize)
+                // The same grey travel as the dial: how far round the burrs
+                // have actually come, laid over the setting they are heading
+                // for.
+                if let machinePosition {
+                    Circle()
+                        .trim(from: 0, to: max(0.02, machinePosition / 80))
+                        .stroke(StudioTheme.muted, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeInOut(duration: 0.28), value: machinePosition)
+                }
                 VStack(spacing: 2) {
                     Text(isGrinding ? "\(Int(elapsed.rounded()))" : "\(size)")
                         .font(.system(size: 40, weight: .semibold, design: .rounded))
