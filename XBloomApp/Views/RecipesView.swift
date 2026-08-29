@@ -43,6 +43,7 @@ struct RecipesView: View {
     @Environment(RecipeGenerationCoordinator.self) private var generation
     @Query(sort: \StoredRecipe.updatedAt, order: .reverse) private var recipes: [StoredRecipe]
     @State private var draft: Recipe?
+    @State private var isDesigningWithAI = false
     @State private var searchText = ""
     @State private var selectedFilter: RecipeLibraryFilter = .all
 
@@ -160,19 +161,29 @@ struct RecipesView: View {
             .toolbar {
                 MachineToolbar()
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        draft = Recipe(
-                            name: "",
-                            pours: [
-                                PourStep(volume: 50, temperature: 93, pauseAfter: 30),
-                                PourStep(volume: 120, temperature: 93, flowRate: 3.3),
-                                PourStep(volume: 118, temperature: 92, flowRate: 3.5),
-                            ]
-                        )
+                    Menu {
+                        Button("Create with AI", systemImage: "wand.and.sparkles") {
+                            isDesigningWithAI = true
+                        }
+                        Button("Create manually", systemImage: "slider.horizontal.3") {
+                            draft = Recipe(
+                                name: "",
+                                pours: [
+                                    PourStep(volume: 50, temperature: 93, pauseAfter: 30),
+                                    PourStep(volume: 120, temperature: 93, flowRate: 3.3),
+                                    PourStep(volume: 118, temperature: 92, flowRate: 3.5),
+                                ]
+                            )
+                        }
                     } label: {
                         Image(systemName: "plus")
                     }
                 }
+            }
+            // The same designer the bean shelf opens, without a bean chosen
+            // yet. One screen, two doors.
+            .sheet(isPresented: $isDesigningWithAI) {
+                AIRecipeDesignerView(bean: nil)
             }
             .sheet(item: $draft) { recipe in
                 RecipeEditorView(recipe: recipe) { saved in

@@ -1167,8 +1167,13 @@ struct AIRecipeDesignerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(GeminiService.self) private var gemini
     @Environment(RecipeGenerationCoordinator.self) private var generation
+    @Query(sort: \StoredBean.updatedAt, order: .reverse) private var libraryBeans: [StoredBean]
 
-    let bean: BeanProfile
+    /// The coffee this recipe is for, when the screen was opened from one.
+    /// Opened from the recipe library there is no bean yet, and there may never
+    /// be one — a recipe can be designed for something that is not in the
+    /// library at all.
+    let bean: BeanProfile?
 
     @State private var letsAIDecide: Bool
     @State private var rememberPreferences: Bool
@@ -1182,8 +1187,16 @@ struct AIRecipeDesignerView: View {
     /// The generation this screen started, so it can follow that one rather
     /// than any other the app happens to be running.
     @State private var requestID: UUID?
+    /// A bean chosen here, when the screen did not arrive with one.
+    @State private var pickedBeanID: UUID?
+    /// What the coffee is, when it is not in the library. The model reasons
+    /// from roast, process and origin; with none of that it is guessing.
+    @State private var beanDescription = ""
+    @State private var letsAIDecidePours = true
+    @State private var pourCount = 3
+    @State private var useGrinder = true
 
-    init(bean: BeanProfile) {
+    init(bean: BeanProfile?) {
         self.bean = bean
         let defaults = UserDefaults.standard
         let remembers = defaults.bool(forKey: "aiRecipeRememberPreferences")
@@ -1216,11 +1229,15 @@ struct AIRecipeDesignerView: View {
         _style = State(initialValue: remembers ? savedStyle : .hot)
         _cups = State(initialValue: remembers ? savedCups : 1)
         _selectedAims = State(initialValue: remembers ? migratedAims : [])
+        // The bean's own "desired cup" is the best starting note there is, and
+        // there simply is not one when the screen opens without a bean.
+        let desiredCup = bean?.desiredCup ?? ""
         _goal = State(
             initialValue: remembers
-                ? defaults.string(forKey: "aiRecipePreferredGoal") ?? bean.desiredCup
-                : bean.desiredCup
+                ? defaults.string(forKey: "aiRecipePreferredGoal") ?? desiredCup
+                : desiredCup
         )
+        _useGrinder = State(initialValue: defaults.object(forKey: "aiRecipeUseGrinder") as? Bool ?? true)
     }
 
     var body: some View {
@@ -1230,6 +1247,7 @@ struct AIRecipeDesignerView: View {
                 ScrollView {
                     LazyVStack(spacing: 18) {
                         hero
+                        beanChoice
 
                         StudioCard(accent: StudioTheme.accent) {
                             VStack(alignment: .leading, spacing: 16) {
@@ -1379,6 +1397,8 @@ struct AIRecipeDesignerView: View {
                         }
                         .animation(.easeInOut(duration: 0.22), value: letsAIDecide)
 
+                        pourChoice
+
                         if let createdRecipe {
                             StudioCard(accent: StudioTheme.mint) {
                                 VStack(alignment: .leading, spacing: 12) {
@@ -1474,6 +1494,7 @@ struct AIRecipeDesignerView: View {
         .onChange(of: rememberPreferences) { _, _ in persistPreferences() }
         .onChange(of: style) { _, _ in persistPreferences() }
         .onChange(of: cups) { _, _ in persistPreferences() }
+        .onChange(of: useGrinder) { _, _ in persistPreferences() }
         .onChange(of: selectedAims) { _, _ in persistPreferences() }
         .onChange(of: goal) { _, _ in persistPreferences() }
         // Deliberately no cancel-on-disappear: the request belongs to
@@ -1483,7 +1504,9 @@ struct AIRecipeDesignerView: View {
             // Reopening the designer while its request is still running picks
             // that request back up, rather than showing a Create button for
             // work already in flight.
-            if requestID == nil { requestID = generation.pending(forBean: bean.id)?.id }
+            if requestID == nil, let beanID = bean?.id {
+                requestID = generation.pending(forBean: beanID)?.id
+            }
             #if DEBUG
             // The overlay is otherwise only reachable with an account, so
             // `-seedPendingRecipe` adopts the seeded request too.
@@ -1493,7 +1516,7 @@ struct AIRecipeDesignerView: View {
             #endif
         }
         .onChange(of: generation.lastCompleted) { _, recipe in
-            guard let recipe, recipe.beanID == bean.id else { return }
+            guard let recipe, recipe.beanID == activeBean?.id else { return }
             createdRecipe = recipe
             rationale = recipe.aiDescription
         }
@@ -1513,14 +1536,24 @@ struct AIRecipeDesignerView: View {
         errorMessage = nil
         generation.clearLastCompleted()
         requestID = generation.start(
-            bean: bean,
+            bean: activeBean,
             style: style,
             cups: cups,
             goals: letsAIDecide ? [] : selectedAims.map(\.rawValue).sorted(),
             notes: letsAIDecide ? "" : goal.trimmingCharacters(in: .whitespacesAndNewlines),
+            pours: letsAIDecidePours ? nil : pourCount,
+            beanDescription: beanDescription,
+            useGrinder: useGrinder,
             gemini: gemini,
             context: modelContext
         )
+    }
+
+    /// The bean the recipe is actually for: the one this screen was opened
+    /// with, or the one picked here.
+    private var activeBean: BeanProfile? {
+        if let bean { return bean }
+        return libraryBeans.first { $0.id == pickedBeanID }?.profile
     }
 
     private var hero: some View {
@@ -1535,16 +1568,125 @@ struct AIRecipeDesignerView: View {
                     .font(.caption2.weight(.heavy))
                     .tracking(1.2)
                     .foregroundStyle(StudioTheme.accent)
-                Text(bean.name)
+                Text(activeBean?.name ?? "A new recipe")
                     .font(.title2.weight(.bold))
-                Text([bean.roaster, bean.country, bean.process].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.caption)
-                    .foregroundStyle(StudioTheme.muted)
-                    .lineLimit(2)
+                Text(
+                    activeBean.map { profile in
+                        [profile.roaster, profile.country, profile.process]
+                            .filter { !$0.isEmpty }
+                            .joined(separator: " · ")
+                    } ?? "Choose a coffee below, or describe what is in the hopper"
+                )
+                .font(.caption)
+                .foregroundStyle(StudioTheme.muted)
+                .lineLimit(2)
             }
             Spacer(minLength: 0)
         }
         .padding(.top, 8)
+    }
+
+    /// Only shown when the screen did not arrive attached to a bean.
+    @ViewBuilder
+    private var beanChoice: some View {
+        if bean == nil {
+            StudioCard(accent: StudioTheme.mint) {
+                VStack(alignment: .leading, spacing: 12) {
+                    StudioSectionTitle(
+                        title: "Which coffee?",
+                        detail: activeBean == nil ? "Optional" : nil,
+                        icon: "leaf.fill"
+                    )
+
+                    Menu {
+                        Button("No bean — I'll describe it") { pickedBeanID = nil }
+                        ForEach(libraryBeans) { stored in
+                            Button(stored.name) { pickedBeanID = stored.id }
+                        }
+                    } label: {
+                        HStack {
+                            Text(activeBean?.name ?? "No bean attached")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(.white)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(StudioTheme.muted)
+                        }
+                        .padding(13)
+                        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+
+                    if activeBean == nil {
+                        StudioTextField(
+                            title: "What is the coffee?",
+                            text: $beanDescription,
+                            icon: "text.book.closed.fill",
+                            axis: .vertical
+                        )
+                        Text(
+                            "Roast, process, origin, tasting notes — whatever you know. "
+                                + "The recipe is designed from this, so \"light Ethiopian "
+                                + "natural, fruity\" gets a far better answer than nothing."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(StudioTheme.muted)
+                    } else {
+                        Label("The bean's roast, process and notes are sent with the request.", systemImage: "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(StudioTheme.mint)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The pour count, which the brief is otherwise written to decide.
+    private var pourChoice: some View {
+        StudioCard {
+            VStack(alignment: .leading, spacing: 12) {
+                StudioSectionTitle(
+                    title: "Pours",
+                    detail: letsAIDecidePours ? "AI decides" : "\(pourCount) steps",
+                    icon: "drop.fill"
+                )
+                Toggle(isOn: $letsAIDecidePours) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Let the AI choose")
+                            .font(.subheadline.weight(.semibold))
+                        Text("It picks the pour count from the roast, process and your cup goal.")
+                            .font(.caption)
+                            .foregroundStyle(StudioTheme.muted)
+                    }
+                }
+                .tint(StudioTheme.accent)
+
+                if !letsAIDecidePours {
+                    HStack(spacing: 8) {
+                        ForEach(1...8, id: \.self) { count in
+                            Button {
+                                pourCount = count
+                            } label: {
+                                Text("\(count)")
+                                    .font(.subheadline.weight(.bold).monospacedDigit())
+                                    .foregroundStyle(pourCount == count ? .black : .white.opacity(0.72))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        pourCount == count ? StudioTheme.accent : StudioTheme.raised,
+                                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                GrinderPowerControl(isOn: $useGrinder)
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: letsAIDecidePours)
     }
 
 
@@ -1610,6 +1752,7 @@ struct AIRecipeDesignerView: View {
         guard rememberPreferences else { return }
         defaults.set(style.rawValue, forKey: "aiRecipePreferredStyle")
         defaults.set(cups, forKey: "aiRecipePreferredCups")
+        defaults.set(useGrinder, forKey: "aiRecipeUseGrinder")
         defaults.set(selectedAims.map(\.rawValue).sorted(), forKey: "aiRecipePreferredAims")
         defaults.set(goal, forKey: "aiRecipePreferredGoal")
     }

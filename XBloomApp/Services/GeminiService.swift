@@ -127,19 +127,40 @@ final class GeminiService {
         )
     }
 
+    /// - Parameters:
+    ///   - bean: The coffee, when there is one in the library. Without it the
+    ///     model has nothing to reason from, so `beanDescription` carries
+    ///     whatever the user could say about what is in the hopper.
+    ///   - pours: A pour count the user insisted on. Nil leaves the
+    ///     architecture to the model, which is what the brief is written for.
     func generateRecipe(
-        for bean: BeanProfile,
+        for bean: BeanProfile?,
         style: BrewStyle? = .hot,
         cups: Int? = 1,
         goals: [String] = [],
-        notes: String = ""
+        notes: String = "",
+        pours: Int? = nil,
+        beanDescription: String = ""
     ) async throws -> AIRecipeResult {
-        let profileData = try JSONEncoder().encode(bean)
-        let profileJSON = String(decoding: profileData, as: UTF8.self)
+        let profileJSON: String
+        if let bean {
+            profileJSON = String(decoding: try JSONEncoder().encode(bean), as: UTF8.self)
+        } else {
+            let described = beanDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            profileJSON = described.isEmpty
+                ? "No bean details were supplied. Design for a typical washed, "
+                    + "medium-light filter coffee and say so in the rationale."
+                : "No structured bean profile is available. The user describes "
+                    + "the coffee as: \(described)"
+        }
         let styleRequest = style.map { "\($0.rawValue) pour-over" }
             ?? "hot or iced pour-over, whichever best suits the bean"
         let servingRequest = cups.map { "\($0) cup(s)" }
-            ?? "1-3 cups, choosing the serving count that produces the most coherent recipe"
+            ?? "1-2 cups, choosing the serving count that produces the most coherent recipe"
+        let pourRequest = pours.map {
+            "The user has asked for exactly \($0) pour step(s). Use that count and "
+                + "make it work for this coffee, rather than choosing your own."
+        } ?? ""
         let selectedGoals = goals.isEmpty
             ? "Analyze the bean and choose the flavor direction that best showcases it."
             : goals.joined(separator: ", ")
@@ -148,6 +169,7 @@ final class GeminiService {
         Create one practical \(styleRequest) recipe for \(servingRequest) from the bean profile below.
         The user's simultaneous cup goals are: \(selectedGoals)
         Additional user note: \(notes.isEmpty ? "None." : notes)
+        \(pourRequest)
         Treat every selected goal as intentional and optimize them together. Do not discard
         one goal merely because another creates a tradeoff; choose a sensible balance and
         explain that balance in the rationale.
@@ -365,7 +387,7 @@ struct AIRecipeResult: Codable {
         case iceGrams = "ice_grams"
     }
 
-    func recipe(bean: BeanProfile, cups: Int? = 1, requestedStyle: BrewStyle? = nil) throws -> Recipe {
+    func recipe(bean: BeanProfile?, cups: Int? = 1, requestedStyle: BrewStyle? = nil) throws -> Recipe {
         let steps = pours.map {
             PourStep(
                 volume: min(240, max(0, $0.volume)),
@@ -379,16 +401,19 @@ struct AIRecipeResult: Codable {
         }
         let value = Recipe(
             name: String(name.prefix(80)),
-            roaster: bean.roaster,
-            origin: [bean.country, bean.process].filter { !$0.isEmpty }.joined(separator: " · "),
+            roaster: bean?.roaster ?? "",
+            origin: [bean?.country, bean?.process]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " · "),
             grindSize: min(55, max(31, grind)),
             rpm: GrinderRPM(rawValue: rpm) ?? .rpm80,
             dose: min(30, max(5, dose)),
             brewStyle: requestedStyle ?? BrewStyle(rawValue: brewStyle) ?? .hot,
             iceGrams: max(0, iceGrams),
-            beanID: bean.id,
+            beanID: bean?.id,
             generatedByAI: true,
-            servings: min(3, max(1, cups ?? servings)),
+            servings: min(2, max(1, cups ?? servings)),
             aiDescription: "\(methodName): \(rationale)",
             pours: Array(steps.prefix(8))
         )

@@ -16,6 +16,8 @@ final class RecipeGenerationCoordinator {
     struct Pending: Identifiable, Equatable {
         let id: UUID
         let beanID: UUID?
+        /// What the card calls it: the bean's name, the user's own description
+        /// of what is in the hopper, or nothing at all.
         let beanName: String
         let style: BrewStyle
         let cups: Int
@@ -40,20 +42,25 @@ final class RecipeGenerationCoordinator {
     /// Starts a generation and returns its id. The caller is free to disappear.
     @discardableResult
     func start(
-        bean: BeanProfile,
+        bean: BeanProfile?,
         style: BrewStyle,
         cups: Int,
         goals: [String],
         notes: String,
+        pours: Int? = nil,
+        beanDescription: String = "",
+        useGrinder: Bool = true,
         gemini: GeminiService,
         context: ModelContext
     ) -> UUID {
         let id = UUID()
+        let describedBean = beanDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         pending.append(
             Pending(
                 id: id,
-                beanID: bean.id,
-                beanName: bean.name,
+                beanID: bean?.id,
+                beanName: bean?.name
+                    ?? (describedBean.isEmpty ? "No bean attached" : describedBean),
                 style: style,
                 cups: cups,
                 startedAt: Date()
@@ -72,10 +79,15 @@ final class RecipeGenerationCoordinator {
                     style: style,
                     cups: cups,
                     goals: goals,
-                    notes: notes
+                    notes: notes,
+                    pours: pours,
+                    beanDescription: beanDescription
                 )
                 try Task.checkCancellation()
-                let recipe = try result.recipe(bean: bean, cups: cups, requestedStyle: style)
+                var recipe = try result.recipe(bean: bean, cups: cups, requestedStyle: style)
+                // Pre-ground coffee changes nothing about the pours and
+                // everything about the program the machine runs.
+                recipe.useGrinder = useGrinder
                 context.insert(StoredRecipe(recipe: recipe))
                 try context.save()
                 self?.lastCompleted = recipe
