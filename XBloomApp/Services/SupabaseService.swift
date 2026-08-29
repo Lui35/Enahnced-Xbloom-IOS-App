@@ -281,6 +281,9 @@ final class SupabaseService {
         metadata.setKnownIDs(Set(recipes.map(\.id)), for: .recipe)
         metadata.setKnownIDs(Set(brews.map(\.id)), for: .brew)
         metadata.setKnownIDs(Set(maintenance.map(\.id)), for: .maintenance)
+        // A sync can pull another device's brews down and push this one past
+        // the limit, so the trim runs here as well as after a brew.
+        try? LocalLibrary.pruneHistory(in: context)
         return CloudSyncSummary(
             beans: beans.count,
             recipes: recipes.count,
@@ -309,16 +312,31 @@ final class SupabaseService {
         return value
     }
 
+    /// Marks rows deleted in the cloud and throws away what made them big.
+    ///
+    /// The marker itself has to stay: it is how another device learns the
+    /// record is gone, and a row removed outright is simply re-uploaded by the
+    /// next device that still has it. What does not have to stay is the
+    /// payload — the recipe program, the bean profile, every telemetry sample
+    /// of a brew — which is all of the size. A tombstone keeps an id and a
+    /// date; the rest is emptied.
     private func pushDeletions(
         table: String,
         userID: UUID,
         deletedIDs: Set<UUID>,
         database: PostgrestClient
     ) async throws {
-        let tombstone = CloudTombstone(deletedAt: Date(), clientUpdatedAt: Date())
+        guard !deletedIDs.isEmpty else { return }
+        let now = Date()
+        let tombstone = CloudTombstone(deletedAt: now, clientUpdatedAt: now)
+        let emptied = CloudEmptiedTombstone(deletedAt: now, clientUpdatedAt: now, payloadJSON: "{}")
         for id in deletedIDs {
-            try await database.from(table)
-                .update(tombstone)
+            let query = database.from(table)
+            // maintenance_events carry no payload column to empty.
+            let update = table == "maintenance_events"
+                ? try query.update(tombstone)
+                : try query.update(emptied)
+            try await update
                 .eq("user_id", value: userID.uuidString)
                 .eq("id", value: id.uuidString)
                 .execute()
@@ -480,6 +498,20 @@ struct CloudSyncSummary {
     let brews: Int
     var maintenance: Int = 0
     var total: Int { beans + recipes + brews + maintenance }
+}
+
+/// A tombstone that also drops the payload, which is everything that made the
+/// row worth storing while it existed.
+private struct CloudEmptiedTombstone: Encodable {
+    let deletedAt: Date
+    let clientUpdatedAt: Date
+    let payloadJSON: String
+
+    enum CodingKeys: String, CodingKey {
+        case deletedAt = "deleted_at"
+        case clientUpdatedAt = "client_updated_at"
+        case payloadJSON = "payload_json"
+    }
 }
 
 private struct CloudMaintenanceRow: Codable {

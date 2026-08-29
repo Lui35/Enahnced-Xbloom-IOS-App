@@ -177,9 +177,11 @@ struct RecipesView: View {
                                 }
                                 .transition(.popIn)
                                 .contextMenu {
+                                    // Deleting a recipe takes the brews that
+                                    // ran it — they are records of this
+                                    // program — but never the bean.
                                     Button("Delete", systemImage: "trash", role: .destructive) {
-                                        modelContext.delete(stored)
-                                        try? modelContext.save()
+                                        try? LocalLibrary.delete(recipe: stored, in: modelContext)
                                     }
                                 }
                             }

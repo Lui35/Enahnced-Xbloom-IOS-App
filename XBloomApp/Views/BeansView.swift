@@ -13,6 +13,7 @@ struct BeansView: View {
     @State private var showingManualEditor = false
     @State private var showingPhotoImporter = false
     @State private var aiBean: BeanProfile?
+    @State private var deleting: StoredBean?
 
     var body: some View {
         NavigationStack {
@@ -50,6 +51,9 @@ struct BeansView: View {
                             .contextMenu {
                                 Button("Archive", systemImage: "archivebox") {
                                     archive(bean)
+                                }
+                                Button("Delete bag", systemImage: "trash", role: .destructive) {
+                                    deleting = bean
                                 }
                             }
                         }
@@ -91,6 +95,23 @@ struct BeansView: View {
             .sheet(item: $aiBean) { profile in
                 AIRecipeDesignerView(bean: profile)
             }
+        }
+        .confirmationDialog(
+            "Delete this bag?",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete the bag and its recipes", role: .destructive) {
+                if let deleting { try? LocalLibrary.delete(bean: deleting, in: modelContext) }
+                deleting = nil
+            }
+            Button("Cancel", role: .cancel) { deleting = nil }
+        } message: {
+            Text(
+                "Its recipes and every brew of them go too, here and in your "
+                    + "account. Archive instead to keep the record and take the bag "
+                    + "off the shelf."
+            )
         }
         .animation(.spring(response: 0.42, dampingFraction: 0.62), value: beanImport.pending.count)
         .animation(.spring(response: 0.42, dampingFraction: 0.62), value: beans.count)

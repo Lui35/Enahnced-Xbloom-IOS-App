@@ -43,6 +43,10 @@ struct RootView: View {
                 try LocalLibrary.seedHistoryPreviewIfRequested(in: modelContext)
                 try LocalLibrary.seedBeanRelationshipPreviewIfRequested(in: modelContext)
                 #endif
+                // A library that predates the retention limit is trimmed on
+                // the first launch that knows about it, rather than waiting
+                // for the next brew.
+                try LocalLibrary.pruneHistory(in: modelContext)
             } catch {
                 seedError = error.localizedDescription
             }

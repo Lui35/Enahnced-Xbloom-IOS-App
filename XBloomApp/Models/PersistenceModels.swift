@@ -365,6 +365,67 @@ enum LocalLibrary {
         }
     }
 
+    /// Removes a bean and everything that only exists because of it.
+    ///
+    /// A recipe is written for a coffee and a brew is a record of brewing one;
+    /// with the bag gone, both describe something that is not there. Deleting
+    /// the bean alone used to leave its recipes pointing at a missing bag and
+    /// its brews in history under a bean name nothing resolves.
+    static func delete(bean: StoredBean, in context: ModelContext) throws {
+        let beanID = bean.id
+        let recipes = try context.fetch(FetchDescriptor<StoredRecipe>())
+            .filter { $0.beanID == beanID || $0.recipe?.beanID == beanID }
+        for recipe in recipes {
+            try delete(recipe: recipe, in: context, save: false)
+        }
+        for brew in try brews(forBean: beanID, in: context) {
+            context.delete(brew)
+        }
+        context.delete(bean)
+        try context.save()
+    }
+
+    /// Removes a recipe and the brews that ran it — but never the bean, which
+    /// outlives any number of attempts at brewing it.
+    static func delete(recipe: StoredRecipe, in context: ModelContext, save: Bool = true) throws {
+        let recipeID = recipe.id
+        let related = try context.fetch(FetchDescriptor<StoredBrew>())
+            .filter { $0.recipeID == recipeID || $0.entry?.recipeID == recipeID }
+        for brew in related {
+            context.delete(brew)
+        }
+        context.delete(recipe)
+        if save { try context.save() }
+    }
+
+    private static func brews(forBean beanID: UUID, in context: ModelContext) throws -> [StoredBrew] {
+        try context.fetch(FetchDescriptor<StoredBrew>()).filter { stored in
+            if stored.beanID == beanID { return true }
+            guard let entry = stored.entry else { return false }
+            return entry.beanID == beanID
+                || entry.beanSnapshot?.id == beanID
+                || entry.recipeSnapshot?.beanID == beanID
+        }
+    }
+
+    /// Drops everything past the retention limit.
+    ///
+    /// Called wherever history grows — after a brew is recorded, and after a
+    /// sync pulls other devices' brews down — so the limit holds no matter
+    /// which of them added the record. The deletions reach the cloud through
+    /// the ordinary sync path, so the trim is not local-only.
+    @discardableResult
+    static func pruneHistory(in context: ModelContext) throws -> Int {
+        let brews = try context.fetch(FetchDescriptor<StoredBrew>())
+        let doomed = BrewRetention.idsToPrune(brews.map { ($0.id, $0.completedAt) })
+        guard !doomed.isEmpty else { return 0 }
+        for brew in brews where doomed.contains(brew.id) {
+            context.delete(brew)
+        }
+        try context.save()
+        return doomed.count
+    }
+
     static func recordCompletedBrew(
         id: UUID = UUID(),
         recipe: Recipe,
@@ -404,6 +465,7 @@ enum LocalLibrary {
             bean.update(with: profile)
         }
         try context.save()
+        try pruneHistory(in: context)
     }
 
     #if DEBUG
