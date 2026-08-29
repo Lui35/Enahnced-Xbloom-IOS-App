@@ -27,7 +27,9 @@ struct AccountAIView: View {
             StudioBackground()
             ScrollView {
                 LazyVStack(spacing: 18) {
-                    if cloud.isAuthenticated {
+                    if !SupabaseService.isConfigured {
+                        unconfiguredCard
+                    } else if cloud.isAuthenticated {
                         accountCard
                         modelCard
                         syncCard
@@ -61,6 +63,34 @@ struct AccountAIView: View {
         .onDisappear {
             testTask?.cancel()
             testTask = nil
+        }
+    }
+
+    /// This build has no backend, which is a supported way to run the app —
+    /// not a failure to report as one.
+    private var unconfiguredCard: some View {
+        StudioCard(accent: StudioTheme.muted) {
+            VStack(alignment: .leading, spacing: 12) {
+                StudioSectionTitle(
+                    title: "No project configured",
+                    detail: "Local only",
+                    icon: "icloud.slash"
+                )
+                Text(
+                    "This build was made without a Supabase project, so there is no "
+                        + "account to sign in to and the AI features are unavailable."
+                )
+                .font(.subheadline)
+                .foregroundStyle(StudioTheme.muted)
+                Text(
+                    "Everything else works: your beans, recipes and history live on "
+                        + "this iPhone, and the machine is driven over Bluetooth. To add "
+                        + "sync and AI, put your own project into Secrets.xcconfig and "
+                        + "rebuild — INSTALLATION.md walks through it."
+                )
+                .font(.caption)
+                .foregroundStyle(StudioTheme.muted)
+            }
         }
     }
 

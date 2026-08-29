@@ -42,6 +42,12 @@ jobs:
 
       # XBloom.xcodeproj is generated and gitignored in spirit: regenerating it
       # here also proves project.yml still describes a project that builds.
+      # No Supabase project in CI, on purpose: a public build must not carry
+      # anybody's backend. The app is fully usable without one — only sync and
+      # the AI features need it.
+      - name: Create an empty backend configuration
+        run: cp Secrets.example.xcconfig Secrets.xcconfig
+
       - name: Generate the Xcode project
         run: xcodegen generate
 
