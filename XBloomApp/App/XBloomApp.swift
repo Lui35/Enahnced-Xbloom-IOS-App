@@ -9,6 +9,7 @@ struct XBloomApp: App {
     @State private var gemini: GeminiService
     @State private var brewSession = BrewSessionCoordinator()
     @State private var recipeGeneration = RecipeGenerationCoordinator()
+    @State private var beanImport = BeanImportCoordinator()
 
     init() {
         let cloud = SupabaseService()
@@ -24,6 +25,7 @@ struct XBloomApp: App {
                 .environment(gemini)
                 .environment(brewSession)
                 .environment(recipeGeneration)
+                .environment(beanImport)
         }
         .modelContainer(
             for: [
@@ -41,12 +43,14 @@ private struct CloudBootstrapView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SupabaseService.self) private var cloud
     @Environment(RecipeGenerationCoordinator.self) private var recipeGeneration
+    @Environment(BeanImportCoordinator.self) private var beanImport
 
     var body: some View {
         RootView()
             .task {
                 #if DEBUG
                 recipeGeneration.seedPreviewPendingIfRequested()
+                beanImport.seedPreviewPendingIfRequested()
                 #endif
                 await cloud.refreshSession()
             }

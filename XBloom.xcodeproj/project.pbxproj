@@ -25,6 +25,7 @@
 		6BE814CAF21C11E434544B58 /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = C00EDAF742C0A316EE940850 /* XBloomCore */; };
 		79C41BBC938C16B7AC666171 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79E013F5D81849E8BB547B3D /* SettingsView.swift */; };
 		8CAAAE1F529CF4563D4DEA20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 45C4A7D8A6676C96CC574A14 /* Assets.xcassets */; };
+		9A4F67BC5D0A139A449C13BB /* BeanImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DFFA847B7A98439EE6958E /* BeanImportCoordinator.swift */; };
 		9C0C3A56B40FC3A2F477BE35 /* ScaleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EB51229F947ABE48988CA68 /* ScaleView.swift */; };
 		A7A212D3ABFA89659FA8DFF1 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 4CDEAC636DE90A7943C97D61 /* Supabase */; };
 		B0A60BDF676E785964240882 /* XBloomBLEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */; };
@@ -97,6 +98,7 @@
 		C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		CDB1FBD500EDF962502E6514 /* GrinderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrinderView.swift; sourceTree = "<group>"; };
 		D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomBLEClient.swift; sourceTree = "<group>"; };
+		D5DFFA847B7A98439EE6958E /* BeanImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeanImportCoordinator.swift; sourceTree = "<group>"; };
 		D88E4B719592471EEF5650D3 /* RecipesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipesView.swift; sourceTree = "<group>"; };
 		DE378BDE43EE3E266B604B87 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		EAC5A5AAF24A5BB4B324FDA9 /* xBloom app */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "xBloom app"; path = .; sourceTree = SOURCE_ROOT; };
@@ -186,6 +188,7 @@
 		6E51705A2B8D825AA7584777 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				D5DFFA847B7A98439EE6958E /* BeanImportCoordinator.swift */,
 				3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */,
 				1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */,
 				60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */,
@@ -341,6 +344,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				290E0226530B6696AA4E19F4 /* AccountAIView.swift in Sources */,
+				9A4F67BC5D0A139A449C13BB /* BeanImportCoordinator.swift in Sources */,
 				D87049683A34826E86428065 /* BeansView.swift in Sources */,
 				C68FE583E0B5EA6C84C64712 /* BrewLiveActivityManager.swift in Sources */,
 				DBE663F2A2D320EFF7BDDA29 /* BrewView.swift in Sources */,

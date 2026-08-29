@@ -1045,3 +1045,138 @@ struct AIProcessingOverlay: View {
         .zIndex(100)
     }
 }
+
+/// A card for work the AI is still doing, shown in the list where its result
+/// will land.
+///
+/// Motion is driven by `TimelineView(.animation)` rather than by `withAnimation`
+/// on a `@State` flag: a repeating animation started in `onAppear` is dropped
+/// whenever the surrounding list re-renders — which, in a screen fed by live
+/// queries, is constantly. That is why the first version sat still.
+struct AIGeneratingCard: View {
+    let title: String
+    let subtitle: String
+    var icon = "wand.and.sparkles"
+    var tint = StudioTheme.accent
+    /// Skeletons standing in for the figures the finished card will show.
+    var placeholderCount = 3
+    var onCancel: (() -> Void)?
+
+    private let shape = RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            let turn = Angle.degrees(time.truncatingRemainder(dividingBy: 3) / 3 * 360)
+            // A second, slower rotation keeps the glow from looking welded to
+            // the border it travels along.
+            let inner = Angle.degrees(-time.truncatingRemainder(dividingBy: 4.5) / 4.5 * 360)
+            let pulse = 0.5 + 0.5 * sin(time * 2)
+
+            content(inner: inner, pulse: pulse)
+                .background(StudioTheme.panel, in: shape)
+                .overlay {
+                    // The travelling light itself: one hard stroke for the
+                    // edge, one blurred copy under it for the glow.
+                    ZStack {
+                        shape.stroke(border, lineWidth: 9).blur(radius: 13)
+                        shape.stroke(border, lineWidth: 4).blur(radius: 4).opacity(0.9)
+                        shape.stroke(border, lineWidth: 2)
+                    }
+                    .rotationEffect(turn)
+                    // Wide enough for the bloom to spread; a tight mask cropped
+                    // the glow back to the same width as the line itself.
+                    .mask(shape.stroke(lineWidth: 18))
+                    .allowsHitTesting(false)
+                }
+                .clipShape(shape)
+        }
+    }
+
+    /// A conic sweep with one bright arc in it. Rotating the whole gradient
+    /// walks that arc around the card.
+    private var border: AngularGradient {
+        AngularGradient(
+            colors: [
+                tint.opacity(0.05),
+                tint.opacity(0.05),
+                tint,
+                StudioTheme.mint,
+                tint.opacity(0.05),
+                tint.opacity(0.05),
+            ],
+            center: .center
+        )
+    }
+
+    private func content(inner: Angle, pulse: Double) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .stroke(StudioTheme.raised, lineWidth: 3.5)
+                    .frame(width: 74, height: 74)
+                Circle()
+                    .trim(from: 0.06, to: 0.7)
+                    .stroke(
+                        AngularGradient(colors: [tint.opacity(0.1), tint, StudioTheme.mint], center: .center),
+                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                    )
+                    .frame(width: 74, height: 74)
+                    .rotationEffect(inner)
+                Image(systemName: icon)
+                    .font(.system(size: 25, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .scaleEffect(0.94 + 0.06 * pulse)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(StudioTheme.muted)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    ForEach(0..<placeholderCount, id: \.self) { index in
+                        Capsule()
+                            .fill(StudioTheme.raised)
+                            .frame(width: 46, height: 9)
+                            // The shimmer runs along the row rather than each
+                            // pill blinking on its own.
+                            .opacity(0.55 + 0.45 * abs(sin(pulse * .pi + Double(index) * 0.7)))
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if let onCancel {
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(StudioTheme.muted)
+                        .frame(width: 32, height: 32)
+                        .background(StudioTheme.raised, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cancel")
+            }
+        }
+        .padding(16)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(subtitle)")
+    }
+}
+
+/// The way a finished thing should arrive in a list: a small pop rather than a
+/// fade, so the eye catches the row that was not there a moment ago.
+extension AnyTransition {
+    static var popIn: AnyTransition {
+        .asymmetric(
+            insertion: .scale(scale: 0.82).combined(with: .opacity),
+            removal: .opacity
+        )
+    }
+}

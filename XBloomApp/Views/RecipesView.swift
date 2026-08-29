@@ -135,15 +135,14 @@ struct RecipesView: View {
                         // land. The request belongs to the app rather than to
                         // the designer sheet, so this survives leaving it.
                         ForEach(visiblePending) { item in
-                            GeneratingRecipeCard(pending: item) {
+                            AIGeneratingCard(
+                                title: "Designing a recipe",
+                                subtitle: "\(item.beanName) · \(item.style == .iced ? "Iced" : "Hot") · \(item.cups) cup\(item.cups == 1 ? "" : "s")",
+                                tint: item.style == .iced ? StudioTheme.iced : StudioTheme.accent
+                            ) {
                                 generation.cancel(item.id)
                             }
-                            .transition(
-                                .asymmetric(
-                                    insertion: .scale(scale: 0.96).combined(with: .opacity),
-                                    removal: .opacity
-                                )
-                            )
+                            .transition(.popIn)
                         }
 
                         if filteredRecipes.isEmpty, visiblePending.isEmpty {
@@ -176,6 +175,7 @@ struct RecipesView: View {
                                     RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
                                         .stroke(.white.opacity(0.08), lineWidth: 1)
                                 }
+                                .transition(.popIn)
                                 .contextMenu {
                                     Button("Delete", systemImage: "trash", role: .destructive) {
                                         modelContext.delete(stored)
@@ -228,9 +228,10 @@ struct RecipesView: View {
             }
         }
         .preferredColorScheme(.dark)
-        // The placeholder leaving and the real recipe arriving are one motion.
-        .animation(.smooth(duration: 0.4), value: generation.pending.count)
-        .animation(.smooth(duration: 0.4), value: recipes.count)
+        // The placeholder leaving and the real recipe arriving are one motion,
+        // and a spring is what makes the arrival read as a pop.
+        .animation(.spring(response: 0.42, dampingFraction: 0.62), value: generation.pending.count)
+        .animation(.spring(response: 0.42, dampingFraction: 0.62), value: recipes.count)
     }
 
     private var recipeSearchField: some View {
@@ -1450,100 +1451,3 @@ struct RecipeEditorView: View {
     }
 }
 
-/// A recipe the AI is still writing, shown in the library where it will land.
-///
-/// It is deliberately the shape of a real row — badge, title, three figures —
-/// so the finished recipe replaces it rather than appearing somewhere else.
-struct GeneratingRecipeCard: View {
-    let pending: RecipeGenerationCoordinator.Pending
-    let onCancel: () -> Void
-
-    @State private var sweep = false
-    @State private var spins = false
-
-    private var tint: Color {
-        pending.style == .iced ? StudioTheme.iced : StudioTheme.accent
-    }
-
-    var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .trim(from: 0.08, to: 0.72)
-                    .stroke(
-                        AngularGradient(
-                            colors: [tint.opacity(0.15), tint, StudioTheme.mint, tint.opacity(0.15)],
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
-                    )
-                    .frame(width: 74, height: 74)
-                    .rotationEffect(.degrees(spins ? 360 : 0))
-                Image(systemName: "wand.and.sparkles")
-                    .font(.system(size: 25, weight: .semibold))
-                    .foregroundStyle(tint)
-            }
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text("Designing a recipe")
-                    .font(.headline)
-                Text("\(pending.beanName) · \(pending.style == .iced ? "Iced" : "Hot") · \(pending.cups) cup\(pending.cups == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(StudioTheme.muted)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                // Where the dose, water, and ratio figures will be.
-                HStack(spacing: 8) {
-                    ForEach(0..<3, id: \.self) { _ in
-                        Capsule()
-                            .fill(StudioTheme.raised)
-                            .frame(width: 46, height: 9)
-                    }
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            Button(action: onCancel) {
-                Image(systemName: "xmark")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(StudioTheme.muted)
-                    .frame(width: 32, height: 32)
-                    .background(StudioTheme.raised, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Cancel this recipe")
-        }
-        .padding(16)
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
-                .stroke(tint.opacity(0.42), lineWidth: 1.5)
-        }
-        // A light sweeping across the card: the one part that says "working"
-        // rather than "empty".
-        .overlay {
-            GeometryReader { proxy in
-                RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [.clear, tint.opacity(0.14), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: proxy.size.width * 0.55)
-                    .offset(x: sweep ? proxy.size.width : -proxy.size.width * 0.55)
-            }
-            .allowsHitTesting(false)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Designing a recipe for \(pending.beanName)")
-        .onAppear {
-            withAnimation(.linear(duration: 2.6).repeatForever(autoreverses: false)) { spins = true }
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: false)) { sweep = true }
-        }
-    }
-}

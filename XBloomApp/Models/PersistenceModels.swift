@@ -11,10 +11,17 @@ final class StoredBean {
     var archived: Bool
     var updatedAt: Date
     var payload: Data
+    /// A bag the AI read off a photo and nobody has checked yet.
+    ///
+    /// Deliberately outside the synced payload: it is a note about this
+    /// device's inbox, not a fact about the coffee, and a bean already reviewed
+    /// on one phone should not arrive needing review on another. Added after
+    /// the first release, so it carries a default.
+    var needsVerification: Bool = false
     @Transient private var cachedPayload: Data?
     @Transient private var cachedProfile: BeanProfile?
 
-    init(profile: BeanProfile) {
+    init(profile: BeanProfile, needsVerification: Bool = false) {
         id = profile.id
         name = profile.name
         roaster = profile.roaster
@@ -22,6 +29,7 @@ final class StoredBean {
         archived = profile.archived
         updatedAt = Date()
         payload = (try? Self.encoder.encode(profile)) ?? Data()
+        self.needsVerification = needsVerification
     }
 
     var profile: BeanProfile? {

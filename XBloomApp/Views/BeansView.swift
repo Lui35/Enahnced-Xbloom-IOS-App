@@ -8,6 +8,7 @@ import XBloomCore
 struct BeansView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(GeminiService.self) private var gemini
+    @Environment(BeanImportCoordinator.self) private var beanImport
     @Query(sort: \StoredBean.updatedAt, order: .reverse) private var beans: [StoredBean]
     @State private var showingManualEditor = false
     @State private var showingPhotoImporter = false
@@ -21,8 +22,31 @@ struct BeansView: View {
                     LazyVStack(spacing: 18) {
                         beanShelfHero
 
+                        if let failure = beanImport.lastError {
+                            importFailureCard(failure)
+                        }
+
+                        // A bag still being read, on the shelf where it will
+                        // land. The request belongs to the app, so this is here
+                        // whether or not the importer sheet is still open.
+                        ForEach(beanImport.pending) { item in
+                            AIGeneratingCard(
+                                title: "Reading the bag",
+                                subtitle: item.photoCount == 1
+                                    ? "One photo · finding origin, process, and roast"
+                                    : "\(item.photoCount) photos · finding origin, process, and roast",
+                                icon: "doc.viewfinder.fill",
+                                tint: StudioTheme.mint,
+                                placeholderCount: 2
+                            ) {
+                                beanImport.cancel(item.id)
+                            }
+                            .transition(.popIn)
+                        }
+
                         ForEach(beans.filter { !$0.archived }) { bean in
                             beanShelfCard(bean)
+                            .transition(.popIn)
                             .contextMenu {
                                 Button("Archive", systemImage: "archivebox") {
                                     archive(bean)
@@ -67,6 +91,41 @@ struct BeansView: View {
             .sheet(item: $aiBean) { profile in
                 AIRecipeDesignerView(bean: profile)
             }
+        }
+        .animation(.spring(response: 0.42, dampingFraction: 0.62), value: beanImport.pending.count)
+        .animation(.spring(response: 0.42, dampingFraction: 0.62), value: beans.count)
+    }
+
+    /// An import that failed after its sheet was closed would otherwise vanish
+    /// without a word.
+    private func importFailureCard(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(StudioTheme.warning)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("The bag was not read")
+                    .font(.subheadline.weight(.bold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(StudioTheme.muted)
+            }
+            Spacer(minLength: 0)
+            Button {
+                beanImport.clearError()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(StudioTheme.muted)
+                    .frame(width: 30, height: 30)
+                    .background(StudioTheme.raised, in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
+                .stroke(StudioTheme.warning.opacity(0.4), lineWidth: 1.5)
         }
     }
 
@@ -148,6 +207,14 @@ struct BeansView: View {
                         .frame(width: 62, height: 62)
 
                         VStack(alignment: .leading, spacing: 5) {
+                            if bean.needsVerification {
+                                Label("NEEDS REVIEW", systemImage: "eye.trianglebadge.exclamationmark.fill")
+                                    .font(.caption2.weight(.heavy))
+                                    .foregroundStyle(.black)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(StudioTheme.warning, in: Capsule())
+                            }
                             Text(bean.name)
                                 .font(.title3.weight(.bold))
                                 .foregroundStyle(.white)
@@ -283,6 +350,7 @@ struct BeansView: View {
 }
 
 struct BeanDetailView: View {
+    @Environment(\.modelContext) private var modelContext
     let bean: StoredBean
     @Query(sort: \StoredRecipe.updatedAt, order: .reverse) private var storedRecipes: [StoredRecipe]
     @Query(sort: \StoredBrew.completedAt, order: .reverse) private var storedBrews: [StoredBrew]
@@ -321,6 +389,9 @@ struct BeanDetailView: View {
             ScrollView {
                 if let profile = bean.profile {
                     LazyVStack(spacing: 18) {
+                        if bean.needsVerification {
+                            verifyCard(profile)
+                        }
                         detailHero(profile)
                         relationshipOverviewCard(profile)
                         linkedRecipesCard(profile)
@@ -369,7 +440,8 @@ struct BeanDetailView: View {
         }
         .sheet(isPresented: $showingEditor) {
             if let profile = bean.profile {
-                BeanEditorView(profile: profile, storedBean: bean)
+                // Going through the details and saving them is the review.
+                BeanEditorView(profile: profile, storedBean: bean) { verify() }
             }
         }
         .sheet(isPresented: $showingRefill) {
@@ -378,6 +450,61 @@ struct BeanDetailView: View {
                 .presentationDragIndicator(.visible)
         }
         .preferredColorScheme(.dark)
+    }
+
+    /// What the AI read off the label, still waiting to be checked.
+    ///
+    /// It is saved already — losing a read because nobody confirmed it would be
+    /// worse than holding a draft — but it says plainly that a machine wrote
+    /// it, and asks for the one action that settles it.
+    private func verifyCard(_ profile: BeanProfile) -> some View {
+        StudioCard(accent: StudioTheme.warning) {
+            VStack(alignment: .leading, spacing: 12) {
+                StudioSectionTitle(
+                    title: "Check this bag",
+                    detail: "Read from your photos",
+                    icon: "eye.trianglebadge.exclamationmark.fill"
+                )
+                Text(
+                    "Gemini filled these details in from the label. Correct anything "
+                        + "it misread, then confirm — the bag stays flagged until you do."
+                )
+                .font(.caption)
+                .foregroundStyle(StudioTheme.muted)
+
+                HStack(spacing: 10) {
+                    Button {
+                        showingEditor = true
+                    } label: {
+                        Label("Edit details", systemImage: "square.and.pencil")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 46)
+                            .background(StudioTheme.raised, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        verify()
+                    } label: {
+                        Label("Looks right", systemImage: "checkmark")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 46)
+                            .background(StudioTheme.warning, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func verify() {
+        bean.needsVerification = false
+        try? modelContext.save()
+        MachineFeedback.acknowledged()
     }
 
     private func relationshipOverviewCard(_ profile: BeanProfile) -> some View {
@@ -1928,15 +2055,22 @@ struct BeanEditorView: View {
 
 struct BeanPhotoImporterView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Environment(GeminiService.self) private var gemini
+    @Environment(BeanImportCoordinator.self) private var beanImport
     @State private var selections: [PhotosPickerItem] = []
     @State private var preparedImages: [PreparedBeanImage] = []
     @State private var showingCamera = false
-    @State private var isWorking = false
-    @State private var draft: BeanProfile?
     @State private var errorMessage: String?
-    @State private var importTask: Task<Void, Never>?
+    /// The import this screen started, so it follows that one and no other.
+    @State private var requestID: UUID?
     @State private var selectionTask: Task<Void, Never>?
+
+    /// True while *this* screen's request is still running.
+    private var isWorking: Bool {
+        guard let requestID else { return false }
+        return beanImport.pending.contains { $0.id == requestID }
+    }
 
     var body: some View {
         NavigationStack {
@@ -1968,8 +2102,7 @@ struct BeanPhotoImporterView: View {
                         }
 
                         Button {
-                            importTask?.cancel()
-                            importTask = Task { await importPhotos() }
+                            startImport()
                         } label: {
                             HStack {
                                 if isWorking {
@@ -1977,7 +2110,7 @@ struct BeanPhotoImporterView: View {
                                 } else {
                                     Image(systemName: "sparkles")
                                 }
-                                Text(isWorking ? "Reading the label…" : "Read bag with Gemini")
+                                Text(isWorking ? "Reading the label…" : "Import with AI")
                             }
                             .font(.headline)
                             .foregroundStyle(.black)
@@ -2019,12 +2152,6 @@ struct BeanPhotoImporterView: View {
                 }
                 .ignoresSafeArea()
             }
-            .sheet(item: $draft) {
-                BeanEditorView(profile: $0) {
-                    draft = nil
-                    dismiss()
-                }
-            }
             .onChange(of: selections) {
                 selectionTask?.cancel()
                 selectionTask = Task { await prepareSelections() }
@@ -2041,19 +2168,26 @@ struct BeanPhotoImporterView: View {
                         "Preparing a bean profile for review…",
                     ],
                     systemImage: "doc.viewfinder.fill",
-                    tint: StudioTheme.mint
-                ) {
-                    importTask?.cancel()
-                }
+                    tint: StudioTheme.mint,
+                    leaveTitle: "Back to Beans",
+                    onLeave: { dismiss() }
+                )
             }
         }
         .preferredColorScheme(.dark)
+        // The import belongs to `BeanImportCoordinator` now, so leaving this
+        // sheet is a supported way to wait for it. The shelf shows it working.
         .onDisappear {
-            importTask?.cancel()
             selectionTask?.cancel()
-            importTask = nil
             selectionTask = nil
-            preparedImages.removeAll(keepingCapacity: false)
+        }
+        .onChange(of: beanImport.lastImported) { _, imported in
+            // The bag is on the shelf, flagged for review. Nothing more to do
+            // here.
+            if imported != nil, requestID != nil { dismiss() }
+        }
+        .onChange(of: beanImport.lastError) { _, message in
+            if let message { errorMessage = message }
         }
     }
 
@@ -2066,7 +2200,7 @@ struct BeanPhotoImporterView: View {
                 .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             Text("Photograph the coffee bag")
                 .font(.title2.weight(.bold))
-            Text("Capture the front and back labels. Gemini extracts the details, then you review everything before it is saved.")
+            Text("Capture the front and back labels. The bag goes onto your shelf as soon as Gemini has read it, flagged for you to check.")
                 .font(.subheadline)
                 .foregroundStyle(StudioTheme.muted)
                 .multilineTextAlignment(.center)
@@ -2142,34 +2276,14 @@ struct BeanPhotoImporterView: View {
         }
     }
 
-    private func importPhotos() async {
-        isWorking = true
-        defer { isWorking = false }
-        do {
-            errorMessage = nil
-            let images = preparedImages.map { ($0.data, "image/jpeg") }
-            let result = try await gemini.importBean(images: images)
-            try Task.checkCancellation()
-            draft = BeanProfile(
-                name: result.name,
-                roaster: result.roaster ?? "",
-                country: result.country ?? "",
-                region: result.region ?? "",
-                producer: result.producer ?? "",
-                species: result.species ?? "Arabica",
-                variety: result.variety ?? "",
-                process: result.process ?? "Washed",
-                processDetail: result.processDetail ?? "",
-                altitudeMASL: result.altitudeMASL,
-                roastLevel: result.roastLevel ?? "Medium-light",
-                acidityLevel: result.acidityLevel,
-                tastingNotes: result.tastingNotes ?? ""
-            )
-        } catch is CancellationError {
-            return
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+    private func startImport() {
+        errorMessage = nil
+        beanImport.clearLastImported()
+        requestID = beanImport.start(
+            images: preparedImages.map { ($0.data, "image/jpeg") },
+            gemini: gemini,
+            context: modelContext
+        )
     }
 
     @MainActor
