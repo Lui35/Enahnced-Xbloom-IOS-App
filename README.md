@@ -235,6 +235,28 @@ time. If you own an xBloom:
 Open questions are listed under **Still unverified** at the end of the verified
 behaviour document.
 
+### How a change reaches main
+
+`main` is protected: no direct pushes, from anybody, including the owner.
+
+```sh
+git checkout -b your-branch
+# work, commit
+git push -u origin your-branch
+gh pr create
+```
+
+Two checks run on every pull request and both must be green before the merge
+button unlocks:
+
+| Check | What it runs |
+|---|---|
+| **Tests** | `swift test` — the XBloomCore suite, no project or simulator needed |
+| **Build** | `xcodegen generate` then a full app build for the iOS Simulator |
+
+The branch must also be up to date with `main`, review conversations must be
+resolved, and force-pushing or deleting `main` is refused outright.
+
 ## Documentation
 
 - `docs/APP_BLE_IMPLEMENTATION.md` — what this app sends: the brew sequence with
