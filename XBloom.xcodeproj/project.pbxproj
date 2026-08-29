@@ -14,6 +14,7 @@
 		226B5E17B795C4B522D970A4 /* XBloomLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		24AE48EB3F43420D8089A5A7 /* MachineDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */; };
 		27C8744AAD5E6A661DBE7C8E /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A64A00702BFAAD2884EEE6B /* XBloomCore */; };
+		290E0226530B6696AA4E19F4 /* AccountAIView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C68DB0343188910490219D /* AccountAIView.swift */; };
 		2E0CBD06A36229067366FF2D /* MachineFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3530DABDDE58B039409B5C97 /* MachineFeedback.swift */; };
 		37A3D1A7AF48FBECD9CBA6C5 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */; };
 		450E1ED33F3C042BB2A893AF /* XBloomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */; };
@@ -68,6 +69,7 @@
 /* Begin PBXFileReference section */
 		00067031474B071C240BD8D2 /* CameraCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCaptureView.swift; sourceTree = "<group>"; };
 		0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineDiagnosticsView.swift; sourceTree = "<group>"; };
+		16C68DB0343188910490219D /* AccountAIView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountAIView.swift; sourceTree = "<group>"; };
 		1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
 		1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = XBloomLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		288AD2850F804ABEB0F63EC4 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -158,6 +160,7 @@
 		62230E903A2A25267E8E09D2 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				16C68DB0343188910490219D /* AccountAIView.swift */,
 				71C5A662F8A8FAFF2121A83E /* BeansView.swift */,
 				73B6AD0DD130E8DD29ED6908 /* BrewView.swift */,
 				00067031474B071C240BD8D2 /* CameraCaptureView.swift */,
@@ -334,6 +337,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				290E0226530B6696AA4E19F4 /* AccountAIView.swift in Sources */,
 				D87049683A34826E86428065 /* BeansView.swift in Sources */,
 				C68FE583E0B5EA6C84C64712 /* BrewLiveActivityManager.swift in Sources */,
 				DBE663F2A2D320EFF7BDDA29 /* BrewView.swift in Sources */,

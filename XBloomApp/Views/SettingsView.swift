@@ -7,18 +7,10 @@ import XBloomCore
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SupabaseService.self) private var cloud
-    @Environment(GeminiService.self) private var gemini
     @Environment(XBloomBLEClient.self) private var machine
     @Environment(BrewSessionCoordinator.self) private var brewSession
     @State private var confirmingMachineStop = false
     @State private var machineStopMessage: String?
-    @State private var email = ""
-    @State private var password = ""
-    @State private var model = ""
-    @State private var statusMessage: String?
-    @State private var isTesting = false
-    @State private var isAuthenticating = false
-    @State private var testTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -38,102 +30,23 @@ struct SettingsView: View {
                     }
                     .studioCard()
 
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            StudioSectionTitle(
-                                title: "Cloud & Gemini",
-                                subtitle: "Supabase backup and server-side AI"
+                    VStack(alignment: .leading, spacing: 14) {
+                        StudioSectionTitle(title: "Account")
+                        NavigationLink {
+                            AccountAIView()
+                        } label: {
+                            settingsRow(
+                                icon: "person.crop.circle.fill",
+                                title: "Account & AI",
+                                subtitle: cloud.isAuthenticated
+                                    ? (cloud.email ?? "Signed in")
+                                    : "Sign in for sync and AI",
+                                tint: cloud.isAuthenticated ? StudioTheme.mint : StudioTheme.warning,
+                                isComplete: cloud.isAuthenticated
                             )
-                            Spacer()
-                            StatusPill(
-                                title: cloud.isAuthenticated ? "Connected" : "Setup",
-                                color: cloud.isAuthenticated ? StudioTheme.mint : StudioTheme.warning,
-                                systemImage: cloud.isAuthenticated ? "checkmark.circle.fill" : "icloud.slash"
-                            )
                         }
-
-                        if cloud.isAuthenticated {
-                            Label(cloud.email ?? "Supabase account", systemImage: "person.crop.circle.fill")
-                                .font(.subheadline.weight(.semibold))
-
-                            HStack {
-                                Image(systemName: "cpu").foregroundStyle(.secondary)
-                                TextField("Gemini model", text: $model)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                            }
-                            .padding(13)
-                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
-
-                            HStack {
-                                Button("Save model") {
-                                    gemini.model = model.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    statusMessage = "Model preference saved."
-                                }
-                                Button {
-                                    testGemini()
-                                } label: {
-                                    Label(isTesting ? "Testing…" : "Test AI", systemImage: "network")
-                                }
-                                .disabled(isTesting)
-                                Spacer()
-                                Button("Sign out", role: .destructive) {
-                                    Task { await signOut() }
-                                }
-                            }
-                            .font(.subheadline.weight(.semibold))
-
-                            Button {
-                                Task { await syncNow() }
-                            } label: {
-                                Label(
-                                    cloud.isSyncing ? "Syncing…" : "Sync now",
-                                    systemImage: "arrow.triangle.2.circlepath"
-                                )
-                                .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(PrimaryActionButtonStyle())
-                            .disabled(cloud.isSyncing)
-                        } else {
-                            VStack(spacing: 10) {
-                                TextField("Email", text: $email)
-                                    .textContentType(.emailAddress)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                SecureField("Password (8+ characters)", text: $password)
-                                    .textContentType(.password)
-                            }
-                            .padding(13)
-                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
-
-                            HStack {
-                                Button("Sign in") {
-                                    Task { await authenticate(createAccount: false) }
-                                }
-                                .buttonStyle(PrimaryActionButtonStyle())
-                                Button("Create account") {
-                                    Task { await authenticate(createAccount: true) }
-                                }
-                                .disabled(isAuthenticating)
-                            }
-                        }
-
-                        if isTesting { ProgressView().frame(maxWidth: .infinity) }
-                        if isAuthenticating || cloud.isSyncing {
-                            ProgressView().frame(maxWidth: .infinity)
-                        }
-                        if let message = statusMessage ?? cloud.statusMessage {
-                            Text(message)
-                                .font(.footnote)
-                                .foregroundStyle(message.contains("failed") ? StudioTheme.warning : .secondary)
-                        }
-
-                        Label(
-                            "Your library stays on this iPhone and syncs to your private Supabase account. Gemini requests run through an authenticated Edge Function; its API key is never stored in the app.",
-                            systemImage: "lock.shield.fill"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                     }
                     .studioCard()
 
@@ -250,11 +163,6 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { model = gemini.model }
-        .onDisappear {
-            testTask?.cancel()
-            testTask = nil
-        }
     }
 
     /// The last resort for a machine that is pouring when nothing in the app is
@@ -323,7 +231,15 @@ struct SettingsView: View {
         }
     }
 
-    private func settingsRow(icon: String, title: String, subtitle: String, tint: Color) -> some View {
+    /// `isComplete` puts a tick on the row, so a screen that has already been
+    /// dealt with says so without being opened.
+    private func settingsRow(
+        icon: String,
+        title: String,
+        subtitle: String,
+        tint: Color,
+        isComplete: Bool = false
+    ) -> some View {
         HStack(spacing: 14) {
             IconBadge(systemImage: icon, tint: tint, size: 44)
             VStack(alignment: .leading, spacing: 3) {
@@ -331,6 +247,11 @@ struct SettingsView: View {
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            if isComplete {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(StudioTheme.mint)
+            }
             Image(systemName: "chevron.right")
                 .font(.caption.bold())
                 .foregroundStyle(.tertiary)
@@ -339,66 +260,9 @@ struct SettingsView: View {
         .contentShape(Rectangle())
     }
 
-    private func authenticate(createAccount: Bool) async {
-        guard password.count >= 8 else {
-            statusMessage = "Use a password with at least 8 characters."
-            return
-        }
-        isAuthenticating = true
-        defer { isAuthenticating = false }
-        do {
-            if createAccount {
-                try await cloud.signUp(
-                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                    password: password
-                )
-            } else {
-                try await cloud.signIn(
-                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                    password: password
-                )
-            }
-            password = ""
-            statusMessage = cloud.statusMessage
-        } catch {
-            statusMessage = error.localizedDescription
-        }
-    }
 
-    private func signOut() async {
-        do {
-            try await cloud.signOut()
-            statusMessage = cloud.statusMessage
-        } catch {
-            statusMessage = error.localizedDescription
-        }
-    }
 
-    private func syncNow() async {
-        do {
-            let summary = try await cloud.sync(in: modelContext)
-            statusMessage = "Synced \(summary.beans) beans, \(summary.recipes) recipes, and \(summary.brews) brews."
-        } catch {
-            statusMessage = error.localizedDescription
-        }
-    }
 
-    private func testGemini() {
-        testTask?.cancel()
-        testTask = Task { @MainActor in
-            isTesting = true
-            defer { isTesting = false }
-            do {
-                try await gemini.testConnection()
-                try Task.checkCancellation()
-                statusMessage = "Gemini connection succeeded."
-            } catch is CancellationError {
-                return
-            } catch {
-                statusMessage = error.localizedDescription
-            }
-        }
-    }
 }
 
 private extension UTType {

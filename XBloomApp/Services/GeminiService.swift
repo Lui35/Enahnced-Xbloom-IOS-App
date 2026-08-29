@@ -68,9 +68,19 @@ final class GeminiService {
         didSet { UserDefaults.standard.set(model, forKey: "geminiModel") }
     }
 
+    static let defaultModel = "gemini-3.6-flash"
+
+    /// The names the Edge Function will accept. It matches `^gemini-…$` and
+    /// forwards the name to Google, so anything else fails at the server with
+    /// nothing the app can explain — better to refuse it while it is being
+    /// typed.
+    static func isValidModelName(_ name: String) -> Bool {
+        name.range(of: "^gemini-[a-z0-9.-]{1,64}$", options: .regularExpression) != nil
+    }
+
     init(cloud: SupabaseService) {
         self.cloud = cloud
-        model = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-3.6-flash"
+        model = UserDefaults.standard.string(forKey: "geminiModel") ?? Self.defaultModel
     }
 
     var hasAPIKey: Bool {
