@@ -1456,11 +1456,14 @@ struct AIRecipeDesignerView: View {
                         "Leave this open or carry on — it keeps working.",
                     ],
                     systemImage: "wand.and.sparkles",
-                    tint: StudioTheme.accent
-                ) {
-                    if let requestID { generation.cancel(requestID) }
-                    requestID = nil
-                }
+                    tint: StudioTheme.accent,
+                    onCancel: {
+                        if let requestID { generation.cancel(requestID) }
+                        requestID = nil
+                    },
+                    leaveTitle: "Wait in Recipes",
+                    onLeave: { dismiss() }
+                )
             }
         }
         .preferredColorScheme(.dark)
@@ -1478,6 +1481,13 @@ struct AIRecipeDesignerView: View {
             // that request back up, rather than showing a Create button for
             // work already in flight.
             if requestID == nil { requestID = generation.pending(forBean: bean.id)?.id }
+            #if DEBUG
+            // The overlay is otherwise only reachable with an account, so
+            // `-seedPendingRecipe` adopts the seeded request too.
+            if requestID == nil, ProcessInfo.processInfo.arguments.contains("-seedPendingRecipe") {
+                requestID = generation.pending.first?.id
+            }
+            #endif
         }
         .onChange(of: generation.lastCompleted) { _, recipe in
             guard let recipe, recipe.beanID == bean.id else { return }

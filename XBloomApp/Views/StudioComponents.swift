@@ -904,6 +904,12 @@ struct AIProcessingOverlay: View {
     var systemImage = "sparkles"
     var tint = StudioTheme.accent
     var onCancel: (() -> Void)?
+    /// Leaves the screen without stopping the work. Only offered where the
+    /// request outlives the view that started it — this overlay covers the
+    /// whole screen, navigation bar included, so without it the only way out
+    /// of a running request is to kill it.
+    var leaveTitle: String?
+    var onLeave: (() -> Void)?
 
     @State private var rotates = false
     @State private var breathes = false
@@ -994,6 +1000,16 @@ struct AIProcessingOverlay: View {
                     }
                 }
                 .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: breathes)
+
+                if let onLeave {
+                    Button(leaveTitle ?? "Leave it running", action: onLeave)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(tint, in: Capsule())
+                        .buttonStyle(.plain)
+                }
 
                 if let onCancel {
                     Button("Cancel request", action: onCancel)
