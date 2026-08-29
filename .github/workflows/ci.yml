@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # A new push to a branch makes the run in flight for it pointless.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer"
+          xcodebuild -version
+          swift --version
+
+      # The domain and protocol logic is a SwiftPM package, so it needs no
+      # project, no simulator, and no signing. This is the fast check.
+      - name: Run the XBloomCore test suite
+        run: swift test
+
+  build:
+    name: Build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # XBloom.xcodeproj is generated and gitignored in spirit: regenerating it
+      # here also proves project.yml still describes a project that builds.
+      - name: Generate the Xcode project
+        run: xcodegen generate
+
+      # A generic simulator destination needs no booted device and no runtime
+      # beyond the SDK, and CODE_SIGNING_ALLOWED=NO keeps the runner out of the
+      # signing business entirely.
+      - name: Build the app
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project XBloom.xcodeproj \
+            -scheme XBloom \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -40
