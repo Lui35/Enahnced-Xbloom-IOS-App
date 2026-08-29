@@ -1166,6 +1166,7 @@ struct AIRecipeDesignerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(GeminiService.self) private var gemini
+    @Environment(RecipeGenerationCoordinator.self) private var generation
 
     let bean: BeanProfile
 
@@ -1175,11 +1176,12 @@ struct AIRecipeDesignerView: View {
     @State private var cups: Int
     @State private var selectedAims: Set<RecipeFlavorGoal>
     @State private var goal: String
-    @State private var isGenerating = false
     @State private var createdRecipe: Recipe?
     @State private var rationale: String?
     @State private var errorMessage: String?
-    @State private var generationTask: Task<Void, Never>?
+    /// The generation this screen started, so it can follow that one rather
+    /// than any other the app happens to be running.
+    @State private var requestID: UUID?
 
     init(bean: BeanProfile) {
         self.bean = bean
@@ -1437,8 +1439,7 @@ struct AIRecipeDesignerView: View {
                         enabled: gemini.hasAPIKey && !isGenerating,
                         compact: true
                     ) {
-                        generationTask?.cancel()
-                        generationTask = Task { await generate() }
+                        startGeneration()
                     }
                 }
             }
@@ -1452,11 +1453,13 @@ struct AIRecipeDesignerView: View {
                         "Balancing dose, grind, and water…",
                         "Composing each pour and rest…",
                         "Validating the program for your xBloom…",
+                        "Leave this open or carry on — it keeps working.",
                     ],
                     systemImage: "wand.and.sparkles",
                     tint: StudioTheme.accent
                 ) {
-                    generationTask?.cancel()
+                    if let requestID { generation.cancel(requestID) }
+                    requestID = nil
                 }
             }
         }
@@ -1467,10 +1470,44 @@ struct AIRecipeDesignerView: View {
         .onChange(of: cups) { _, _ in persistPreferences() }
         .onChange(of: selectedAims) { _, _ in persistPreferences() }
         .onChange(of: goal) { _, _ in persistPreferences() }
-        .onDisappear {
-            generationTask?.cancel()
-            generationTask = nil
+        // Deliberately no cancel-on-disappear: the request belongs to
+        // `RecipeGenerationCoordinator` now, and leaving this sheet is a
+        // supported way to wait for it. The library shows it working.
+        .task {
+            // Reopening the designer while its request is still running picks
+            // that request back up, rather than showing a Create button for
+            // work already in flight.
+            if requestID == nil { requestID = generation.pending(forBean: bean.id)?.id }
         }
+        .onChange(of: generation.lastCompleted) { _, recipe in
+            guard let recipe, recipe.beanID == bean.id else { return }
+            createdRecipe = recipe
+            rationale = recipe.aiDescription
+        }
+        .onChange(of: generation.lastError) { _, message in
+            if let message { errorMessage = message }
+        }
+    }
+
+    /// True while *this* screen's request is still running.
+    private var isGenerating: Bool {
+        guard let requestID else { return false }
+        return generation.pending.contains { $0.id == requestID }
+    }
+
+    private func startGeneration() {
+        persistPreferences()
+        errorMessage = nil
+        generation.clearLastCompleted()
+        requestID = generation.start(
+            bean: bean,
+            style: style,
+            cups: cups,
+            goals: letsAIDecide ? [] : selectedAims.map(\.rawValue).sorted(),
+            notes: letsAIDecide ? "" : goal.trimmingCharacters(in: .whitespacesAndNewlines),
+            gemini: gemini,
+            context: modelContext
+        )
     }
 
     private var hero: some View {
@@ -1497,36 +1534,6 @@ struct AIRecipeDesignerView: View {
         .padding(.top, 8)
     }
 
-    @MainActor
-    private func generate() async {
-        isGenerating = true
-        errorMessage = nil
-        defer { isGenerating = false }
-        do {
-            persistPreferences()
-            let result = try await gemini.generateRecipe(
-                for: bean,
-                style: style,
-                cups: cups,
-                goals: letsAIDecide ? [] : selectedAims.map(\.rawValue).sorted(),
-                notes: letsAIDecide ? "" : goal.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-            try Task.checkCancellation()
-            let recipe = try result.recipe(
-                bean: bean,
-                cups: cups,
-                requestedStyle: style
-            )
-            modelContext.insert(StoredRecipe(recipe: recipe))
-            try modelContext.save()
-            createdRecipe = recipe
-            rationale = "\(result.methodName) · \(result.rationale)"
-        } catch is CancellationError {
-            return
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
 
     private func styleTitle(_ style: BrewStyle) -> String {
         style == .iced ? "Iced pour-over" : "Hot pour-over"

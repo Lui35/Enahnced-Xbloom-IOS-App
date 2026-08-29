@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0929F6A404E3B41DB55F3C7A /* XBloomLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 641D924ACBD150A88E41D4BA /* XBloomLiveActivityBundle.swift */; };
+		0C7CD1C896B7BFB2CEE33437 /* RecipeGenerationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 355AC9239C3402F3119CDD7C /* RecipeGenerationCoordinator.swift */; };
 		17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */; };
 		200C478580FED52EB0A8706D /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */; };
 		220A2352A2E96F54EFD37AE1 /* DoseWeighingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A208A223001D666B39B03708 /* DoseWeighingView.swift */; };
@@ -77,6 +78,7 @@
 		2EB51229F947ABE48988CA68 /* ScaleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScaleView.swift; sourceTree = "<group>"; };
 		3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewLiveActivityManager.swift; sourceTree = "<group>"; };
 		3530DABDDE58B039409B5C97 /* MachineFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineFeedback.swift; sourceTree = "<group>"; };
+		355AC9239C3402F3119CDD7C /* RecipeGenerationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeGenerationCoordinator.swift; sourceTree = "<group>"; };
 		3CECB5C169218F78F3E3C484 /* Xplume-App-Icon-Concept.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Xplume-App-Icon-Concept.png"; sourceTree = "<group>"; };
 		45C4A7D8A6676C96CC574A14 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		49321FCC4F76BECD12162693 /* StudioComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioComponents.swift; sourceTree = "<group>"; };
@@ -188,6 +190,7 @@
 				1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */,
 				60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */,
 				3530DABDDE58B039409B5C97 /* MachineFeedback.swift */,
+				355AC9239C3402F3119CDD7C /* RecipeGenerationCoordinator.swift */,
 				C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */,
 				D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */,
 			);
@@ -354,6 +357,7 @@
 				C721A74853A10E8C0728007D /* MaintenanceView.swift in Sources */,
 				DC7F97AC5464A229362ABA61 /* ManualPourView.swift in Sources */,
 				17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */,
+				0C7CD1C896B7BFB2CEE33437 /* RecipeGenerationCoordinator.swift in Sources */,
 				629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */,
 				E8A04612E1F5F04A2C3C32E4 /* RootView.swift in Sources */,
 				9C0C3A56B40FC3A2F477BE35 /* ScaleView.swift in Sources */,
