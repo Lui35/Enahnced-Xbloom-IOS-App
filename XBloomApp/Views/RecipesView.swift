@@ -863,14 +863,48 @@ struct RecipeEditorView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("RECIPE")
-                        .font(.caption2.weight(.bold))
-                        .tracking(1.4)
-                        .foregroundStyle(.black.opacity(0.55))
-                    TextField("Name your recipe", text: $recipe.name)
+                    HStack(spacing: 7) {
+                        Text("RECIPE")
+                            .font(.caption2.weight(.bold))
+                            .tracking(1.4)
+                            .foregroundStyle(.black.opacity(0.55))
+                        if recipe.name.isEmpty {
+                            Text("REQUIRED")
+                                .font(.caption2.weight(.heavy))
+                                .tracking(0.8)
+                                .foregroundStyle(StudioTheme.accent)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(.black.opacity(0.72), in: Capsule())
+                                .transition(.opacity)
+                        }
+                    }
+                    // Styled as a field, not as a heading. Set in the card's
+                    // own text colour on the card's own background it read as a
+                    // title someone had left blank, and the only hint that it
+                    // was required was a validation error further down.
+                    TextField(
+                        "",
+                        text: $recipe.name,
+                        prompt: Text("Name your recipe").foregroundStyle(.black.opacity(0.5))
+                    )
                         .font(.title2.weight(.bold))
                         .textFieldStyle(.plain)
                         .foregroundStyle(.black)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background(
+                            .white.opacity(recipe.name.isEmpty ? 0.34 : 0.2),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(
+                                    recipe.name.isEmpty ? .black.opacity(0.5) : .black.opacity(0.14),
+                                    lineWidth: recipe.name.isEmpty ? 1.5 : 1
+                                )
+                        }
+                        .animation(.snappy(duration: 0.2), value: recipe.name.isEmpty)
                 }
                 Spacer()
                 Text("\(recipe.pours.count)")
@@ -928,9 +962,6 @@ struct RecipeEditorView: View {
                         Text("Iced pour-over").tag(BrewStyle.iced)
                     }
                     .pickerStyle(.segmented)
-
-                    StudioTextField(title: "Roaster", text: $recipe.roaster, icon: "building.2")
-                    StudioTextField(title: "Origin & process", text: $recipe.origin, icon: "globe.americas")
 
                     LazyVGrid(columns: parameterColumns, spacing: 12) {
                         StudioDialBox(

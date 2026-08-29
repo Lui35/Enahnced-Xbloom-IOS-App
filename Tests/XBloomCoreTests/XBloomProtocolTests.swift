@@ -1401,3 +1401,26 @@ private extension Data {
         ).isDue
     )
 }
+
+/// The maintenance log answers a question the last-done date could not: how
+/// often a service actually happens, as opposed to how often the rule says it
+/// should.
+@Test func maintenanceCadenceNeedsTwoServicesToSayAnything() {
+    let now = Date()
+    func daysAgo(_ days: Double) -> Date { now.addingTimeInterval(-days * 86_400) }
+
+    #expect(Maintenance.cadence(of: []).summary == nil)
+    #expect(Maintenance.cadence(of: [daysAgo(3)]).summary == "Done once")
+
+    // Three descales across sixty days is one every thirty.
+    let regular = Maintenance.cadence(of: [daysAgo(60), daysAgo(30), now])
+    #expect(regular.performed == 3)
+    #expect(regular.averageDays == 30)
+    #expect(regular.summary == "Done 3 times · about every 30 days")
+
+    // Out of order is the same cadence; the dates get sorted.
+    #expect(Maintenance.cadence(of: [now, daysAgo(60), daysAgo(30)]).averageDays == 30)
+
+    // Two services on the same day is not "every zero days".
+    #expect(Maintenance.cadence(of: [now, now]).summary == "Done 2 times")
+}

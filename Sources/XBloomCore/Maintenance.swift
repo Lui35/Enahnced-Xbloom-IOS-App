@@ -78,6 +78,26 @@ public struct MaintenanceStatus: Equatable, Sendable {
     public var isDormant: Bool
 }
 
+public struct MaintenanceCadence: Equatable, Sendable {
+    /// How many times the service has been recorded.
+    public var performed: Int
+    /// The mean gap between them. Nil until there are two.
+    public var averageDays: Double?
+
+    public init(performed: Int, averageDays: Double?) {
+        self.performed = performed
+        self.averageDays = averageDays
+    }
+
+    /// A phrase for the screen, or nil when there is nothing worth saying.
+    public var summary: String? {
+        guard performed > 0 else { return nil }
+        let times = performed == 1 ? "Done once" : "Done \(performed) times"
+        guard let averageDays, averageDays >= 0.5 else { return times }
+        return "\(times) · about every \(Int(averageDays.rounded())) days"
+    }
+}
+
 public enum Maintenance {
     /// One 20 g packet of tablets per kilogram of beans. xBloom's own guidance
     /// is "about every 4 bags of coffee", which is the same thing for a 250 g
@@ -157,6 +177,22 @@ public enum Maintenance {
                 isDormant: usage.brews == 0 && days == 0
             )
         }
+    }
+
+    /// How often a service actually gets done, from the dates it was done on.
+    ///
+    /// The rule says how often it *should* happen; this says how often it does.
+    /// Needs two dates to say anything — one service is not a cadence.
+    public static func cadence(of performedAt: [Date]) -> MaintenanceCadence {
+        let sorted = performedAt.sorted()
+        guard sorted.count >= 2, let first = sorted.first, let last = sorted.last else {
+            return MaintenanceCadence(performed: sorted.count, averageDays: nil)
+        }
+        let span = last.timeIntervalSince(first) / 86_400
+        return MaintenanceCadence(
+            performed: sorted.count,
+            averageDays: span / Double(sorted.count - 1)
+        )
     }
 
     private static func fraction(from start: Date, to end: Date, now: Date) -> Double {

@@ -212,6 +212,33 @@ final class StoredBrew {
     }()
 }
 
+/// One service actually performed on the machine.
+///
+/// The last-done date each maintenance rule counts from used to be a number in
+/// UserDefaults, which stayed on one phone and remembered only the most recent
+/// one. A row per service syncs like everything else and keeps the cadence:
+/// how often the descale really happens, not just when it last did.
+@Model
+final class StoredMaintenanceEvent {
+    @Attribute(.unique) var id: UUID
+    /// `MaintenanceTask.rawValue`. Stored as a string so an unknown task from a
+    /// newer build survives a round trip instead of failing to decode.
+    var task: String
+    var performedAt: Date
+    var note: String?
+    var updatedAt: Date
+
+    init(id: UUID = UUID(), task: MaintenanceTask, performedAt: Date = Date(), note: String? = nil) {
+        self.id = id
+        self.task = task.rawValue
+        self.performedAt = performedAt
+        self.note = note
+        updatedAt = Date()
+    }
+
+    var maintenanceTask: MaintenanceTask? { MaintenanceTask(rawValue: task) }
+}
+
 @Model
 final class CloudSyncMetadata {
     @Attribute(.unique) var id: String
@@ -219,6 +246,9 @@ final class CloudSyncMetadata {
     var knownBeanIDs: Data
     var knownRecipeIDs: Data
     var knownBrewIDs: Data
+    /// Added after the first release, so it has to carry a default for the
+    /// stores that were written without it.
+    var knownMaintenanceIDs: Data = Data()
     var lastSyncedAt: Date?
 
     init(userID: UUID) {
@@ -227,6 +257,7 @@ final class CloudSyncMetadata {
         knownBeanIDs = Data()
         knownRecipeIDs = Data()
         knownBrewIDs = Data()
+        knownMaintenanceIDs = Data()
     }
 
     func knownIDs(for kind: CloudRecordKind) -> Set<UUID> {
@@ -235,6 +266,7 @@ final class CloudSyncMetadata {
         case .bean: data = knownBeanIDs
         case .recipe: data = knownRecipeIDs
         case .brew: data = knownBrewIDs
+        case .maintenance: data = knownMaintenanceIDs
         }
         return (try? JSONDecoder().decode(Set<UUID>.self, from: data)) ?? []
     }
@@ -245,6 +277,7 @@ final class CloudSyncMetadata {
         case .bean: knownBeanIDs = data
         case .recipe: knownRecipeIDs = data
         case .brew: knownBrewIDs = data
+        case .maintenance: knownMaintenanceIDs = data
         }
     }
 }
@@ -253,6 +286,7 @@ enum CloudRecordKind {
     case bean
     case recipe
     case brew
+    case maintenance
 }
 
 @MainActor

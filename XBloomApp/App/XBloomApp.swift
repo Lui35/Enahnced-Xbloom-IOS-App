@@ -30,6 +30,7 @@ struct XBloomApp: App {
                 StoredBean.self,
                 StoredRecipe.self,
                 StoredBrew.self,
+                StoredMaintenanceEvent.self,
                 CloudSyncMetadata.self,
             ]
         )

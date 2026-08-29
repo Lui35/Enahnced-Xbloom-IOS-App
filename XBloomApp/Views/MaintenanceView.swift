@@ -9,11 +9,10 @@ import XBloomCore
 /// service itself. The machine's own descale and calibration routines are not
 /// driven from here; the app says when and how, the machine does it.
 struct MaintenanceView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \StoredBrew.completedAt, order: .reverse) private var brews: [StoredBrew]
-
-    @AppStorage("maintenance.grinderBrush") private var brushDoneAt: Double = 0
-    @AppStorage("maintenance.grinderTablets") private var tabletsDoneAt: Double = 0
-    @AppStorage("maintenance.descale") private var descaleDoneAt: Double = 0
+    @Query(sort: \StoredMaintenanceEvent.performedAt, order: .reverse)
+    private var services: [StoredMaintenanceEvent]
 
     var body: some View {
         ZStack {
@@ -36,6 +35,7 @@ struct MaintenanceView: View {
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .preferredColorScheme(.dark)
+        .task { importLegacyDatesIfNeeded() }
     }
 
     // MARK: - What the machine has done
@@ -48,24 +48,55 @@ struct MaintenanceView: View {
 
     private var firstBrewAt: Date? { realBrews.last?.completedAt }
 
-    private func doneAt(_ task: MaintenanceTask) -> Date? {
-        let stamp: Double
-        switch task {
-        case .grinderBrush: stamp = brushDoneAt
-        case .grinderTablets: stamp = tabletsDoneAt
-        case .descale: stamp = descaleDoneAt
-        }
-        return stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+    private func history(_ task: MaintenanceTask) -> [StoredMaintenanceEvent] {
+        services.filter { $0.task == task.rawValue }
     }
 
-    private func markDone(_ task: MaintenanceTask, at date: Date?) {
-        let stamp = date?.timeIntervalSince1970 ?? 0
-        switch task {
-        case .grinderBrush: brushDoneAt = stamp
-        case .grinderTablets: tabletsDoneAt = stamp
-        case .descale: descaleDoneAt = stamp
+    private func doneAt(_ task: MaintenanceTask) -> Date? {
+        history(task).first?.performedAt
+    }
+
+    private func markDone(_ task: MaintenanceTask) {
+        modelContext.insert(StoredMaintenanceEvent(task: task))
+        try? modelContext.save()
+        MachineFeedback.acknowledged()
+    }
+
+    /// Takes back the most recent record of this service. Only the latest, so
+    /// a mis-tap is undone without erasing the history behind it.
+    private func undoLast(_ task: MaintenanceTask) {
+        guard let latest = history(task).first else { return }
+        modelContext.delete(latest)
+        try? modelContext.save()
+    }
+
+    /// Moves the three dates the first version kept in UserDefaults into the
+    /// log, once. Without this, upgrading would silently reset every service to
+    /// "never recorded".
+    private func importLegacyDatesIfNeeded() {
+        let defaults = UserDefaults.standard
+        let keys: [(MaintenanceTask, String)] = [
+            (.grinderBrush, "maintenance.grinderBrush"),
+            (.grinderTablets, "maintenance.grinderTablets"),
+            (.descale, "maintenance.descale"),
+        ]
+        var imported = false
+        for (task, key) in keys {
+            let stamp = defaults.double(forKey: key)
+            guard stamp > 0 else { continue }
+            if history(task).isEmpty {
+                modelContext.insert(
+                    StoredMaintenanceEvent(
+                        task: task,
+                        performedAt: Date(timeIntervalSince1970: stamp),
+                        note: "Imported from this device"
+                    )
+                )
+                imported = true
+            }
+            defaults.removeObject(forKey: key)
         }
-        if date != nil { MachineFeedback.acknowledged() }
+        if imported { try? modelContext.save() }
     }
 
     private func usage(for task: MaintenanceTask) -> MaintenanceUsage {
@@ -173,6 +204,14 @@ struct MaintenanceView: View {
                         .multilineTextAlignment(.trailing)
                 }
 
+                if let cadence = Maintenance.cadence(
+                    of: history(task).map(\.performedAt)
+                ).summary {
+                    Label(cadence, systemImage: "clock.arrow.circlepath")
+                        .font(.caption2)
+                        .foregroundStyle(StudioTheme.muted)
+                }
+
                 DisclosureGroup {
                     VStack(alignment: .leading, spacing: 9) {
                         ForEach(Array(steps(for: task).enumerated()), id: \.offset) { index, step in
@@ -205,7 +244,7 @@ struct MaintenanceView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        markDone(task, at: Date())
+                        markDone(task)
                     } label: {
                         Label("Mark as done", systemImage: "checkmark")
                             .font(.subheadline.weight(.bold))
@@ -218,7 +257,7 @@ struct MaintenanceView: View {
 
                     if done != nil {
                         Button {
-                            markDone(task, at: nil)
+                            undoLast(task)
                         } label: {
                             Image(systemName: "arrow.uturn.backward")
                                 .font(.subheadline.weight(.bold))
@@ -254,7 +293,9 @@ struct MaintenanceView: View {
                 Text(
                     "The steps are xBloom's own published procedures. The app only "
                         + "counts and reminds: descaling and calibration are started on "
-                        + "the machine itself, not over Bluetooth from here."
+                        + "the machine itself, not over Bluetooth from here. Each service "
+                        + "you record syncs with your account, so the dates and how often "
+                        + "you do them follow you to another device."
                 )
                 .font(.caption)
                 .foregroundStyle(StudioTheme.muted)

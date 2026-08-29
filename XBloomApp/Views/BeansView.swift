@@ -1188,7 +1188,7 @@ struct AIRecipeDesignerView: View {
         let defaults = UserDefaults.standard
         let remembers = defaults.bool(forKey: "aiRecipeRememberPreferences")
         let savedStyle = BrewStyle(rawValue: defaults.string(forKey: "aiRecipePreferredStyle") ?? "") ?? .hot
-        let savedCups = min(3, max(1, defaults.integer(forKey: "aiRecipePreferredCups")))
+        let savedCups = min(2, max(1, defaults.integer(forKey: "aiRecipePreferredCups")))
         let savedAims = Set(
             (defaults.stringArray(forKey: "aiRecipePreferredAims") ?? [])
                 .compactMap(RecipeFlavorGoal.init(rawValue:))
@@ -1254,7 +1254,10 @@ struct AIRecipeDesignerView: View {
                                     Label("Number of cups", systemImage: "cup.and.saucer.fill")
                                         .font(.subheadline.weight(.semibold))
                                     HStack(spacing: 8) {
-                                        ForEach(1...3, id: \.self) { count in
+                                        // One or two. Three cups needs 500+ ml
+                                        // through a single dripper, which is
+                                        // past what this machine brews well.
+                                        ForEach(1...2, id: \.self) { count in
                                             Button {
                                                 cups = count
                                             } label: {

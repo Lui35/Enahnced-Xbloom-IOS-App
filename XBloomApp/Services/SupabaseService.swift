@@ -176,6 +176,7 @@ final class SupabaseService {
         var beans = try context.fetch(FetchDescriptor<StoredBean>())
         var recipes = try context.fetch(FetchDescriptor<StoredRecipe>())
         var brews = try context.fetch(FetchDescriptor<StoredBrew>())
+        var maintenance = try context.fetch(FetchDescriptor<StoredMaintenanceEvent>())
 
         let remoteBeans: [CloudBeanRow] = try await database.from("beans")
             .select("user_id,id,name,roaster,remaining_weight_grams,archived,payload_json,client_updated_at,deleted_at")
@@ -189,17 +190,34 @@ final class SupabaseService {
             .select("user_id,id,recipe_id,bean_id,recipe_name,bean_name,completed_at,duration_seconds,rating,brew_style,generated_by_ai,was_simulated,servings,water_ml,coffee_weight_grams,step_count,payload_json,client_updated_at,deleted_at")
             .eq("user_id", value: userID.uuidString)
             .execute().value
+        let remoteMaintenance: [CloudMaintenanceRow] = try await database.from("maintenance_events")
+            .select("user_id,id,task,performed_at,note,client_updated_at,deleted_at")
+            .eq("user_id", value: userID.uuidString)
+            .execute().value
         try applyCloudChanges {
             merge(remoteBeans, into: &beans, known: metadata.knownIDs(for: .bean), context: context)
             merge(remoteRecipes, into: &recipes, known: metadata.knownIDs(for: .recipe), context: context)
             merge(remoteBrews, into: &brews, known: metadata.knownIDs(for: .brew), context: context)
+            merge(
+                remoteMaintenance,
+                into: &maintenance,
+                known: metadata.knownIDs(for: .maintenance),
+                context: context
+            )
             try context.save()
         }
 
         beans = try context.fetch(FetchDescriptor<StoredBean>())
         recipes = try context.fetch(FetchDescriptor<StoredRecipe>())
         brews = try context.fetch(FetchDescriptor<StoredBrew>())
+        maintenance = try context.fetch(FetchDescriptor<StoredMaintenanceEvent>())
 
+        try await pushDeletions(
+            table: "maintenance_events",
+            userID: userID,
+            deletedIDs: metadata.knownIDs(for: .maintenance).subtracting(maintenance.map(\.id)),
+            database: database
+        )
         try await pushDeletions(
             table: "brews",
             userID: userID,
@@ -250,10 +268,25 @@ final class SupabaseService {
                 .execute()
         }
 
+        if !maintenance.isEmpty {
+            try await database.from("maintenance_events")
+                .upsert(
+                    maintenance.map { CloudMaintenanceRow(userID: userID, stored: $0) },
+                    onConflict: "user_id,id"
+                )
+                .execute()
+        }
+
         metadata.setKnownIDs(Set(beans.map(\.id)), for: .bean)
         metadata.setKnownIDs(Set(recipes.map(\.id)), for: .recipe)
         metadata.setKnownIDs(Set(brews.map(\.id)), for: .brew)
-        return CloudSyncSummary(beans: beans.count, recipes: recipes.count, brews: brews.count)
+        metadata.setKnownIDs(Set(maintenance.map(\.id)), for: .maintenance)
+        return CloudSyncSummary(
+            beans: beans.count,
+            recipes: recipes.count,
+            brews: brews.count,
+            maintenance: maintenance.count
+        )
     }
 
     private func syncMetadata(for userID: UUID, in context: ModelContext) throws -> CloudSyncMetadata {
@@ -317,6 +350,42 @@ final class SupabaseService {
         isApplyingCloudChanges = true
         defer { isApplyingCloudChanges = false }
         try changes()
+    }
+
+    /// A service performed is a fact with a date on it: there is nothing to
+    /// update, only rows to add and rows the user took back.
+    private func merge(
+        _ remote: [CloudMaintenanceRow],
+        into local: inout [StoredMaintenanceEvent],
+        known: Set<UUID>,
+        context: ModelContext
+    ) {
+        var byID = Dictionary(uniqueKeysWithValues: local.map { ($0.id, $0) })
+        for row in remote {
+            if row.deletedAt != nil {
+                if let stored = byID.removeValue(forKey: row.id) {
+                    context.delete(stored)
+                }
+            } else if let stored = byID[row.id] {
+                if row.clientUpdatedAt > stored.updatedAt {
+                    stored.task = row.task
+                    stored.performedAt = row.performedAt
+                    stored.note = row.note
+                    stored.updatedAt = row.clientUpdatedAt
+                }
+            } else if !known.contains(row.id), let task = MaintenanceTask(rawValue: row.task) {
+                let stored = StoredMaintenanceEvent(
+                    id: row.id,
+                    task: task,
+                    performedAt: row.performedAt,
+                    note: row.note
+                )
+                stored.updatedAt = row.clientUpdatedAt
+                context.insert(stored)
+                byID[row.id] = stored
+            }
+        }
+        local = Array(byID.values)
     }
 
     private func merge(
@@ -409,7 +478,38 @@ struct CloudSyncSummary {
     let beans: Int
     let recipes: Int
     let brews: Int
-    var total: Int { beans + recipes + brews }
+    var maintenance: Int = 0
+    var total: Int { beans + recipes + brews + maintenance }
+}
+
+private struct CloudMaintenanceRow: Codable {
+    let userID: UUID
+    let id: UUID
+    let task: String
+    let performedAt: Date
+    let note: String?
+    let clientUpdatedAt: Date
+    let deletedAt: Date?
+
+    init(userID: UUID, stored: StoredMaintenanceEvent) {
+        self.userID = userID
+        id = stored.id
+        task = stored.task
+        performedAt = stored.performedAt
+        note = stored.note
+        clientUpdatedAt = stored.updatedAt
+        deletedAt = nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case userID = "user_id"
+        case id
+        case task
+        case performedAt = "performed_at"
+        case note
+        case clientUpdatedAt = "client_updated_at"
+        case deletedAt = "deleted_at"
+    }
 }
 
 private struct CloudProfileRow: Encodable {
