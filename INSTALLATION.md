@@ -30,8 +30,8 @@ yourself, which is also why nothing in it phones home to anybody but you.
 ### Steps
 
 ```sh
-git clone https://github.com/Lui35/MyV60.git
-cd MyV60
+git clone https://github.com/Lui35/Enahnced-Xbloom-IOS-App.git
+cd Enahnced-Xbloom-IOS-App
 xcodegen generate
 open XBloom.xcodeproj
 ```

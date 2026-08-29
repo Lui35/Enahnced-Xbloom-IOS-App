@@ -194,8 +194,8 @@ Full instructions, including standing up your own Supabase project, are in
 **[INSTALLATION.md](INSTALLATION.md)**. The short version:
 
 ```sh
-git clone https://github.com/Lui35/MyV60.git
-cd MyV60
+git clone https://github.com/Lui35/Enahnced-Xbloom-IOS-App.git
+cd Enahnced-Xbloom-IOS-App
 xcodegen generate && open XBloom.xcodeproj
 ```
 
