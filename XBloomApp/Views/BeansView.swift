@@ -1480,11 +1480,11 @@ struct AIRecipeDesignerView: View {
                     ],
                     systemImage: "wand.and.sparkles",
                     tint: StudioTheme.accent,
-                    onCancel: {
-                        if let requestID { generation.cancel(requestID) }
-                        requestID = nil
-                    },
-                    leaveTitle: "Wait in Recipes",
+                    // No cancel here. Stopping the request belongs with the
+                    // card in the library that shows it running, not on an
+                    // overlay whose only other option was to throw the work
+                    // away.
+                    leaveTitle: "Back to Recipes",
                     onLeave: { dismiss() }
                 )
             }

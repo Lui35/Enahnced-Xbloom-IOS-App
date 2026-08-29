@@ -96,6 +96,41 @@ struct RecipesView: View {
                         RecipeLibraryFilterPicker(selection: $selectedFilter)
                             .padding(.bottom, 4)
 
+                        // A request that failed after the designer was closed
+                        // would otherwise just remove its card, which reads as
+                        // "nothing happened" rather than "this did not work".
+                        if let failure = generation.lastError {
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(StudioTheme.warning)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("The recipe was not designed")
+                                        .font(.subheadline.weight(.bold))
+                                    Text(failure)
+                                        .font(.caption)
+                                        .foregroundStyle(StudioTheme.muted)
+                                }
+                                Spacer(minLength: 0)
+                                Button {
+                                    generation.clearError()
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(StudioTheme.muted)
+                                        .frame(width: 30, height: 30)
+                                        .background(StudioTheme.raised, in: Circle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(16)
+                            .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
+                                    .stroke(StudioTheme.warning.opacity(0.4), lineWidth: 1.5)
+                            }
+                            .transition(.opacity)
+                        }
+
                         // A recipe still being written, shown where it will
                         // land. The request belongs to the app rather than to
                         // the designer sheet, so this survives leaving it.
