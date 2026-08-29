@@ -103,6 +103,7 @@
 		DE378BDE43EE3E266B604B87 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		EAC5A5AAF24A5BB4B324FDA9 /* xBloom app */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "xBloom app"; path = .; sourceTree = SOURCE_ROOT; };
 		F44BF38C59DA5466E734084C /* ManualPourView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualPourView.swift; sourceTree = "<group>"; };
+		"TEMP_CA72DC85-3CF3-4311-8067-DC2F8E822132" /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -236,6 +237,14 @@
 				58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		"TEMP_8C9C10D3-92AB-4BE6-A9E0-CA0868F9D8EB" /* xBloom app */ = {
+			isa = PBXGroup;
+			children = (
+				"TEMP_CA72DC85-3CF3-4311-8067-DC2F8E822132" /* Secrets.xcconfig */,
+			);
+			path = "xBloom app";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -395,6 +404,7 @@
 /* Begin XCBuildConfiguration section */
 		346BE6AE436BDA4013D75904 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = "TEMP_CA72DC85-3CF3-4311-8067-DC2F8E822132" /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -587,6 +597,7 @@
 		};
 		C0E6B76C759A9E2E65B660D3 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = "TEMP_CA72DC85-3CF3-4311-8067-DC2F8E822132" /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;

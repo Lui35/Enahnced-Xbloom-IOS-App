@@ -39,6 +39,10 @@
 	<string>xBloom uses the camera to import details from your coffee bean packaging.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>SupabaseHost</key>
+	<string>$(SUPABASE_HOST)</string>
+	<key>SupabasePublishableKey</key>
+	<string>$(SUPABASE_PUBLISHABLE_KEY)</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

@@ -196,6 +196,7 @@ Full instructions, including standing up your own Supabase project, are in
 ```sh
 git clone https://github.com/Lui35/Enahnced-Xbloom-IOS-App.git
 cd Enahnced-Xbloom-IOS-App
+cp Secrets.example.xcconfig Secrets.xcconfig
 xcodegen generate && open XBloom.xcodeproj
 ```
 

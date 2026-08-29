@@ -32,9 +32,14 @@ yourself, which is also why nothing in it phones home to anybody but you.
 ```sh
 git clone https://github.com/Lui35/Enahnced-Xbloom-IOS-App.git
 cd Enahnced-Xbloom-IOS-App
+cp Secrets.example.xcconfig Secrets.xcconfig   # your backend goes here later
 xcodegen generate
 open XBloom.xcodeproj
 ```
+
+`Secrets.xcconfig` is not in the repository and never should be — it is where
+your own Supabase project goes in [step 3](#3-point-the-app-at-your-project).
+Left blank, everything except sync and AI still works.
 
 1. **Open Xcode once first** if you never have — accept the licence and let it
    install its components.
@@ -133,12 +138,32 @@ deleted it.
 
 ## 3. Point the app at your project
 
-Two constants, in `XBloomApp/Services/SupabaseService.swift`:
+Put your values in `Secrets.xcconfig` — the file you copied in step 1, which is
+gitignored:
 
-```swift
-static let projectURL = URL(string: "https://YOUR-PROJECT-REF.supabase.co")!
-static let publishableKey = "sb_publishable_YOUR_KEY"
 ```
+SUPABASE_HOST = your-project-ref.supabase.co
+SUPABASE_PUBLISHABLE_KEY = sb_publishable_...
+```
+
+The host has no `https://` because `//` starts a comment in an xcconfig file;
+the scheme is added back in code. Then regenerate and rebuild:
+
+```sh
+xcodegen generate
+```
+
+They reach the app as `Info.plist` values, so nothing about your project is ever
+committed. A build with them blank runs local-only and says so on the Account &
+AI screen — which is exactly what the IPAs in [Releases](../../releases) are,
+since a public build must not carry anybody's backend.
+
+> **Keep it that way.** The publishable key is meant to be readable by a client
+> and Row Level Security keeps your rows private, but anyone holding it can
+> create an account in your project and spend your AI quota through the Edge
+> Function. If a key of yours has ever been public, rotate it in
+> **Project Settings → API Keys**, and consider turning off new sign-ups in
+> **Authentication → Sign In / Providers**.
 
 There is also a URL scheme for the sign-in callback, `xbloom://login-callback`,
 declared in `project.yml`. If you changed the bundle identifier you can leave

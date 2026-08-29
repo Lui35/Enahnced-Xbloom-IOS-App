@@ -7,8 +7,32 @@ import XBloomCore
 @MainActor
 @Observable
 final class SupabaseService {
-    static let projectURL = URL(string: "https://cndmrczfnwztrmafxhmd.supabase.co")!
-    static let publishableKey = "sb_publishable_ULORWw52UGOHx2KEgUwK0w_HBZ_ga7x"
+    /// Where this build's backend lives, read from `Secrets.xcconfig` at build
+    /// time rather than written here.
+    ///
+    /// A public repository that carries a working project URL and key hands
+    /// every reader an account in somebody else's database — and, through the
+    /// AI function, somebody else's model quota. Row Level Security keeps rows
+    /// private either way, but quota is not a row.
+    ///
+    /// Both are empty in a clean checkout, and that is a supported state: the
+    /// library, the recipe editor, and every Bluetooth feature are local.
+    static let projectURL: URL? = {
+        let host = configuration("SupabaseHost")
+        guard !host.isEmpty else { return nil }
+        return URL(string: "https://\(host)")
+    }()
+
+    static let publishableKey = configuration("SupabasePublishableKey")
+
+    /// Whether this build has a backend at all.
+    static var isConfigured: Bool { projectURL != nil && !publishableKey.isEmpty }
+
+    private static func configuration(_ key: String) -> String {
+        (Bundle.main.object(forInfoDictionaryKey: key) as? String)?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+    }
+
     static let authCallbackURL = URL(string: "xbloom://login-callback")!
 
     let client: SupabaseClient
@@ -24,8 +48,11 @@ final class SupabaseService {
     var isAuthenticated: Bool { hasValidSession && userID != nil }
 
     init() {
+        // An unconfigured build still needs a client to exist; every call
+        // through it fails, and `isConfigured` is what the UI asks first so
+        // nothing tries.
         client = SupabaseClient(
-            supabaseURL: Self.projectURL,
+            supabaseURL: Self.projectURL ?? URL(string: "https://unconfigured.invalid")!,
             supabaseKey: Self.publishableKey
         )
         Task { @MainActor [weak self] in
@@ -104,8 +131,9 @@ final class SupabaseService {
     }
 
     func invokeAI(action: String, model: String, body: [String: Any]) async throws -> Data {
+        guard let projectURL = Self.projectURL else { throw CloudError.notConfigured }
         let session = try await requireSession()
-        var request = URLRequest(url: Self.projectURL.appending(path: "functions/v1/coffee-ai"))
+        var request = URLRequest(url: projectURL.appending(path: "functions/v1/coffee-ai"))
         request.httpMethod = "POST"
         request.timeoutInterval = 85
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -731,6 +759,7 @@ private struct CloudFunctionError: Decodable {
 
 enum CloudError: LocalizedError {
     case notSignedIn
+    case notConfigured
     case syncAlreadyRunning
     case invalidResponse
     case function(String)
@@ -738,6 +767,9 @@ enum CloudError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notSignedIn: "Sign in to Supabase to sync or use Gemini."
+        case .notConfigured:
+            "This build has no Supabase project. Add one in Secrets.xcconfig and rebuild — "
+                + "see INSTALLATION.md. Brewing and your library work without it."
         case .syncAlreadyRunning: "A cloud sync is already running."
         case .invalidResponse: "The cloud service returned an invalid response."
         case let .function(message): message

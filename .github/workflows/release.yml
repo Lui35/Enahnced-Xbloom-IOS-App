@@ -32,6 +32,12 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # No Supabase project in CI, on purpose: a public build must not carry
+      # anybody's backend. The app is fully usable without one — only sync and
+      # the AI features need it.
+      - name: Create an empty backend configuration
+        run: cp Secrets.example.xcconfig Secrets.xcconfig
+
       - name: Generate the Xcode project
         run: xcodegen generate
 
