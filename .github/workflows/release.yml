@@ -32,11 +32,34 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      # No Supabase project in CI, on purpose: a public build must not carry
-      # anybody's backend. The app is fully usable without one — only sync and
-      # the AI features need it.
-      - name: Create an empty backend configuration
-        run: cp Secrets.example.xcconfig Secrets.xcconfig
+      # The released build carries this repository's own backend, from secrets
+      # rather than from the source, so the key can be rotated without a commit
+      # and never enters git history.
+      #
+      # Understand what this means: the key ends up inside a public IPA, which
+      # is the same as publishing it. That is only acceptable because new
+      # sign-ups are disabled on the project — the key alone cannot create an
+      # account, and without an account it reaches nothing. Turn sign-ups back
+      # on and this step has to go.
+      #
+      # A fork without these secrets gets blanks and a local-only build, which
+      # is the right default for anybody who is not this repository.
+      - name: Write the backend configuration
+        env:
+          SUPABASE_HOST: ${{ secrets.SUPABASE_HOST }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          cp Secrets.example.xcconfig Secrets.xcconfig
+          if [ -n "$SUPABASE_HOST" ] && [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            {
+              echo "SUPABASE_HOST = $SUPABASE_HOST"
+              echo "SUPABASE_PUBLISHABLE_KEY = $SUPABASE_PUBLISHABLE_KEY"
+            } >> Secrets.xcconfig
+            echo "configured=true" >> "$GITHUB_ENV"
+          else
+            echo "No backend secrets on this repository; building local-only."
+            echo "configured=false" >> "$GITHUB_ENV"
+          fi
 
       - name: Generate the Xcode project
         run: xcodegen generate
@@ -86,6 +109,12 @@ jobs:
           **$SUBJECT**
 
           Built from \`$SHA\` on \`main\`.
+
+          ### What is in this build
+
+          Sync and the AI features: **${{ env.configured == 'true' && 'configured' || 'not configured — this build is local-only' }}**.
+          Brewing, the machine tools and your library work either way; they are
+          local and need no account.
 
           ### Installing this
 

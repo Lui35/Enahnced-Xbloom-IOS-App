@@ -273,3 +273,7 @@ resolved, and force-pushing or deleting `main` is refused outright.
 The Bluetooth implementation is unofficial, derived from the MIT-licensed
 PyBloom interoperability project and from recordings of one machine. It is not a
 vendor-supported API and can change without notice. See `THIRD_PARTY_NOTICES.md`.
+
+## Licence
+
+[MIT](LICENSE) — the same terms as PyBloom, which this builds on.

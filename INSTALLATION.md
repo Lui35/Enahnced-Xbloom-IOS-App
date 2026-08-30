@@ -155,15 +155,21 @@ xcodegen generate
 
 They reach the app as `Info.plist` values, so nothing about your project is ever
 committed. A build with them blank runs local-only and says so on the Account &
-AI screen — which is exactly what the IPAs in [Releases](../../releases) are,
-since a public build must not carry anybody's backend.
+AI screen.
 
-> **Keep it that way.** The publishable key is meant to be readable by a client
-> and Row Level Security keeps your rows private, but anyone holding it can
-> create an account in your project and spend your AI quota through the Edge
-> Function. If a key of yours has ever been public, rotate it in
-> **Project Settings → API Keys**, and consider turning off new sign-ups in
-> **Authentication → Sign In / Providers**.
+The IPAs in [Releases](../../releases) are built by CI from repository secrets
+rather than from the source, and each release says whether that build has a
+backend. A fork without those secrets builds local-only, which is the right
+default for anyone who is not this repository.
+
+> **If you publish a build that contains your key, close the door first.** The
+> publishable key is meant to be readable by a client and Row Level Security
+> keeps your rows private — but anyone holding it can create an account in your
+> project and spend your AI quota through the Edge Function, unless new sign-ups
+> are disabled in **Authentication → Sign In / Providers**. Do that before
+> putting a configured build anywhere public, and rotate the key in
+> **Project Settings → API Keys** if one has ever leaked while sign-ups were
+> open.
 
 There is also a URL scheme for the sign-in callback, `xbloom://login-callback`,
 declared in `project.yml`. If you changed the bundle identifier you can leave

@@ -41,6 +41,7 @@
 		DD735855BFE08C898D0C6C69 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */; };
 		E8A04612E1F5F04A2C3C32E4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288AD2850F804ABEB0F63EC4 /* RootView.swift */; };
 		EE9364C6CF5692E611867378 /* XBloomBrewLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A52D9466670E09651FD3349C /* XBloomBrewLiveActivity.swift */; };
+		EEE890B93D89E4771718D598 /* BrewingReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63419A369FC46A26018BBF8B /* BrewingReference.swift */; };
 		FE027D87D8FDF042E764F0CF /* Xplume-App-Icon-Concept.png in Resources */ = {isa = PBXBuildFile; fileRef = 3CECB5C169218F78F3E3C484 /* Xplume-App-Icon-Concept.png */; };
 /* End PBXBuildFile section */
 
@@ -86,6 +87,7 @@
 		58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomApp.swift; sourceTree = "<group>"; };
 		5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		63419A369FC46A26018BBF8B /* BrewingReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewingReference.swift; sourceTree = "<group>"; };
 		641D924ACBD150A88E41D4BA /* XBloomLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomLiveActivityBundle.swift; sourceTree = "<group>"; };
 		71C5A662F8A8FAFF2121A83E /* BeansView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeansView.swift; sourceTree = "<group>"; };
 		7210B750C8D2A62B65AE67BC /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
@@ -103,7 +105,7 @@
 		DE378BDE43EE3E266B604B87 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		EAC5A5AAF24A5BB4B324FDA9 /* xBloom app */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "xBloom app"; path = .; sourceTree = SOURCE_ROOT; };
 		F44BF38C59DA5466E734084C /* ManualPourView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualPourView.swift; sourceTree = "<group>"; };
-		"TEMP_CA72DC85-3CF3-4311-8067-DC2F8E822132" /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		"TEMP_17954497-3BD5-46E3-B281-9867F92FCE29" /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -190,6 +192,7 @@
 			isa = PBXGroup;
 			children = (
 				D5DFFA847B7A98439EE6958E /* BeanImportCoordinator.swift */,
+				63419A369FC46A26018BBF8B /* BrewingReference.swift */,
 				3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */,
 				1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */,
 				60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */,
@@ -239,10 +242,10 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		"TEMP_8C9C10D3-92AB-4BE6-A9E0-CA0868F9D8EB" /* xBloom app */ = {
+		"TEMP_7F9BDC87-049C-4075-8AA6-490268D66547" /* xBloom app */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_CA72DC85-3CF3-4311-8067-DC2F8E822132" /* Secrets.xcconfig */,
+				"TEMP_17954497-3BD5-46E3-B281-9867F92FCE29" /* Secrets.xcconfig */,
 			);
 			path = "xBloom app";
 			sourceTree = "<group>";
@@ -357,6 +360,7 @@
 				D87049683A34826E86428065 /* BeansView.swift in Sources */,
 				C68FE583E0B5EA6C84C64712 /* BrewLiveActivityManager.swift in Sources */,
 				DBE663F2A2D320EFF7BDDA29 /* BrewView.swift in Sources */,
+				EEE890B93D89E4771718D598 /* BrewingReference.swift in Sources */,
 				D33E678FD500A3F406E29343 /* CameraCaptureView.swift in Sources */,
 				37A3D1A7AF48FBECD9CBA6C5 /* DesignSystem.swift in Sources */,
 				220A2352A2E96F54EFD37AE1 /* DoseWeighingView.swift in Sources */,
@@ -404,7 +408,7 @@
 /* Begin XCBuildConfiguration section */
 		346BE6AE436BDA4013D75904 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_CA72DC85-3CF3-4311-8067-DC2F8E822132" /* Secrets.xcconfig */;
+			baseConfigurationReference = "TEMP_17954497-3BD5-46E3-B281-9867F92FCE29" /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -597,7 +601,7 @@
 		};
 		C0E6B76C759A9E2E65B660D3 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_CA72DC85-3CF3-4311-8067-DC2F8E822132" /* Secrets.xcconfig */;
+			baseConfigurationReference = "TEMP_17954497-3BD5-46E3-B281-9867F92FCE29" /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
