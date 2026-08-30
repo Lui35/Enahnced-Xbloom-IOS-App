@@ -165,7 +165,10 @@ final class GeminiService {
             ? "Analyze the bean and choose the flavor direction that best showcases it."
             : goals.joined(separator: ", ")
         let prompt = """
+        \(BrewingReference.text)
+
         You are an expert specialty-coffee recipe designer for an xBloom Studio.
+        Reason from the reference above; do not quote it or name its sections.
         Create one practical \(styleRequest) recipe for \(servingRequest) from the bean profile below.
         The user's simultaneous cup goals are: \(selectedGoals)
         Additional user note: \(notes.isEmpty ? "None." : notes)
@@ -233,7 +236,10 @@ final class GeminiService {
         let cups = min(3, max(1, original.servings ?? 1))
 
         let prompt = """
+        \(BrewingReference.text)
+
         You are improving an xBloom Studio pour-over recipe after a real brew.
+        Diagnose from the reference above; do not quote it or name its sections.
         The original recipe, exact bean, brew style, and serving count are supplied below.
         Create a NEW improved recipe; do not merely rename or repeat the old one.
 
