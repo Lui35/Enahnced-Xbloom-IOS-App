@@ -1,6 +1,23 @@
 import SwiftData
 import SwiftUI
 
+private struct SelectedTabKey: EnvironmentKey {
+    static let defaultValue: Binding<Int>? = nil
+}
+
+extension EnvironmentValues {
+    /// The tab a screen can send the user to.
+    ///
+    /// A sheet presented from deep inside one tab cannot reach `RootView`'s
+    /// state any other way, so a button promising "Back to Recipes" could only
+    /// ever `dismiss()` — which puts the user back on the tab the sheet came
+    /// from, Beans included.
+    var selectedTab: Binding<Int>? {
+        get { self[SelectedTabKey.self] }
+        set { self[SelectedTabKey.self] = newValue }
+    }
+}
+
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(BrewSessionCoordinator.self) private var brewSession
@@ -33,6 +50,7 @@ struct RootView: View {
                     .zIndex(10)
             }
         }
+        .environment(\.selectedTab, $selectedTab)
         .tint(StudioTheme.accent)
         .preferredColorScheme(.dark)
         .task {

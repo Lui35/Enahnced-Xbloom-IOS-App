@@ -190,7 +190,6 @@ struct BeansView: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(StudioTheme.mint.opacity(0.25), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.28), radius: 18, y: 9)
     }
 
     private func beanShelfCard(_ bean: StoredBean) -> some View {
@@ -348,7 +347,6 @@ struct BeansView: View {
             RoundedRectangle(cornerRadius: 27, style: .continuous)
                 .stroke(.white.opacity(0.09), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.24), radius: 16, y: 8)
     }
 
     private func beanStat(_ title: String, _ icon: String, _ color: Color) -> some View {
@@ -1312,6 +1310,7 @@ private struct BeanRefillView: View {
 
 struct AIRecipeDesignerView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.selectedTab) private var selectedTab
     @Environment(\.modelContext) private var modelContext
     @Environment(GeminiService.self) private var gemini
     @Environment(RecipeGenerationCoordinator.self) private var generation
@@ -1633,7 +1632,13 @@ struct AIRecipeDesignerView: View {
                     // overlay whose only other option was to throw the work
                     // away.
                     leaveTitle: "Back to Recipes",
-                    onLeave: { dismiss() }
+                    onLeave: {
+                        // The recipe lands in the library, so that is where
+                        // this button says it goes — including when the
+                        // designer was opened from a bean on the Beans tab.
+                        selectedTab?.wrappedValue = 1
+                        dismiss()
+                    }
                 )
             }
         }

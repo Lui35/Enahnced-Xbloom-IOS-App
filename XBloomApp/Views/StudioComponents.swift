@@ -965,7 +965,10 @@ struct AIProcessingOverlay: View {
                             in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                         )
                         .scaleEffect(breathes ? 1.04 : 0.94)
-                        .shadow(color: tint.opacity(0.38), radius: breathes ? 22 : 9)
+                        // Fixed radius on purpose. Animating a shadow radius
+                        // re-rasterizes the blur every frame; the scale above
+                        // already carries the breath.
+                        .shadow(color: tint.opacity(0.38), radius: 14)
                 }
 
                 VStack(spacing: 8) {
