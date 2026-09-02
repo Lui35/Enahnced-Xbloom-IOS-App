@@ -130,7 +130,24 @@ final class SupabaseService {
         }
     }
 
-    func invokeAI(action: String, model: String, body: [String: Any]) async throws -> Data {
+    /// Calls the AI function and waits for Gemini to answer.
+    ///
+    /// - Parameters:
+    ///   - requestID: Supplying one asks the function to answer immediately and
+    ///     finish in the background, leaving the result on the row. The same id
+    ///     resent is a duplicate the function refuses to bill twice, so a retry
+    ///     is safe. Without one the call blocks for the whole Gemini round trip,
+    ///     which is still what the short actions want.
+    ///   - context: Handed back untouched on the row, for a result collected by
+    ///     a launch that no longer remembers what it asked for.
+    @discardableResult
+    func invokeAI(
+        action: String,
+        model: String,
+        body: [String: Any],
+        requestID: UUID? = nil,
+        context: [String: Any]? = nil
+    ) async throws -> Data {
         guard let projectURL = Self.projectURL else { throw CloudError.notConfigured }
         let session = try await requireSession()
         var request = URLRequest(url: projectURL.appending(path: "functions/v1/coffee-ai"))
@@ -139,11 +156,14 @@ final class SupabaseService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(Self.publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
+        var payload: [String: Any] = [
             "action": action,
             "model": model,
             "body": body,
-        ])
+        ]
+        if let requestID { payload["requestID"] = requestID.uuidString.lowercased() }
+        if let context { payload["context"] = context }
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw CloudError.invalidResponse }
@@ -152,6 +172,50 @@ final class SupabaseService {
             throw CloudError.function(message ?? "Cloud AI returned HTTP \(http.statusCode).")
         }
         return data
+    }
+
+    /// Every AI request this account has not accounted for yet: still running,
+    /// or finished and waiting to be turned into a recipe.
+    func openAIJobs() async throws -> [AIJobRow] {
+        guard Self.isConfigured else { return [] }
+        let session = try await requireSession()
+        return try await client.schema("public").setAuth(session.accessToken)
+            .from("ai_request_usage")
+            .select("request_id,action,status,error_code,context,response,created_at")
+            .eq("user_id", value: session.user.id)
+            .is("consumed_at", value: nil)
+            .in("status", values: ["started", "succeeded", "failed"])
+            .order("created_at", ascending: true)
+            .execute()
+            .value
+    }
+
+    /// Marks a result as landed, so the next launch does not save it twice.
+    func finishAIJob(_ requestID: UUID) async throws {
+        try await updateAIJob(requestID, values: ["consumed_at": Self.timestamp()])
+    }
+
+    /// Gives up on a request. The row stays: Gemini has usually already been
+    /// called, and it still counts against the rate limit.
+    func cancelAIJob(_ requestID: UUID) async throws {
+        try await updateAIJob(
+            requestID,
+            values: ["status": "cancelled", "consumed_at": Self.timestamp()]
+        )
+    }
+
+    private func updateAIJob(_ requestID: UUID, values: [String: String]) async throws {
+        let session = try await requireSession()
+        try await client.schema("public").setAuth(session.accessToken)
+            .from("ai_request_usage")
+            .update(values)
+            .eq("user_id", value: session.user.id)
+            .eq("request_id", value: requestID)
+            .execute()
+    }
+
+    private static func timestamp(_ date: Date = Date()) -> String {
+        ISO8601DateFormatter().string(from: date)
     }
 
     @discardableResult
@@ -755,6 +819,38 @@ private struct CloudBrewRow: Codable {
 
 private struct CloudFunctionError: Decodable {
     let error: String
+}
+
+/// One AI request as the backend sees it.
+struct AIJobRow: Decodable, Identifiable, Equatable {
+    /// What the app needs to rebuild a recipe from a response it did not wait
+    /// for. Written by the app, stored untouched, read back a launch later.
+    struct Context: Codable, Equatable {
+        var beanID: UUID?
+        var beanName: String
+        var style: String
+        var cups: Int
+        var useGrinder: Bool
+    }
+
+    let requestID: UUID
+    let action: String
+    let status: String
+    let errorCode: String?
+    let context: Context?
+    /// Gemini's own response body, exactly as it was returned, so the app
+    /// decodes and validates it with the same code it uses when it waits.
+    let response: String?
+    let createdAt: Date
+
+    var id: UUID { requestID }
+
+    enum CodingKeys: String, CodingKey {
+        case action, status, context, response
+        case requestID = "request_id"
+        case errorCode = "error_code"
+        case createdAt = "created_at"
+    }
 }
 
 enum CloudError: LocalizedError {

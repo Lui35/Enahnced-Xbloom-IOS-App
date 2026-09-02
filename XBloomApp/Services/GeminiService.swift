@@ -151,7 +151,9 @@ final class GeminiService {
     ///     whatever the user could say about what is in the hopper.
     ///   - pours: A pour count the user insisted on. Nil leaves the
     ///     architecture to the model, which is what the brief is written for.
-    func generateRecipe(
+    func startRecipeJob(
+        requestID: UUID,
+        context: AIJobRow.Context,
         for bean: BeanProfile?,
         style: BrewStyle? = .hot,
         cups: Int? = 1,
@@ -159,7 +161,7 @@ final class GeminiService {
         notes: String = "",
         pours: Int? = nil,
         beanDescription: String = ""
-    ) async throws -> AIRecipeResult {
+    ) async throws {
         let profileJSON: String
         if let bean {
             profileJSON = String(decoding: try JSONEncoder().encode(bean), as: UTF8.self)
@@ -211,10 +213,26 @@ final class GeminiService {
                 "responseJsonSchema": AIRecipeResult.schema,
             ],
         ]
-        return try decodeModelResponse(
-            try await request(body: body, action: "generateRecipe"),
-            as: AIRecipeResult.self
+        guard cloud.isAuthenticated else { throw GeminiError.missingAPIKey }
+        try await cloud.invokeAI(
+            action: "generateRecipe",
+            model: model,
+            body: body,
+            requestID: requestID,
+            context: [
+                "beanID": context.beanID?.uuidString as Any? ?? NSNull(),
+                "beanName": context.beanName,
+                "style": context.style,
+                "cups": context.cups,
+                "useGrinder": context.useGrinder,
+            ]
         )
+    }
+
+    /// Turns a stored Gemini body into a result, for a request the app started
+    /// but did not stay to watch.
+    func recipeResult(from response: String) throws -> AIRecipeResult {
+        try decodeModelResponse(Data(response.utf8), as: AIRecipeResult.self)
     }
 
     func enhanceRecipe(

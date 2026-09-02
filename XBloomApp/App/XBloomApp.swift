@@ -8,13 +8,17 @@ struct XBloomApp: App {
     @State private var cloud: SupabaseService
     @State private var gemini: GeminiService
     @State private var brewSession = BrewSessionCoordinator()
-    @State private var recipeGeneration = RecipeGenerationCoordinator()
+    @State private var recipeGeneration: RecipeGenerationCoordinator
     @State private var beanImport = BeanImportCoordinator()
 
     init() {
         let cloud = SupabaseService()
+        let gemini = GeminiService(cloud: cloud)
         _cloud = State(initialValue: cloud)
-        _gemini = State(initialValue: GeminiService(cloud: cloud))
+        _gemini = State(initialValue: gemini)
+        _recipeGeneration = State(
+            initialValue: RecipeGenerationCoordinator(cloud: cloud, gemini: gemini)
+        )
     }
 
     var body: some Scene {
@@ -58,6 +62,9 @@ private struct CloudBootstrapView: View {
                 guard cloud.isAuthenticated else { return }
                 try? await Task.sleep(for: .seconds(1))
                 _ = try? await cloud.sync(in: modelContext)
+                // A recipe the backend finished while the app was closed is
+                // collected here, and anything still running gets its card back.
+                await recipeGeneration.refresh(context: modelContext)
             }
             .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
                 guard let savedContext = notification.object as? ModelContext,

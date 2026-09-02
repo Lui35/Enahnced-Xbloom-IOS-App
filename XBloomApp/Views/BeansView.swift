@@ -1328,12 +1328,7 @@ struct AIRecipeDesignerView: View {
     @State private var cups: Int
     @State private var selectedAims: Set<RecipeFlavorGoal>
     @State private var goal: String
-    @State private var createdRecipe: Recipe?
-    @State private var rationale: String?
     @State private var errorMessage: String?
-    /// The generation this screen started, so it can follow that one rather
-    /// than any other the app happens to be running.
-    @State private var requestID: UUID?
     /// A bean chosen here, when the screen did not arrive with one.
     @State private var pickedBeanID: UUID?
     /// What the coffee is, when it is not in the library. The model reasons
@@ -1546,37 +1541,6 @@ struct AIRecipeDesignerView: View {
 
                         pourChoice
 
-                        if let createdRecipe {
-                            StudioCard(accent: StudioTheme.mint) {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Label("AI recipe created", systemImage: "sparkles")
-                                            .font(.headline)
-                                            .foregroundStyle(StudioTheme.mint)
-                                        Spacer()
-                                        Text(styleTitle(createdRecipe.brewStyle))
-                                            .font(.caption.bold())
-                                            .padding(.horizontal, 9)
-                                            .padding(.vertical, 6)
-                                            .background(StudioTheme.accent.opacity(0.18), in: Capsule())
-                                    }
-                                    Text(createdRecipe.name)
-                                        .font(.title3.weight(.bold))
-                                    Text("\(createdRecipe.servings ?? cups) cup\(createdRecipe.servings == 1 ? "" : "s") · \(String(format: "%.1f", createdRecipe.dose)) g · \(createdRecipe.totalWater) ml")
-                                        .font(.subheadline.monospacedDigit())
-                                        .foregroundStyle(StudioTheme.muted)
-                                    if let rationale {
-                                        Text(rationale)
-                                            .font(.footnote)
-                                            .foregroundStyle(.white.opacity(0.74))
-                                    }
-                                    Label("Saved to Recipes with the AI signature", systemImage: "checkmark.circle.fill")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(StudioTheme.mint)
-                                }
-                            }
-                        }
-
                         if let errorMessage {
                             Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
@@ -1596,50 +1560,22 @@ struct AIRecipeDesignerView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(createdRecipe == nil ? "Cancel" : "Done") { dismiss() }
+                    Button("Cancel") { dismiss() }
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                if createdRecipe == nil {
-                    StudioSaveBar(
-                        title: isGenerating ? "Designing…" : "Create AI recipe",
-                        subtitle: gemini.hasAPIKey
-                            ? generationSummary
-                            : "Add your Gemini key in Settings first.",
-                        enabled: gemini.hasAPIKey && !isGenerating,
-                        compact: true
-                    ) {
-                        startGeneration()
-                    }
+                StudioSaveBar(
+                    title: alreadyDesigning ? "Designing…" : "Create AI recipe",
+                    subtitle: gemini.hasAPIKey
+                        ? (alreadyDesigning
+                            ? "This coffee already has a recipe on the way."
+                            : generationSummary)
+                        : "Add your Gemini key in Settings first.",
+                    enabled: gemini.hasAPIKey && !alreadyDesigning,
+                    compact: true
+                ) {
+                    startGeneration()
                 }
-            }
-        }
-        .overlay {
-            if isGenerating {
-                AIProcessingOverlay(
-                    title: "Designing your recipe",
-                    messages: [
-                        "Studying the bean and roast development…",
-                        "Balancing dose, grind, and water…",
-                        "Composing each pour and rest…",
-                        "Validating the program for your xBloom…",
-                        "Leave this open or carry on — it keeps working.",
-                    ],
-                    systemImage: "wand.and.sparkles",
-                    tint: StudioTheme.accent,
-                    // No cancel here. Stopping the request belongs with the
-                    // card in the library that shows it running, not on an
-                    // overlay whose only other option was to throw the work
-                    // away.
-                    leaveTitle: "Back to Recipes",
-                    onLeave: {
-                        // The recipe lands in the library, so that is where
-                        // this button says it goes — including when the
-                        // designer was opened from a bean on the Beans tab.
-                        selectedTab?.wrappedValue = 1
-                        dismiss()
-                    }
-                )
             }
         }
         .preferredColorScheme(.dark)
@@ -1651,44 +1587,27 @@ struct AIRecipeDesignerView: View {
         .onChange(of: selectedAims) { _, _ in persistPreferences() }
         .onChange(of: goal) { _, _ in persistPreferences() }
         // Deliberately no cancel-on-disappear: the request belongs to
-        // `RecipeGenerationCoordinator` now, and leaving this sheet is a
-        // supported way to wait for it. The library shows it working.
-        .task {
-            // Reopening the designer while its request is still running picks
-            // that request back up, rather than showing a Create button for
-            // work already in flight.
-            if requestID == nil, let beanID = bean?.id {
-                requestID = generation.pending(forBean: beanID)?.id
-            }
-            #if DEBUG
-            // The overlay is otherwise only reachable with an account, so
-            // `-seedPendingRecipe` adopts the seeded request too.
-            if requestID == nil, ProcessInfo.processInfo.arguments.contains("-seedPendingRecipe") {
-                requestID = generation.pending.first?.id
-            }
-            #endif
-        }
-        .onChange(of: generation.lastCompleted) { _, recipe in
-            guard let recipe, recipe.beanID == activeBean?.id else { return }
-            createdRecipe = recipe
-            rationale = recipe.aiDescription
-        }
+        // `RecipeGenerationCoordinator`, and closing this sheet is now the
+        // normal way to start one. The library shows it working.
         .onChange(of: generation.lastError) { _, message in
             if let message { errorMessage = message }
         }
     }
 
-    /// True while *this* screen's request is still running.
-    private var isGenerating: Bool {
-        guard let requestID else { return false }
-        return generation.pending.contains { $0.id == requestID }
+    /// Whether this coffee already has a recipe on the way, so the button does
+    /// not quietly queue a second one for the same bean.
+    private var alreadyDesigning: Bool {
+        generation.pending(forBean: activeBean?.id) != nil
     }
 
+    /// Starts the request and leaves. The recipe is written by the backend and
+    /// collected into the library, so the library is where the work is watched
+    /// — there is nothing left for this screen to show.
     private func startGeneration() {
         persistPreferences()
         errorMessage = nil
         generation.clearLastCompleted()
-        requestID = generation.start(
+        generation.start(
             bean: activeBean,
             style: style,
             cups: cups,
@@ -1697,9 +1616,10 @@ struct AIRecipeDesignerView: View {
             pours: letsAIDecidePours ? nil : pourCount,
             beanDescription: beanDescription,
             useGrinder: useGrinder,
-            gemini: gemini,
             context: modelContext
         )
+        selectedTab?.wrappedValue = 1
+        dismiss()
     }
 
     /// The bean the recipe is actually for: the one this screen was opened
