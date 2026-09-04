@@ -1452,3 +1452,31 @@ private extension Data {
     #expect(BrewRetention.idsToPrune([a, b], limit: 1) == [a.id])
     #expect(BrewRetention.idsToPrune([b, a], limit: 1) == [a.id])
 }
+
+@Test func validationIssueReportsItsOwnMessage() {
+    // Caught as a bare `Error` and reported through `localizedDescription`,
+    // which is how the AI collector and the editor surface a rejected recipe.
+    let error: Error = ValidationIssue(
+        field: "water",
+        message: "Total machine water cannot exceed 500 ml."
+    )
+    #expect(error.localizedDescription == "Total machine water cannot exceed 500 ml.")
+}
+
+@Test func requireSafeRejectsARecipeGeminiCouldPlausiblyReturn() {
+    // Every pour is individually legal — the clamp in `AIRecipeResult.recipe`
+    // caps each at 240 ml — but eight of them are not, and `totalWater` is
+    // just their sum. This is the shape that reaches the user as an error.
+    let recipe = Recipe(
+        name: "Eight full pours",
+        grindSize: 45,
+        rpm: .rpm80,
+        dose: 18,
+        pours: Array(
+            repeating: PourStep(volume: 240, temperature: 93, flowRate: 3.2),
+            count: 8
+        )
+    )
+    #expect(recipe.totalWater == 1920)
+    #expect(throws: ValidationIssue.self) { try RecipeValidator.requireSafe(recipe) }
+}

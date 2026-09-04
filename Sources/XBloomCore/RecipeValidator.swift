@@ -1,6 +1,13 @@
 import Foundation
 
-public struct ValidationIssue: Error, Equatable, Identifiable, Sendable {
+/// A reason a recipe cannot be brewed as written.
+///
+/// `LocalizedError` matters more than it looks: these are thrown by
+/// `requireSafe`, and anything that catches one and reports
+/// `error.localizedDescription` — the AI collector, the editor — would
+/// otherwise show Foundation's "The operation couldn't be completed.
+/// (XBloomCore.ValidationIssue error 1.)" in place of the message right here.
+public struct ValidationIssue: Error, LocalizedError, Equatable, Identifiable, Sendable {
     public enum Severity: String, Sendable {
         case warning
         case error
@@ -10,6 +17,8 @@ public struct ValidationIssue: Error, Equatable, Identifiable, Sendable {
     public let field: String
     public let message: String
     public let severity: Severity
+
+    public var errorDescription: String? { message }
 
     public init(field: String, message: String, severity: Severity = .error) {
         self.field = field

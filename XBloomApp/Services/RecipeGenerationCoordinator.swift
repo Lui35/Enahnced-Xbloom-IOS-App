@@ -37,6 +37,13 @@ final class RecipeGenerationCoordinator {
     /// only runs while a card is on screen waiting for it.
     private static let pollInterval = Duration.seconds(3)
 
+    /// How long a request may sit unfinished before the app stops believing in
+    /// it. `coffee-ai` gives Gemini 75 seconds and writes the row either way,
+    /// so a row still `started` well past that means the background task died
+    /// without reporting — and without this the card would spin forever, on
+    /// every launch, with cancelling by hand as the only way out.
+    private static let staleAfter: TimeInterval = 180
+
     /// Generations still in flight, oldest first.
     private(set) var pending: [Pending] = []
     /// The most recent recipe to land, for a screen that wants to point at it.
@@ -142,6 +149,9 @@ final class RecipeGenerationCoordinator {
         var running: [Pending] = []
         for row in rows {
             switch row.status {
+            case "started" where Date().timeIntervalSince(row.createdAt) > Self.staleAfter:
+                lastError = "The recipe was never finished. Try designing it again."
+                try? await cloud.abandonAIJob(row.requestID)
             case "started":
                 running.append(
                     Pending(

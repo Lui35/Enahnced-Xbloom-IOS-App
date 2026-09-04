@@ -204,6 +204,19 @@ final class SupabaseService {
         )
     }
 
+    /// Gives up on a request the backend never finished, so a card cannot spin
+    /// on a result that is never coming.
+    ///
+    /// Recorded as failed rather than cancelled: the user did not walk away
+    /// from this one, and the usage table is the only place the two can be told
+    /// apart — a run of these is how a broken background task would show up.
+    func abandonAIJob(_ requestID: UUID) async throws {
+        try await updateAIJob(
+            requestID,
+            values: ["status": "failed", "consumed_at": Self.timestamp()]
+        )
+    }
+
     private func updateAIJob(_ requestID: UUID, values: [String: String]) async throws {
         let session = try await requireSession()
         try await client.schema("public").setAuth(session.accessToken)
