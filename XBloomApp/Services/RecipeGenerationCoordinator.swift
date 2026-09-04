@@ -38,11 +38,16 @@ final class RecipeGenerationCoordinator {
     private static let pollInterval = Duration.seconds(3)
 
     /// How long a request may sit unfinished before the app stops believing in
-    /// it. `coffee-ai` gives Gemini 75 seconds and writes the row either way,
-    /// so a row still `started` well past that means the background task died
-    /// without reporting — and without this the card would spin forever, on
-    /// every launch, with cancelling by hand as the only way out.
-    private static let staleAfter: TimeInterval = 180
+    /// it. Without this, a background task that died without patching its row
+    /// would leave the card spinning forever, on every launch, with cancelling
+    /// by hand as the only way out.
+    ///
+    /// Giving up too early is the more expensive mistake: it consumes the row,
+    /// so a result that lands afterwards is never collected and the recipe is
+    /// lost. So this stays comfortably clear of `coffee-ai`'s own worst case —
+    /// a 75s attempt, a 12s wait, then a 45s retry, near enough two minutes.
+    /// Raise it if that budget ever grows.
+    private static let staleAfter: TimeInterval = 240
 
     /// Generations still in flight, oldest first.
     private(set) var pending: [Pending] = []
@@ -139,7 +144,13 @@ final class RecipeGenerationCoordinator {
         guard cloud.isAuthenticated else { return }
         let rows: [AIJobRow]
         do {
-            rows = try await cloud.openAIJobs().filter { $0.action == "generateRecipe" }
+            // A row with no context predates this change: the client that made
+            // it waited for its answer inline and already has it. Collecting
+            // those would replay a backlog of long-dead failures as fresh
+            // banners on the first launch after upgrading.
+            rows = try await cloud.openAIJobs().filter {
+                $0.action == "generateRecipe" && $0.context != nil
+            }
         } catch {
             // An unreachable backend is not worth a banner: the cards stay, and
             // the next poll or launch asks again.

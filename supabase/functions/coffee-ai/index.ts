@@ -31,6 +31,17 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const MAX_REQUEST_BYTES = 20_000_000;
 const REQUESTS_PER_MINUTE = 20;
 
+/// What Google returns when it is overloaded rather than when anything is
+/// wrong with the request: RESOURCE_EXHAUSTED, INTERNAL, UNAVAILABLE. These are
+/// worth one more try; a 400 never is.
+const RETRY_STATUSES = new Set([429, 500, 503]);
+const RETRY_DELAY_MS = 12_000;
+const GEMINI_TIMEOUT_MS = 75_000;
+/// Shorter than the first attempt so the whole background task stays inside
+/// the runtime's wall-clock budget even when a slow request is what failed.
+/// Observed generations land in under 30s, so this is not a real ceiling.
+const GEMINI_RETRY_TIMEOUT_MS = 45_000;
+
 /// The one action the app no longer waits for. Recipe design is the long call
 /// (tens of seconds) and the only one whose result is worth keeping when the
 /// phone goes away mid-flight; `testConnection` is a connectivity check the
@@ -158,27 +169,27 @@ async function callGemini(
   requestID: string,
   model: string,
   encodedBody: string,
-  storeResponse: boolean,
+  background: boolean,
 ): Promise<Response> {
   try {
-    const endpoint =
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    const geminiResponse = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-goog-api-key": geminiKey,
-      },
-      body: encodedBody,
-      signal: AbortSignal.timeout(75_000),
-    });
+    let geminiResponse = await callModel(geminiKey, model, encodedBody, GEMINI_TIMEOUT_MS);
+    // Only in the background: nobody is waiting, so a retry costs a later
+    // recipe instead of a longer spinner. On the synchronous path the app
+    // gives up at 85s, so retrying there would just guarantee it never sees
+    // the answer. A timeout is never retried — the attempt already spent the
+    // budget, and a returned status means the call came back fast.
+    if (background && !geminiResponse.ok && RETRY_STATUSES.has(geminiResponse.status)) {
+      await geminiResponse.body?.cancel();
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      geminiResponse = await callModel(geminiKey, model, encodedBody, GEMINI_RETRY_TIMEOUT_MS);
+    }
     const responseBody = await geminiResponse.text();
 
     const values: Record<string, unknown> = {
       status: geminiResponse.ok ? "succeeded" : "failed",
       error_code: geminiResponse.ok ? null : `gemini_http_${geminiResponse.status}`,
     };
-    if (storeResponse && geminiResponse.ok) values.response = responseBody;
+    if (background && geminiResponse.ok) values.response = responseBody;
     await updateUsage(supabaseURL, secretKey, userID, requestID, values);
 
     return new Response(responseBody, {
@@ -198,6 +209,25 @@ async function callGemini(
       requestID,
     });
   }
+}
+
+function callModel(
+  geminiKey: string,
+  model: string,
+  encodedBody: string,
+  timeoutMS: number,
+): Promise<Response> {
+  const endpoint =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  return fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-goog-api-key": geminiKey,
+    },
+    body: encodedBody,
+    signal: AbortSignal.timeout(timeoutMS),
+  });
 }
 
 async function updateUsage(
