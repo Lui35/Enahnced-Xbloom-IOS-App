@@ -201,6 +201,25 @@ struct AccountAIView: View {
                 )
                 .font(.caption)
                 .foregroundStyle(StudioTheme.muted)
+
+                Divider()
+
+                Toggle(isOn: Binding(
+                    get: { gemini.usesBrewingReference },
+                    set: { gemini.usesBrewingReference = $0 }
+                )) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Brewing reference").font(.subheadline.weight(.semibold))
+                        Text(
+                            "Send the grind, flow, pattern and agitation guide with every "
+                                + "recipe request. Turn it off to generate the same bean "
+                                + "both ways and compare."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(StudioTheme.muted)
+                    }
+                }
+                .tint(StudioTheme.mint)
             }
         }
     }
