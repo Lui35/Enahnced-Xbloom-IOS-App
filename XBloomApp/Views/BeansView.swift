@@ -1342,7 +1342,7 @@ struct AIRecipeDesignerView: View {
         self.bean = bean
         let defaults = UserDefaults.standard
         let remembers = defaults.bool(forKey: "aiRecipeRememberPreferences")
-        let savedStyle = BrewStyle(rawValue: defaults.string(forKey: "aiRecipePreferredStyle") ?? "") ?? .hot
+        let savedStyle = BrewStyle(rawValue: defaults.string(forKey: "aiRecipePreferredStyle") ?? "") ?? .iced
         let savedCups = min(2, max(1, defaults.integer(forKey: "aiRecipePreferredCups")))
         let savedAims = Set(
             (defaults.stringArray(forKey: "aiRecipePreferredAims") ?? [])
@@ -1368,7 +1368,9 @@ struct AIRecipeDesignerView: View {
             initialValue: defaults.object(forKey: "aiRecipeLetsAIDecide") as? Bool ?? false
         )
         _rememberPreferences = State(initialValue: remembers)
-        _style = State(initialValue: remembers ? savedStyle : .hot)
+        // Iced is what this machine gets asked for most, so it is the opening
+        // position rather than hot. A remembered preference still wins.
+        _style = State(initialValue: remembers ? savedStyle : .iced)
         _cups = State(initialValue: remembers ? savedCups : 1)
         _selectedAims = State(initialValue: remembers ? migratedAims : [])
         // The bean's own "desired cup" is the best starting note there is, and
