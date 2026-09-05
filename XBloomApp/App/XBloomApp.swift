@@ -44,6 +44,7 @@ struct XBloomApp: App {
 }
 
 private struct CloudBootstrapView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
     @Environment(SupabaseService.self) private var cloud
     @Environment(RecipeGenerationCoordinator.self) private var recipeGeneration
@@ -65,6 +66,15 @@ private struct CloudBootstrapView: View {
                 // A recipe the backend finished while the app was closed is
                 // collected here, and anything still running gets its card back.
                 await recipeGeneration.refresh(context: modelContext)
+            }
+            // Coming back to the app is the other moment a finished recipe can
+            // be waiting. Without this, collection had exactly two triggers —
+            // a cold launch, and the poll loop that only lives while something
+            // is in flight — so a result that landed after the poll stopped
+            // sat on its row until the app was killed and started again.
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active, cloud.isAuthenticated else { return }
+                Task { await recipeGeneration.refresh(context: modelContext) }
             }
             .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
                 guard let savedContext = notification.object as? ModelContext,
