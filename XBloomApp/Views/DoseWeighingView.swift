@@ -31,38 +31,11 @@ struct DoseWeighingView: View {
     @State private var status: MachineToolStatus = .idle
     @State private var isWorking = false
     @State private var hasTared = false
-    @State private var manualAdjustment: Double?
+    @State private var weighing = DoseWeighingState()
     @State private var reachedTargetOnce = false
-    /// The weight captured when the dose was confirmed. The live scale drops
-    /// back to zero the moment the beans are lifted off it, so the figure that
-    /// goes to the machine has to be held separately.
-    @State private var confirmedDose: Double = 0
-
-    /// An empty pan means the beans are off the scale, not that the dose is
-    /// zero. Lifting the container to look at it — or tipping it early — used
-    /// to drop the reading to 0.0 g, which put the dose under the machine's
-    /// 5 g floor and killed the Continue button with the coffee already
-    /// weighed. The last real reading since the tare is held instead.
-    @State private var heldWeight: Double = 0
-
+    private var confirmedDose: Double { weighing.confirmedDose ?? 0 }
     private var target: Double { recipe.dose }
-
-    private var liveWeight: Double { max(0, machine.telemetry.weight ?? 0) }
-
-    /// What will actually be used. Normally the live scale reading; a manual
-    /// entry takes over if the user has corrected it.
-    private var measured: Double {
-        if let manualAdjustment { return manualAdjustment }
-        return liveWeight >= DoseFit.emptyPanThreshold ? liveWeight : heldWeight
-    }
-
-    /// The scale is empty but a dose was weighed on it, so the figure on
-    /// screen is remembered rather than live.
-    private var isHoldingReading: Bool {
-        manualAdjustment == nil
-            && liveWeight < DoseFit.emptyPanThreshold
-            && heldWeight >= DoseFit.emptyPanThreshold
-    }
+    private var measured: Double { weighing.measured }
 
     private var difference: Double { measured - target }
 
@@ -87,7 +60,9 @@ struct DoseWeighingView: View {
     }
 
     private var guidance: String {
-        if !hasTared { return "Put your container on the scale, then tare" }
+        if !hasTared && measured < DoseFit.emptyPanThreshold {
+            return "Tare on the phone or machine, then add beans"
+        }
         switch band {
         case .empty:
             return "Add your beans"
@@ -161,7 +136,10 @@ struct DoseWeighingView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     if stage == .loading {
                         Button("Back") {
-                            withAnimation(.snappy) { stage = .weighing }
+                            withAnimation(.snappy) {
+                                weighing.reweigh()
+                                stage = .weighing
+                            }
                         }
                     } else {
                         Button("Cancel") { dismiss() }
@@ -171,9 +149,11 @@ struct DoseWeighingView: View {
             .safeAreaInset(edge: .bottom) { confirmBar }
             .task { await openScale() }
             .onDisappear { Task { await machine.closeScale() } }
-            .onChange(of: machine.telemetry.weight) { _, _ in
-                guard stage == .weighing, liveWeight >= DoseFit.emptyPanThreshold else { return }
-                heldWeight = liveWeight
+            .onChange(of: machine.telemetry.weight, initial: true) { _, weight in
+                if let weight { weighing.ingest(weight: weight) }
+            }
+            .onChange(of: machine.scaleTareRevision) { _, _ in
+                resetTare()
             }
             .onChange(of: isOnTarget) { _, onTarget in
                 guard stage == .weighing, onTarget, hasTared, !reachedTargetOnce else { return }
@@ -211,12 +191,6 @@ struct DoseWeighingView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(guidanceColor)
                 .multilineTextAlignment(.center)
-
-            if isHoldingReading {
-                Label("Holding the last reading — the scale is empty", systemImage: "lock.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(StudioTheme.muted)
-            }
 
             if let ratioNote {
                 Text(ratioNote)
@@ -313,14 +287,14 @@ struct DoseWeighingView: View {
             VStack(alignment: .leading, spacing: 12) {
                 StudioSectionTitle(
                     title: "Dose used",
-                    detail: manualAdjustment == nil ? "From the scale" : "Set by hand",
+                    detail: weighing.adjustment == nil ? "From the scale" : "Set by hand",
                     icon: "scalemass.fill"
                 )
                 StudioDialBox(
                     title: "Adjust if needed",
                     value: Binding(
                         get: { measured },
-                        set: { manualAdjustment = $0 }
+                        set: { weighing.adjustment = $0 }
                     ),
                     range: 1...40,
                     step: 0.1,
@@ -329,9 +303,9 @@ struct DoseWeighingView: View {
                     tint: tint,
                     height: 84
                 )
-                if manualAdjustment != nil {
+                if weighing.adjustment != nil {
                     Button("Follow the scale again") {
-                        manualAdjustment = nil
+                        weighing.adjustment = nil
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(StudioTheme.accent)
@@ -350,77 +324,34 @@ struct DoseWeighingView: View {
 
     /// The machine refuses a dose outside this range, so the brew is blocked
     /// here with an explanation rather than failing after the sheet closes.
-    private var isDoseBrewable: Bool { (5.0...30.0).contains(measured) }
-
-    /// The scale falling back to near zero is the machine's own confirmation
-    /// that the beans have been lifted off it.
-    private var beansLifted: Bool {
-        guard let weight = machine.telemetry.weight else { return false }
-        return weight < max(1, confirmedDose * 0.25)
-    }
+    private var isDoseBrewable: Bool { weighing.isBrewable }
 
     private var loadingStage: some View {
         VStack(spacing: 18) {
-            VStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .stroke(StudioTheme.raised, lineWidth: 12)
-                    Circle()
-                        .trim(from: 0, to: beansLifted ? 1 : 0.001)
-                        .stroke(StudioTheme.mint, style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .animation(.smooth(duration: 0.4), value: beansLifted)
-                    VStack(spacing: 1) {
-                        Text(String(format: "%.1f", confirmedDose))
-                            .font(.system(size: 46, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                        Text("g measured")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(StudioTheme.muted)
-                    }
-                }
-                .frame(width: 168, height: 168)
-
-                Text("Now put the beans in")
+            VStack(spacing: 12) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 54))
+                    .foregroundStyle(StudioTheme.mint)
+                Text(String(format: "%.1f g dose confirmed", confirmedDose))
                     .font(.title2.weight(.bold))
-                Text("Tip the coffee you just weighed into the grinder.")
+                Text("Tip the beans into the grinder, then replace the weighing container with your coffee server.")
                     .font(.subheadline)
+                    .foregroundStyle(StudioTheme.muted)
+                    .multilineTextAlignment(.center)
+                Text("Your dose is saved. Moving containers on the scale will not change it.")
+                    .font(.caption)
                     .foregroundStyle(StudioTheme.muted)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 12)
 
-            StudioCard(accent: beansLifted ? StudioTheme.mint : StudioTheme.accent) {
-                HStack(spacing: 14) {
-                    Image(systemName: beansLifted ? "checkmark.circle.fill" : "arrow.up.circle")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(beansLifted ? StudioTheme.mint : StudioTheme.accent)
-                        .frame(width: 50, height: 50)
-                        .background(
-                            (beansLifted ? StudioTheme.mint : StudioTheme.accent).opacity(0.14),
-                            in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
-                        )
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(beansLifted ? "Beans are off the scale" : "Waiting for the scale to clear")
-                            .font(.headline)
-                        Text(
-                            beansLifted
-                                ? "The machine reads \(String(format: "%.1f", machine.telemetry.weight ?? 0)) g now"
-                                : "Lift the container so the reading drops back to zero"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(StudioTheme.muted)
-                    }
-                    Spacer()
-                }
-            }
-
             StudioCard {
                 VStack(alignment: .leading, spacing: 8) {
                     StudioSectionTitle(title: "Before you start", icon: "checklist")
                     checklistRow("Beans are in the grinder, not still in your cup")
                     checklistRow("The dripper is seated on the machine")
+                    checklistRow("The coffee server is on the scale beneath the dripper")
                     checklistRow("There is water in the tank")
                     Text(
                         "The machine will grind \(String(format: "%.1f", confirmedDose)) g at "
@@ -457,7 +388,7 @@ struct DoseWeighingView: View {
                         .foregroundStyle(StudioTheme.warning)
                 }
                 Button {
-                    confirmedDose = measured
+                    guard weighing.confirm() else { return }
                     withAnimation(.snappy) { stage = .loading }
                 } label: {
                     Label(
@@ -474,7 +405,7 @@ struct DoseWeighingView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .disabled(!isDoseBrewable)
+                .disabled(!isDoseBrewable || isWorking || !machine.isConnected)
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 12)
@@ -487,7 +418,7 @@ struct DoseWeighingView: View {
                     Task { await handOffToBrew() }
                 } label: {
                     Label(
-                        String(format: "Beans are in — brew %.1f g", confirmedDose),
+                        "Server in place — start brewing",
                         systemImage: "play.fill"
                     )
                     .font(.headline)
@@ -500,9 +431,9 @@ struct DoseWeighingView: View {
                     .opacity(isWorking ? 0.6 : 1)
                 }
                 .buttonStyle(.plain)
-                .disabled(isWorking)
+                .disabled(isWorking || !machine.isConnected)
 
-                Text("Nothing is sent to the machine until you tap this.")
+                Text("This starts grinding, followed by pouring. Have the server in place first.")
                     .font(.caption2)
                     .foregroundStyle(StudioTheme.muted)
             }
@@ -544,15 +475,21 @@ struct DoseWeighingView: View {
         }
     }
 
+    private func resetTare() {
+        weighing.tare()
+        // SwiftUI may deliver the tare event and a newer reading in one render pass.
+        if let weight = machine.telemetry.weight { weighing.ingest(weight: weight) }
+        guard stage == .weighing else { return }
+        hasTared = true
+        reachedTargetOnce = false
+    }
+
     private func tare() async {
         isWorking = true
         defer { isWorking = false }
         do {
             if try await machine.tareScale() {
-                hasTared = true
-                reachedTargetOnce = false
-                manualAdjustment = nil
-                heldWeight = 0
+                resetTare()
                 MachineFeedback.acknowledged()
                 status = .succeeded("Tared — now add your beans")
             } else {

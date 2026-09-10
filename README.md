@@ -16,7 +16,7 @@ authenticated Edge Function, so no provider key is ever shipped in the app.
 </p>
 
 <p align="center">
-  <em>Swift 6 · SwiftUI · SwiftData · Core Bluetooth · Supabase · Gemini · 62 tests</em>
+  <em>Swift 6 · SwiftUI · SwiftData · Core Bluetooth · Supabase · Gemini · core and app regression tests</em>
 </p>
 
 > **Unofficial.** Not affiliated with or endorsed by xBloom. The protocol was
@@ -35,14 +35,15 @@ authenticated Edge Function, so no provider key is ever shipped in the app.
 ### It weighs the dose before it commits to it
 
 The recipe's dose is a target. Coffee does not come out of a bag in exact
-grams, so the app opens the machine's own scale first, holds the reading when
-you lift the container off it, and lets you correct it by hand. That figure —
+grams, so the app opens the machine's own scale first, follows its live reading,
+and lets you correct it by hand. Confirm the dose before lifting the beans. That figure —
 not the recipe's rounded target — is what the machine is told, what history
 records, and what comes off your bean bag.
 
 Weighing and loading are separate steps on purpose: the beans have to leave the
-scale and go into the grinder in between, and the screen waits to see the scale
-fall back to zero before it offers to start.
+scale and go into the grinder in between. Once confirmed, the dose stays fixed
+while you replace the weighing container with a coffee server. The next button
+explicitly starts grinding and brewing; scale changes do not toggle readiness.
 
 ### It stops a brew that is about to pour over whole beans
 
@@ -174,17 +175,23 @@ hand-written one does: dose 5–30 g, grind 1–80, 1–8 pours, ≤ 500 ml, 80�
 - **Recipes** — a full editor over the machine's real parameter space, with
   validation that explains itself, plus import/export of a whole library.
 - **History** — every brew with its telemetry curve, rated and tagged, feeding
-  both the AI and the maintenance counters. The newest twenty are kept; a bag
-  rarely outlives twenty cups.
+  both the AI and the maintenance counters. Brew summaries and feedback are retained;
+  detailed telemetry is kept for the newest twenty brews.
+- **Daily shortcuts** — repeat the exact recipe saved with a past brew, rate a
+  completed cup quickly, and keep favorite recipes close on Home. Connection and
+  sync status show whether the machine is connected and whether local changes
+  have reached your account.
 - **Live Activity** — the brew on the Lock Screen and Dynamic Island.
 - **A preview mode** — watch a recipe run end to end at realistic speed with no
-  machine connected and no commands sent.
+  machine connected, no commands sent, and no changes to inventory or brew history.
 - **Machine diagnostics** — record the Bluetooth session and share the
   transcript. Every protocol finding in `docs/` came out of one of these.
 
-Deleting means what it says: a bean takes its recipes and their brews, a recipe
-takes the brews that ran it and leaves the bean, and the deletions reach your
-account rather than lingering there.
+Deleting a bag removes it and its recipes from the library. Deleting a recipe
+leaves its bean in place. Both preserve historical brews, snapshots and feedback,
+so cleaning up the library does not reset maintenance usage. Library deletions
+still sync to your account. Maintenance shows due services first and keeps a log
+of completed services with dates and optional notes.
 
 ---
 
@@ -252,8 +259,8 @@ button unlocks:
 
 | Check | What it runs |
 |---|---|
-| **Tests** | `swift test` — the XBloomCore suite, no project or simulator needed |
-| **Build** | `xcodegen generate` then a full app build for the iOS Simulator |
+| **Tests** | `swift test` for XBloomCore plus Deno backend fault and retry tests |
+| **Build** | `xcodegen generate` then app build and SwiftData/job lifecycle tests on an iOS Simulator |
 
 The branch must also be up to date with `main`, review conversations must be
 resolved, and force-pushing or deleting `main` is refused outright.

@@ -108,6 +108,21 @@ public enum Maintenance {
     public static let descaleMonths = 3
     public static let brushDays = 7
 
+    /// Aggregates retained summaries, including the first brew when no service is recorded.
+    public static func usage(
+        brews: [BrewHistoryEntry], servicedAt: Date?, now: Date = Date()
+    ) -> MaintenanceUsage {
+        let real = brews.filter { $0.wasSimulated != true }
+        let since = servicedAt ?? real.map(\.completedAt).min() ?? now
+        let counted = real.filter { servicedAt == nil || $0.completedAt > since }
+        let ground = counted.filter { $0.recipeSnapshot?.useGrinder == true }
+        return MaintenanceUsage(
+            since: since, wasServiced: servicedAt != nil,
+            groundGrams: ground.reduce(0) { $0 + max(0, $1.recipeSnapshot?.dose ?? 0) },
+            brews: counted.count, lastGrinderUseAt: ground.map(\.completedAt).max()
+        )
+    }
+
     public static func status(
         _ task: MaintenanceTask,
         usage: MaintenanceUsage,

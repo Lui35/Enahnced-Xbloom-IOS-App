@@ -42,6 +42,8 @@ final class SupabaseService {
     private(set) var isSyncing = false
     private(set) var isApplyingCloudChanges = false
     private(set) var lastSyncAt: Date?
+    private(set) var syncState = LibrarySyncState()
+    private(set) var lastSyncError: String?
     private(set) var statusMessage: String?
     private var automaticSyncTask: Task<Void, Never>?
 
@@ -101,7 +103,13 @@ final class SupabaseService {
     }
 
     func scheduleAutomaticSync(in context: ModelContext) {
-        guard isAuthenticated, !isApplyingCloudChanges else { return }
+        guard !isApplyingCloudChanges else { return }
+        syncState.recordLocalSave()
+        guard isAuthenticated, !isSyncing else { return }
+        enqueueAutomaticSync(in: context)
+    }
+
+    private func enqueueAutomaticSync(in context: ModelContext) {
         automaticSyncTask?.cancel()
         automaticSyncTask = Task { @MainActor [weak self] in
             do {
@@ -130,20 +138,42 @@ final class SupabaseService {
         }
     }
 
-    func invokeAI(action: String, model: String, body: [String: Any]) async throws -> Data {
+    /// Calls the AI function and waits for Gemini to answer.
+    ///
+    /// - Parameters:
+    ///   - requestID: Supplying one asks the function to answer immediately and
+    ///     finish in the background, leaving the result on the row. The same id
+    ///     resent is a duplicate the function refuses to bill twice, so a retry
+    ///     is safe. Without one the call blocks for the whole Gemini round trip,
+    ///     which is still what the short actions want.
+    ///   - context: Handed back untouched on the row, for a result collected by
+    ///     a launch that no longer remembers what it asked for.
+    @discardableResult
+    func invokeAI(
+        action: String,
+        model: String,
+        body: [String: Any],
+        requestID: UUID? = nil,
+        context: [String: Any]? = nil,
+        expectedUserID: UUID? = nil
+    ) async throws -> Data {
         guard let projectURL = Self.projectURL else { throw CloudError.notConfigured }
         let session = try await requireSession()
+        if let expectedUserID, session.user.id != expectedUserID { throw CancellationError() }
         var request = URLRequest(url: projectURL.appending(path: "functions/v1/coffee-ai"))
         request.httpMethod = "POST"
         request.timeoutInterval = 85
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(Self.publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
+        var payload: [String: Any] = [
             "action": action,
             "model": model,
             "body": body,
-        ])
+        ]
+        if let requestID { payload["requestID"] = requestID.uuidString.lowercased() }
+        if let context { payload["context"] = context }
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw CloudError.invalidResponse }
@@ -154,17 +184,74 @@ final class SupabaseService {
         return data
     }
 
+    func openAIJobs(for userID: UUID) async throws -> [AIJobRow] {
+        let session = try await requireSession()
+        guard session.user.id == userID else { throw CancellationError() }
+        var rows: [AIJobRow] = []
+        let pageSize = 100
+        while true {
+            let page: [AIJobRow] = try await client.schema("public").setAuth(session.accessToken)
+                .from("ai_request_usage")
+                .select("request_id,action,status,error_code,context,response,created_at")
+                .eq("user_id", value: userID)
+                .in("action", values: ["generateRecipe", "enhanceRecipe"])
+                .not("context", operator: .is, value: "null")
+                .is("consumed_at", value: nil)
+                .in("status", values: ["started", "succeeded", "failed"])
+                .order("created_at", ascending: true)
+                .order("request_id", ascending: true)
+                .range(from: rows.count, to: rows.count + pageSize - 1)
+                .execute().value
+            rows += page
+            if page.count < pageSize { return rows }
+        }
+    }
+
+    func finishAIJob(_ requestID: UUID, for userID: UUID) async throws {
+        guard try await updateAIJob(requestID, userID: userID,
+                                    values: ["consumed_at": Self.timestamp()]) else {
+            throw CloudError.function("The recipe acknowledgement was not saved. It will be retried.")
+        }
+    }
+
+    /// A missing row is not an acknowledgement: submission may still be in flight.
+    func cancelAIJob(_ requestID: UUID, for userID: UUID) async throws -> Bool {
+        try await updateAIJob(requestID, userID: userID,
+                             values: ["status": "cancelled", "consumed_at": Self.timestamp()])
+    }
+
+    private func updateAIJob(_ requestID: UUID, userID: UUID, values: [String: String]) async throws -> Bool {
+        let session = try await requireSession()
+        guard session.user.id == userID else { throw CancellationError() }
+        struct UpdatedRow: Decodable { let request_id: UUID }
+        let rows: [UpdatedRow] = try await client.schema("public").setAuth(session.accessToken)
+            .from("ai_request_usage")
+            .update(values)
+            .eq("user_id", value: userID)
+            .eq("request_id", value: requestID)
+            .select("request_id")
+            .execute().value
+        return rows.count == 1
+    }
+
+    private static func timestamp(_ date: Date = Date()) -> String {
+        ISO8601DateFormatter().string(from: date)
+    }
+
     @discardableResult
     func sync(in context: ModelContext) async throws -> CloudSyncSummary {
         guard !isSyncing else { throw CloudError.syncAlreadyRunning }
-        let session = try await requireSession()
-        let userID = session.user.id
-        let database = client.schema("public").setAuth(session.accessToken)
+        let accountAtStart = self.userID
+        let revision = syncState.localRevision
         isSyncing = true
+        lastSyncError = nil
         statusMessage = "Syncing your library…"
         defer { isSyncing = false }
 
         do {
+            let session = try await requireSession()
+            let userID = session.user.id
+            let database = client.schema("public").setAuth(session.accessToken)
             let metadata = try syncMetadata(for: userID, in: context)
             let summary = try await performSync(
                 userID: userID,
@@ -172,13 +259,8 @@ final class SupabaseService {
                 context: context,
                 database: database
             )
+            guard self.userID == userID else { throw CancellationError() }
             let now = Date()
-            try applyCloudChanges {
-                metadata.lastSyncedAt = now
-                lastSyncAt = now
-                try context.save()
-            }
-
             let profile = CloudProfileRow(
                 userID: userID,
                 initialSyncCompletedAt: now,
@@ -187,9 +269,19 @@ final class SupabaseService {
             try await database.from("profiles")
                 .upsert(profile, onConflict: "user_id")
                 .execute()
+            guard self.userID == userID else { throw CancellationError() }
+            try applyCloudChanges {
+                metadata.lastSyncedAt = now
+                try context.save()
+            }
+            lastSyncAt = now
+            syncState.acknowledge(revision: revision)
+            if syncState.hasPendingChanges { enqueueAutomaticSync(in: context) }
             statusMessage = "Synced \(summary.total) records."
             return summary
         } catch {
+            guard self.userID == accountAtStart else { throw error }
+            lastSyncError = error.localizedDescription
             statusMessage = "Sync failed: \(error.localizedDescription)"
             throw error
         }
@@ -206,22 +298,22 @@ final class SupabaseService {
         var brews = try context.fetch(FetchDescriptor<StoredBrew>())
         var maintenance = try context.fetch(FetchDescriptor<StoredMaintenanceEvent>())
 
-        let remoteBeans: [CloudBeanRow] = try await database.from("beans")
-            .select("user_id,id,name,roaster,remaining_weight_grams,archived,payload_json,client_updated_at,deleted_at")
-            .eq("user_id", value: userID.uuidString)
-            .execute().value
-        let remoteRecipes: [CloudRecipeRow] = try await database.from("recipes")
-            .select("user_id,id,name,roaster,origin,brew_style,generated_by_ai,servings,bean_id,payload_json,client_updated_at,deleted_at")
-            .eq("user_id", value: userID.uuidString)
-            .execute().value
-        let remoteBrews: [CloudBrewRow] = try await database.from("brews")
-            .select("user_id,id,recipe_id,bean_id,recipe_name,bean_name,completed_at,duration_seconds,rating,brew_style,generated_by_ai,was_simulated,servings,water_ml,coffee_weight_grams,step_count,payload_json,client_updated_at,deleted_at")
-            .eq("user_id", value: userID.uuidString)
-            .execute().value
-        let remoteMaintenance: [CloudMaintenanceRow] = try await database.from("maintenance_events")
-            .select("user_id,id,task,performed_at,note,client_updated_at,deleted_at")
-            .eq("user_id", value: userID.uuidString)
-            .execute().value
+        let remoteBeans: [CloudBeanRow] = try await fetchAll(
+            table: "beans", columns: "user_id,id,name,roaster,remaining_weight_grams,archived,payload_json,client_updated_at,deleted_at",
+            userID: userID, database: database
+        )
+        let remoteRecipes: [CloudRecipeRow] = try await fetchAll(
+            table: "recipes", columns: "user_id,id,name,roaster,origin,brew_style,generated_by_ai,servings,bean_id,payload_json,client_updated_at,deleted_at",
+            userID: userID, database: database
+        )
+        let remoteBrews: [CloudBrewRow] = try await fetchAll(
+            table: "brews", columns: "user_id,id,recipe_id,bean_id,recipe_name,bean_name,completed_at,duration_seconds,rating,brew_style,generated_by_ai,was_simulated,servings,water_ml,coffee_weight_grams,step_count,payload_json,client_updated_at,deleted_at",
+            userID: userID, database: database
+        )
+        let remoteMaintenance: [CloudMaintenanceRow] = try await fetchAll(
+            table: "maintenance_events", columns: "user_id,id,task,performed_at,note,client_updated_at,deleted_at",
+            userID: userID, database: database
+        )
         try applyCloudChanges {
             merge(remoteBeans, into: &beans, known: metadata.knownIDs(for: .bean), context: context)
             merge(remoteRecipes, into: &recipes, known: metadata.knownIDs(for: .recipe), context: context)
@@ -309,15 +401,28 @@ final class SupabaseService {
         metadata.setKnownIDs(Set(recipes.map(\.id)), for: .recipe)
         metadata.setKnownIDs(Set(brews.map(\.id)), for: .brew)
         metadata.setKnownIDs(Set(maintenance.map(\.id)), for: .maintenance)
-        // A sync can pull another device's brews down and push this one past
-        // the limit, so the trim runs here as well as after a brew.
-        try? LocalLibrary.pruneHistory(in: context)
+        // Synchronization can add older telemetry. Retain its summary and compact samples.
+        _ = try? LocalLibrary.compactHistory(in: context)
         return CloudSyncSummary(
             beans: beans.count,
             recipes: recipes.count,
             brews: brews.count,
             maintenance: maintenance.count
         )
+    }
+
+    private func fetchAll<Row: Decodable>(
+        table: String, columns: String, userID: UUID, database: PostgrestClient
+    ) async throws -> [Row] {
+        var rows: [Row] = []
+        let pageSize = 100
+        while true {
+            let page: [Row] = try await database.from(table).select(columns)
+                .eq("user_id", value: userID).order("id", ascending: true)
+                .range(from: rows.count, to: rows.count + pageSize - 1).execute().value
+            rows += page
+            if page.count < pageSize { return rows }
+        }
     }
 
     private func syncMetadata(for userID: UUID, in context: ModelContext) throws -> CloudSyncMetadata {
@@ -331,6 +436,7 @@ final class SupabaseService {
                 existing.knownBeanIDs = Data()
                 existing.knownRecipeIDs = Data()
                 existing.knownBrewIDs = Data()
+                existing.knownMaintenanceIDs = Data()
                 existing.lastSyncedAt = nil
             }
             return existing
@@ -384,6 +490,11 @@ final class SupabaseService {
     }
 
     private func apply(session: Session?) {
+        if userID != session?.user.id {
+            syncState = LibrarySyncState()
+            lastSyncAt = nil
+            lastSyncError = nil
+        }
         userID = session?.user.id
         email = session?.user.email
         hasValidSession = session != nil
@@ -756,6 +867,7 @@ private struct CloudBrewRow: Codable {
 private struct CloudFunctionError: Decodable {
     let error: String
 }
+
 
 enum CloudError: LocalizedError {
     case notSignedIn

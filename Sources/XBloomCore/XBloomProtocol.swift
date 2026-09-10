@@ -247,6 +247,8 @@ public enum XBloomProtocol {
         }
 
         switch XBloomNotification(rawValue: command) {
+        case .weightCleared:
+            result.weight = 0
         case .weightRealTime:
             result.weight = Double(packet.readFloat32LE(at: 10))
         case .deviceBrewerTemperature:

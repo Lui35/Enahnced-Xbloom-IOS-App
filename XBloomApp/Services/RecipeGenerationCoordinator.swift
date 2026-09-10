@@ -3,135 +3,327 @@ import Observation
 import SwiftData
 import XBloomCore
 
-/// Owns AI recipe generations so they outlive the screen that started them.
-///
-/// The designer used to own its own task and cancel it in `onDisappear`, which
-/// meant leaving the sheet — or switching tabs while it worked — silently threw
-/// the request away after it had already been paid for. The work belongs to the
-/// app, not to a view: this holds it, writes the recipe when it lands, and
-/// gives the library something to show in the meantime.
+/// Submits account-scoped jobs and collects results after durable, idempotent local storage.
 @MainActor
 @Observable
 final class RecipeGenerationCoordinator {
     struct Pending: Identifiable, Equatable {
         let id: UUID
         let beanID: UUID?
-        /// What the card calls it: the bean's name, the user's own description
-        /// of what is in the hopper, or nothing at all.
         let beanName: String
         let style: BrewStyle
         let cups: Int
         let startedAt: Date
+        var sourceBrewID: UUID? = nil
+
+        var isEnhancement: Bool { sourceBrewID != nil }
     }
 
-    /// Generations still in flight, oldest first.
+    private static let staleAfter: TimeInterval = 240
     private(set) var pending: [Pending] = []
-    /// The most recent recipe to land, for a screen that wants to point at it.
     private(set) var lastCompleted: Recipe?
     private(set) var lastError: String?
+    private(set) var libraryRequestID: UUID?
 
-    @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private let cloud: any RecipeJobStore
+    @ObservationIgnored private let gemini: any RecipeJobGenerating
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let save: (ModelContext) throws -> Void
+    @ObservationIgnored private let automaticallyPoll: Bool
+    @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var context: ModelContext?
+    @ObservationIgnored private var accountID: UUID?
+    @ObservationIgnored private var submitting: Set<UUID> = []
+    @ObservationIgnored private var cancellations: Set<UUID> = []
+    @ObservationIgnored private var isRefreshing = false
+    @ObservationIgnored private var refreshRequested = false
 
     var isWorking: Bool { !pending.isEmpty }
+
+    init(
+        cloud: any RecipeJobStore, gemini: any RecipeJobGenerating,
+        defaults: UserDefaults = .standard, automaticallyPoll: Bool = true,
+        save: @escaping (ModelContext) throws -> Void = { try $0.save() }
+    ) {
+        self.cloud = cloud
+        self.gemini = gemini
+        self.defaults = defaults
+        self.automaticallyPoll = automaticallyPoll
+        self.save = save
+    }
 
     func pending(forBean beanID: UUID?) -> Pending? {
         guard let beanID else { return nil }
         return pending.first { $0.beanID == beanID }
     }
 
-    /// Starts a generation and returns its id. The caller is free to disappear.
+    /// Called on sign-out as well as sign-in, so old-account work cannot leak into the UI.
+    func accountChanged() {
+        let next = cloud.isAuthenticated ? cloud.userID : nil
+        guard next != accountID else { return }
+        pollTask?.cancel()
+        pollTask = nil
+        accountID = next
+        pending = []
+        submitting = []
+        lastCompleted = nil
+        libraryRequestID = nil
+        lastError = nil
+        cancellations = Set((next.flatMap { defaults.stringArray(forKey: cancellationKey($0)) } ?? [])
+            .compactMap(UUID.init(uuidString:)))
+    }
+
     @discardableResult
     func start(
-        bean: BeanProfile?,
-        style: BrewStyle,
-        cups: Int,
-        goals: [String],
-        notes: String,
-        pours: Int? = nil,
-        beanDescription: String = "",
-        useGrinder: Bool = true,
-        gemini: GeminiService,
+        bean: BeanProfile?, style: BrewStyle, cups: Int, goals: [String], notes: String,
+        pours: Int? = nil, beanDescription: String = "", useGrinder: Bool = true,
         context: ModelContext
     ) -> UUID {
+        accountChanged()
         let id = UUID()
-        let describedBean = beanDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        pending.append(
-            Pending(
-                id: id,
-                beanID: bean?.id,
-                beanName: bean?.name
-                    ?? (describedBean.isEmpty ? "No bean attached" : describedBean),
-                style: style,
-                cups: cups,
-                startedAt: Date()
-            )
-        )
+        guard let userID = accountID else {
+            lastError = CloudError.notSignedIn.localizedDescription
+            return id
+        }
+        self.context = context
+        let description = beanDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let beanName = bean?.name ?? (description.isEmpty ? "No bean attached" : description)
+        pending.append(Pending(id: id, beanID: bean?.id, beanName: beanName,
+                               style: style, cups: cups, startedAt: Date()))
+        submitting.insert(id)
+        libraryRequestID = id
         lastError = nil
-
-        tasks[id] = Task { @MainActor [weak self] in
-            defer {
-                self?.pending.removeAll { $0.id == id }
-                self?.tasks[id] = nil
-            }
-            do {
-                let result = try await gemini.generateRecipe(
-                    for: bean,
-                    style: style,
-                    cups: cups,
-                    goals: goals,
-                    notes: notes,
-                    pours: pours,
-                    beanDescription: beanDescription
-                )
-                try Task.checkCancellation()
-                var recipe = try result.recipe(bean: bean, cups: cups, requestedStyle: style)
-                // Pre-ground coffee changes nothing about the pours and
-                // everything about the program the machine runs.
-                recipe.useGrinder = useGrinder
-                context.insert(StoredRecipe(recipe: recipe))
-                try context.save()
-                self?.lastCompleted = recipe
-                MachineFeedback.acknowledged()
-            } catch is CancellationError {
-                return
-            } catch {
-                self?.lastError = error.localizedDescription
-            }
+        submit(id: id, userID: userID, context: context) { [gemini] in
+            try await gemini.startRecipeJob(
+                requestID: id, userID: userID,
+                context: AIJobRow.Context(beanID: bean?.id, beanName: beanName,
+                                          style: style.rawValue, cups: cups, useGrinder: useGrinder),
+                for: bean, style: style, cups: cups, goals: goals, notes: notes,
+                pours: pours, beanDescription: beanDescription
+            )
         }
         return id
     }
 
-    func cancel(_ id: UUID) {
-        tasks[id]?.cancel()
-        tasks[id] = nil
-        pending.removeAll { $0.id == id }
-    }
-
-    /// Clears the "just landed" pointer once a screen has reacted to it.
-    func clearLastCompleted() {
-        lastCompleted = nil
-    }
-
-    func clearError() {
+    @discardableResult
+    func startEnhancement(
+        original: Recipe, bean: BeanProfile, brew: BrewHistoryEntry,
+        rating: Int, feedbackTags: [String], goals: [String], notes: String,
+        context: ModelContext
+    ) -> UUID? {
+        accountChanged()
+        guard let userID = accountID else {
+            lastError = CloudError.notSignedIn.localizedDescription
+            return nil
+        }
+        if let existing = pending.first(where: { $0.sourceBrewID == brew.id }) { return existing.id }
+        let id = UUID()
+        let style: BrewStyle = original.brewStyle == .iced ? .iced : .hot
+        let cups = original.servings ?? 1
+        self.context = context
+        pending.append(Pending(id: id, beanID: bean.id, beanName: bean.name,
+                               style: style, cups: cups, startedAt: Date(), sourceBrewID: brew.id))
+        submitting.insert(id)
+        libraryRequestID = id
         lastError = nil
+        let job = AIJobRow.Context(
+            beanID: bean.id, beanName: bean.name, style: style.rawValue, cups: cups,
+            useGrinder: original.useGrinder, parentRecipeID: original.id,
+            sourceBrewID: brew.id, beanSnapshot: bean
+        )
+        submit(id: id, userID: userID, context: context) { [gemini] in
+            try await gemini.startEnhancementJob(
+                requestID: id, userID: userID, context: job, original: original,
+                bean: bean, brew: brew, rating: rating, feedbackTags: feedbackTags,
+                goals: goals, notes: notes
+            )
+        }
+        return id
+    }
+
+    private func submit(
+        id: UUID, userID: UUID, context: ModelContext,
+        operation: @escaping @MainActor () async throws -> Void
+    ) {
+        Task { [weak self] in
+            guard let self else { return }
+            do { try await operation() }
+            catch {
+                guard isCurrent(userID) else { return }
+                if !cancellations.contains(id) { lastError = error.localizedDescription }
+                // A lost acknowledgement may still have created a job. Reconcile with the server.
+            }
+            guard isCurrent(userID) else { return }
+            submitting.remove(id)
+            await refresh(context: context)
+        }
+    }
+
+    /// Serialize collection across poll, startup and foreground events, including their awaits.
+    func refresh(context: ModelContext) async {
+        self.context = context
+        accountChanged()
+        guard accountID != nil else { return }
+        if isRefreshing {
+            refreshRequested = true
+            return
+        }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        repeat {
+            refreshRequested = false
+            if let userID = accountID { await refreshOnce(userID: userID, context: context) }
+            accountChanged()
+        } while refreshRequested && accountID != nil
+        startPolling()
+    }
+
+    private func refreshOnce(userID: UUID, context: ModelContext) async {
+        await flushCancellations(userID: userID)
+        guard isCurrent(userID) else { return }
+        let rows: [AIJobRow]
+        do {
+            rows = try await cloud.openAIJobs(for: userID)
+        } catch {
+            return // Keep known work until connectivity returns.
+        }
+        guard isCurrent(userID) else { return }
+        var running: [Pending] = []
+        for row in rows where !cancellations.contains(row.id) {
+            guard isCurrent(userID) else { return }
+            switch row.status {
+            case "started":
+                if Date().timeIntervalSince(row.createdAt) > Self.staleAfter {
+                    // Never consume an unfinished result: a late result must remain recoverable.
+                    lastError = "The recipe is taking longer than expected. Reopen the app to check again, or design another."
+                } else {
+                    running.append(card(row))
+                }
+            case "succeeded":
+                if !(await collect(row, userID: userID, context: context)) {
+                    running.append(card(row)) // Failed saves/acknowledgements must continue polling.
+                }
+            case "failed":
+                lastError = Self.message(forErrorCode: row.errorCode)
+                do { try await cloud.finishAIJob(row.id, for: userID) }
+                catch { running.append(card(row)) }
+            default: break
+            }
+        }
+        guard isCurrent(userID) else { return }
+        let known = Set(rows.map(\.id))
+        pending = running + pending.filter {
+            submitting.contains($0.id) && !known.contains($0.id) && !cancellations.contains($0.id)
+        }
+    }
+
+    func cancel(_ id: UUID) {
+        accountChanged()
+        guard let userID = accountID else { return }
+        cancellations.insert(id)
+        persistCancellations(userID)
+        pending.removeAll { $0.id == id }
+        Task { [weak self] in
+            guard let self, let context = self.context else { return }
+            await self.refresh(context: context)
+        }
+    }
+
+    private func flushCancellations(userID: UUID) async {
+        for id in cancellations where !submitting.contains(id) {
+            guard isCurrent(userID) else { return }
+            do {
+                let acknowledged = try await cloud.cancelAIJob(id, for: userID)
+                guard isCurrent(userID) else { return }
+                if acknowledged {
+                    cancellations.remove(id)
+                    persistCancellations(userID)
+                }
+            } catch {
+                // Intent survives relaunch and is retried on the next poll/foreground event.
+            }
+        }
+    }
+
+    private func collect(_ row: AIJobRow, userID: UUID, context: ModelContext) async -> Bool {
+        do {
+            let result = try RecipeJobPersistence.collect(
+                row, userID: userID, in: context, save: save
+            ) { bean in
+                guard let response = row.response else { throw GeminiError.invalidResponse }
+                let result = try gemini.recipeResult(from: response)
+                var recipe = try result.recipe(
+                    bean: bean, cups: row.context?.cups,
+                    requestedStyle: row.context.flatMap { BrewStyle(rawValue: $0.style) }
+                )
+                recipe.useGrinder = row.context?.useGrinder ?? true
+                recipe.parentRecipeID = row.context?.parentRecipeID
+                recipe.sourceBrewID = row.context?.sourceBrewID
+                if row.action == "enhanceRecipe" {
+                    recipe.aiDescription = "Enhanced from your feedback\n\nWhat changed and why\n" + (recipe.aiDescription ?? "")
+                }
+                return recipe
+            }
+            if let recipe = result.recipe {
+                lastCompleted = recipe
+                MachineFeedback.acknowledged()
+            }
+            if let rejection = result.rejection { lastError = rejection }
+            try await cloud.finishAIJob(row.id, for: userID)
+            return true
+        } catch {
+            guard isCurrent(userID) else { return false }
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    private func isCurrent(_ userID: UUID) -> Bool {
+        cloud.isAuthenticated && cloud.userID == userID && accountID == userID
+    }
+
+    private func card(_ row: AIJobRow) -> Pending {
+        Pending(id: row.id, beanID: row.context?.beanID,
+                beanName: row.context?.beanName ?? "No bean attached",
+                style: row.context.flatMap { BrewStyle(rawValue: $0.style) } ?? .hot,
+                cups: row.context?.cups ?? 1, startedAt: row.createdAt,
+                sourceBrewID: row.context?.sourceBrewID)
+    }
+
+    private func cancellationKey(_ userID: UUID) -> String { "recipeJobs.cancelled.\(userID)" }
+    private func persistCancellations(_ userID: UUID) {
+        defaults.set(cancellations.map(\.uuidString), forKey: cancellationKey(userID))
+    }
+
+    private func startPolling() {
+        guard automaticallyPoll, pollTask == nil, !pending.isEmpty, let userID = accountID else { return }
+        pollTask = Task { [weak self] in
+            while let self, !self.pending.isEmpty, self.isCurrent(userID), !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(3)) } catch { break }
+                guard !Task.isCancelled, let context = self.context else { break }
+                await self.refresh(context: context)
+            }
+            if !Task.isCancelled { self?.pollTask = nil }
+        }
+    }
+
+    func clearLastCompleted() { lastCompleted = nil }
+    func clearError() { lastError = nil }
+
+    private static func message(forErrorCode code: String?) -> String {
+        switch code {
+        case "timeout": "Gemini took too long to answer. Try designing the recipe again."
+        case "upstream_error": "Gemini could not be reached. Try designing the recipe again."
+        case let code?: "The recipe could not be designed (\(code))."
+        case nil: "The recipe could not be designed. Try again."
+        }
     }
 
     #if DEBUG
-    /// Shows the library's in-progress card without a network round trip.
-    /// Launch with `-seedPendingRecipe`.
     func seedPreviewPendingIfRequested() {
-        guard ProcessInfo.processInfo.arguments.contains("-seedPendingRecipe"),
-              pending.isEmpty else { return }
-        pending.append(
-            Pending(
-                id: UUID(),
-                beanID: nil,
-                beanName: "Relationship Preview Bean",
-                style: .hot,
-                cups: 1,
-                startedAt: Date()
-            )
-        )
+        guard ProcessInfo.processInfo.arguments.contains("-seedPendingRecipe"), pending.isEmpty else { return }
+        pending.append(Pending(id: UUID(), beanID: nil, beanName: "Relationship Preview Bean",
+                               style: .hot, cups: 1, startedAt: Date()))
     }
     #endif
 }

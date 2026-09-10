@@ -151,7 +151,10 @@ final class GeminiService {
     ///     whatever the user could say about what is in the hopper.
     ///   - pours: A pour count the user insisted on. Nil leaves the
     ///     architecture to the model, which is what the brief is written for.
-    func generateRecipe(
+    func startRecipeJob(
+        requestID: UUID,
+        userID: UUID,
+        context: AIJobRow.Context,
         for bean: BeanProfile?,
         style: BrewStyle? = .hot,
         cups: Int? = 1,
@@ -159,7 +162,7 @@ final class GeminiService {
         notes: String = "",
         pours: Int? = nil,
         beanDescription: String = ""
-    ) async throws -> AIRecipeResult {
+    ) async throws {
         let profileJSON: String
         if let bean {
             profileJSON = String(decoding: try JSONEncoder().encode(bean), as: UTF8.self)
@@ -211,13 +214,25 @@ final class GeminiService {
                 "responseJsonSchema": AIRecipeResult.schema,
             ],
         ]
-        return try decodeModelResponse(
-            try await request(body: body, action: "generateRecipe"),
-            as: AIRecipeResult.self
+        guard cloud.isAuthenticated else { throw GeminiError.missingAPIKey }
+        try await cloud.invokeAI(
+            action: "generateRecipe",
+            model: model,
+            body: body,
+            requestID: requestID,
+            context: try jobContext(context),
+            expectedUserID: userID
         )
     }
 
-    func enhanceRecipe(
+    /// Turns a stored Gemini body into a result, for a request the app started
+    /// but did not stay to watch.
+    func recipeResult(from response: String) throws -> AIRecipeResult {
+        try decodeModelResponse(Data(response.utf8), as: AIRecipeResult.self)
+    }
+
+    func startEnhancementJob(
+        requestID: UUID, userID: UUID, context job: AIJobRow.Context,
         original: Recipe,
         bean: BeanProfile,
         brew: BrewHistoryEntry,
@@ -225,7 +240,7 @@ final class GeminiService {
         feedbackTags: [String],
         goals: [String],
         notes: String
-    ) async throws -> AIRecipeResult {
+    ) async throws {
         let context: [String: Any] = [
             "rating_out_of_5": min(5, max(1, rating)),
             "quick_feedback": feedbackTags,
@@ -236,7 +251,9 @@ final class GeminiService {
             "duration_seconds": brew.duration,
             "machine_water_ml": brew.water,
             "scale_yield_grams": brew.coffeeWeight,
-            "completed_pour_steps": brew.steps,
+            "planned_pour_steps": brew.steps,
+            "completed_pour_steps": brew.completedSteps as Any? ?? NSNull(),
+            "outcome": brew.outcome?.rawValue ?? "unknown",
         ]
         let feedbackJSON = String(
             decoding: try JSONSerialization.data(withJSONObject: context),
@@ -275,6 +292,10 @@ final class GeminiService {
         create a tradeoff, balance them rather than silently dropping one. Give the new
         recipe a concise name distinct from "\(original.name)".
 
+        In the rationale, name the concrete changes with before/after values where useful
+        (for example grind 45 to 48 or first pour 60 to 50 ml) and their intended effect
+        on this cup. Do not claim the new recipe has been brewed or its result verified.
+
         Original recipe JSON:
         \(recipeJSON)
 
@@ -295,10 +316,16 @@ final class GeminiService {
                 "responseJsonSchema": AIRecipeResult.schema,
             ],
         ]
-        return try decodeModelResponse(
-            try await request(body: body, action: "enhanceRecipe"),
-            as: AIRecipeResult.self
+        guard cloud.isAuthenticated else { throw GeminiError.missingAPIKey }
+        _ = try await cloud.invokeAI(
+            action: "enhanceRecipe", model: model, body: body, requestID: requestID,
+            context: try jobContext(job), expectedUserID: userID
         )
+    }
+
+    private func jobContext(_ context: AIJobRow.Context) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(context)
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
     }
 
     private func request(body: [String: Any], action: String) async throws -> Data {

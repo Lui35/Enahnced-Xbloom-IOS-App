@@ -9,43 +9,80 @@
 /* Begin PBXBuildFile section */
 		0929F6A404E3B41DB55F3C7A /* XBloomLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 641D924ACBD150A88E41D4BA /* XBloomLiveActivityBundle.swift */; };
 		0C7CD1C896B7BFB2CEE33437 /* RecipeGenerationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 355AC9239C3402F3119CDD7C /* RecipeGenerationCoordinator.swift */; };
+		11C1F535BE8CC75E1C0D1AF3 /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = 16B43F7C6A97BB2FAAB2448F /* XBloomCore */; };
 		17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */; };
 		200C478580FED52EB0A8706D /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */; };
 		220A2352A2E96F54EFD37AE1 /* DoseWeighingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A208A223001D666B39B03708 /* DoseWeighingView.swift */; };
 		226B5E17B795C4B522D970A4 /* XBloomLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		24164F8C55B22FF005C4DFC3 /* BrewSessionView+Presentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D1867D954D845E3633D656 /* BrewSessionView+Presentation.swift */; };
 		24AE48EB3F43420D8089A5A7 /* MachineDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */; };
+		278E03B74E09A146FE68FA1C /* MaintenanceServiceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E536ADA10A2137F1F8C7D458 /* MaintenanceServiceSheet.swift */; };
 		27C8744AAD5E6A661DBE7C8E /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A64A00702BFAAD2884EEE6B /* XBloomCore */; };
 		290E0226530B6696AA4E19F4 /* AccountAIView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C68DB0343188910490219D /* AccountAIView.swift */; };
 		2E0CBD06A36229067366FF2D /* MachineFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3530DABDDE58B039409B5C97 /* MachineFeedback.swift */; };
 		37A3D1A7AF48FBECD9CBA6C5 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */; };
+		40E7CC15BCA49CBD735A87ED /* RecipeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A6D3CBAEF9DCCA1AD6D518 /* RecipeDetailView.swift */; };
 		450E1ED33F3C042BB2A893AF /* XBloomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */; };
+		48391A2E2EFFD72A3367C053 /* RecipeJobStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AEABBFFCD0DF0C816E1786B /* RecipeJobStore.swift */; };
+		506D22B854E7BE6D62EAC44C /* RepeatBrewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A93339DD1CF09A190371D46 /* RepeatBrewSheet.swift */; };
 		507AE287044BD4D4BD0CE334 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */; };
+		5252D5DC1AE5DEE55D727F19 /* BrewSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABC2A0AE23C9BF97C2372B7 /* BrewSessionView.swift */; };
+		584959F42380DCEC3B5DB022 /* LocalLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC7E0500BA6E112904D0DE91 /* LocalLibrary.swift */; };
 		629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D88E4B719592471EEF5650D3 /* RecipesView.swift */; };
 		684F1F9FA3D59F721B4B0555 /* GrinderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDB1FBD500EDF962502E6514 /* GrinderView.swift */; };
 		6BE814CAF21C11E434544B58 /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = C00EDAF742C0A316EE940850 /* XBloomCore */; };
 		79C41BBC938C16B7AC666171 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79E013F5D81849E8BB547B3D /* SettingsView.swift */; };
+		88E435DD3A798DB45D9148F2 /* BeanPhotoImporterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E691C16ED3546246A2928C69 /* BeanPhotoImporterView.swift */; };
+		894D2481C68012C9A3DE7AAB /* StudioChoiceControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB78451B1B7161E927B8FA1E /* StudioChoiceControls.swift */; };
 		8CAAAE1F529CF4563D4DEA20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 45C4A7D8A6676C96CC574A14 /* Assets.xcassets */; };
+		924236DBF108C6B421114965 /* AIProcessingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5DC7D0059EFABD33902470 /* AIProcessingViews.swift */; };
+		94F51E91623B4A8F74EAFC94 /* RecipeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BC8B2D6300AAC4CF2F2A02F /* RecipeEditorView.swift */; };
 		9A4F67BC5D0A139A449C13BB /* BeanImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DFFA847B7A98439EE6958E /* BeanImportCoordinator.swift */; };
 		9C0C3A56B40FC3A2F477BE35 /* ScaleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EB51229F947ABE48988CA68 /* ScaleView.swift */; };
+		A11385022C8B02F09789ADCE /* BeanRefillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFA1C9F48C2E31F8E676A8A6 /* BeanRefillView.swift */; };
+		A40E01CFB46BE9894E2ED301 /* RecipeJobPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62907616C3A0E9C97DC1180D /* RecipeJobPersistence.swift */; };
 		A7A212D3ABFA89659FA8DFF1 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 4CDEAC636DE90A7943C97D61 /* Supabase */; };
+		AAD1C2E749FB71A8F7755343 /* PourControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = F218ADBA3E4A2E8A2103B45B /* PourControls.swift */; };
+		B007B290C9EC9F9561587A70 /* RecipeGenerationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FB413F5A7A7FC6370730E8A /* RecipeGenerationTests.swift */; };
 		B0A60BDF676E785964240882 /* XBloomBLEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */; };
+		B20CC36F50C4551A14A0EE45 /* RecipeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC95037E80A992C643657BC0 /* RecipeRow.swift */; };
+		B560845C57E30740EECB1B8A /* BeanEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C9B3103C4DC581CD20564D2 /* BeanEditorView.swift */; };
+		B5CAA857322320DA66857C14 /* ConnectionAndSyncStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0FE5F289C313E389E22709C /* ConnectionAndSyncStatus.swift */; };
+		B601814E6EBEC4996EFA9878 /* FavoriteRecipeButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9989CD1593C66315B2E66A /* FavoriteRecipeButton.swift */; };
 		BD9C9803957ED9CE8D985C7D /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7210B750C8D2A62B65AE67BC /* HistoryView.swift */; };
 		C68FE583E0B5EA6C84C64712 /* BrewLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */; };
 		C721A74853A10E8C0728007D /* MaintenanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCF63F274EB4F27608114CE /* MaintenanceView.swift */; };
 		C80FB84C74016044044272D1 /* StudioComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49321FCC4F76BECD12162693 /* StudioComponents.swift */; };
+		CA1F844E24DB5EF1144EBFEA /* LocalLibrary+PreviewFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8464D3F37608018E2E3E82FA /* LocalLibrary+PreviewFixtures.swift */; };
 		D33E678FD500A3F406E29343 /* CameraCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00067031474B071C240BD8D2 /* CameraCaptureView.swift */; };
+		D3B3DED3AE7306A7070FC3A7 /* BeanDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0B04AC425AA95472276EA2 /* BeanDetailView.swift */; };
+		D3CE8C6B486338DE257D22B7 /* BrewSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD025B6B151CAF4265AD160A /* BrewSessionCoordinator.swift */; };
 		D5808958217B7635A5CDB4ED /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE378BDE43EE3E266B604B87 /* HomeView.swift */; };
 		D87049683A34826E86428065 /* BeansView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71C5A662F8A8FAFF2121A83E /* BeansView.swift */; };
 		DBE663F2A2D320EFF7BDDA29 /* BrewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73B6AD0DD130E8DD29ED6908 /* BrewView.swift */; };
 		DC7F97AC5464A229362ABA61 /* ManualPourView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44BF38C59DA5466E734084C /* ManualPourView.swift */; };
+		DC955563E50767811BC0EE05 /* BrewSessionView+Runtime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B8F42A8961E4E8F1F5ED09C /* BrewSessionView+Runtime.swift */; };
 		DD735855BFE08C898D0C6C69 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */; };
+		E680146177DD863FAD147EB5 /* StudioDialBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32F370B3DD1E7C1377E9A4FB /* StudioDialBox.swift */; };
+		E7E53C3C81ED26DAC1D30CDF /* LibraryPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532207214F1E9D5D568BB2D2 /* LibraryPersistenceTests.swift */; };
 		E8A04612E1F5F04A2C3C32E4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288AD2850F804ABEB0F63EC4 /* RootView.swift */; };
 		EE9364C6CF5692E611867378 /* XBloomBrewLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A52D9466670E09651FD3349C /* XBloomBrewLiveActivity.swift */; };
 		EEE890B93D89E4771718D598 /* BrewingReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63419A369FC46A26018BBF8B /* BrewingReference.swift */; };
+		EFA489E84EB749291CB2EAF9 /* AIRecipeDesignerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CD94A1DB38F06794FABB445 /* AIRecipeDesignerView.swift */; };
+		F33C21C8D491B0BCFA016FBE /* AIJobRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3DE8217755D04990EE08E53 /* AIJobRow.swift */; };
+		F3DFDE48A201D5CE8DD285AC /* PreparedBeanImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D09A4398BA825D66BC56199F /* PreparedBeanImage.swift */; };
+		F4C2FBF1DA059E5ACC6E8CE6 /* QuickBrewFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2F0C72A27ED811DA4E193E /* QuickBrewFeedback.swift */; };
 		FE027D87D8FDF042E764F0CF /* Xplume-App-Icon-Concept.png in Resources */ = {isa = PBXBuildFile; fileRef = 3CECB5C169218F78F3E3C484 /* Xplume-App-Icon-Concept.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		128FA2A6024BE0E45F490B70 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E25D63EAEF6411A4F1E9F6FC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ADB05F1BB29B083101FABBC1;
+			remoteInfo = XBloom;
+		};
 		FD86823CD7F04148F8FDF81A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = E25D63EAEF6411A4F1E9F6FC /* Project object */;
@@ -74,41 +111,79 @@
 		0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineDiagnosticsView.swift; sourceTree = "<group>"; };
 		16C68DB0343188910490219D /* AccountAIView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountAIView.swift; sourceTree = "<group>"; };
 		1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
+		1F2F0C72A27ED811DA4E193E /* QuickBrewFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickBrewFeedback.swift; sourceTree = "<group>"; };
 		1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = XBloomLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		288AD2850F804ABEB0F63EC4 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		2CBF68C3FAEE7459EEE1B31D /* XBloom.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = XBloom.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2EB51229F947ABE48988CA68 /* ScaleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScaleView.swift; sourceTree = "<group>"; };
 		3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewLiveActivityManager.swift; sourceTree = "<group>"; };
+		31D1867D954D845E3633D656 /* BrewSessionView+Presentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrewSessionView+Presentation.swift"; sourceTree = "<group>"; };
+		32F370B3DD1E7C1377E9A4FB /* StudioDialBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioDialBox.swift; sourceTree = "<group>"; };
 		3530DABDDE58B039409B5C97 /* MachineFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineFeedback.swift; sourceTree = "<group>"; };
 		355AC9239C3402F3119CDD7C /* RecipeGenerationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeGenerationCoordinator.swift; sourceTree = "<group>"; };
 		3CECB5C169218F78F3E3C484 /* Xplume-App-Icon-Concept.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Xplume-App-Icon-Concept.png"; sourceTree = "<group>"; };
 		45C4A7D8A6676C96CC574A14 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		49321FCC4F76BECD12162693 /* StudioComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioComponents.swift; sourceTree = "<group>"; };
+		4AEABBFFCD0DF0C816E1786B /* RecipeJobStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeJobStore.swift; sourceTree = "<group>"; };
+		4C9B3103C4DC581CD20564D2 /* BeanEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeanEditorView.swift; sourceTree = "<group>"; };
+		532207214F1E9D5D568BB2D2 /* LibraryPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPersistenceTests.swift; sourceTree = "<group>"; };
 		58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomApp.swift; sourceTree = "<group>"; };
 		5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		62907616C3A0E9C97DC1180D /* RecipeJobPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeJobPersistence.swift; sourceTree = "<group>"; };
 		63419A369FC46A26018BBF8B /* BrewingReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewingReference.swift; sourceTree = "<group>"; };
 		641D924ACBD150A88E41D4BA /* XBloomLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomLiveActivityBundle.swift; sourceTree = "<group>"; };
+		6A93339DD1CF09A190371D46 /* RepeatBrewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepeatBrewSheet.swift; sourceTree = "<group>"; };
+		6D0B04AC425AA95472276EA2 /* BeanDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeanDetailView.swift; sourceTree = "<group>"; };
 		71C5A662F8A8FAFF2121A83E /* BeansView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeansView.swift; sourceTree = "<group>"; };
 		7210B750C8D2A62B65AE67BC /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		73B6AD0DD130E8DD29ED6908 /* BrewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewView.swift; sourceTree = "<group>"; };
 		79E013F5D81849E8BB547B3D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		7FB413F5A7A7FC6370730E8A /* RecipeGenerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeGenerationTests.swift; sourceTree = "<group>"; };
+		8464D3F37608018E2E3E82FA /* LocalLibrary+PreviewFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalLibrary+PreviewFixtures.swift"; sourceTree = "<group>"; };
+		8CD94A1DB38F06794FABB445 /* AIRecipeDesignerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRecipeDesignerView.swift; sourceTree = "<group>"; };
+		9A2B86545B507750813FF7FC /* XBloomAppTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = XBloomAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9B8F42A8961E4E8F1F5ED09C /* BrewSessionView+Runtime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrewSessionView+Runtime.swift"; sourceTree = "<group>"; };
+		9BC8B2D6300AAC4CF2F2A02F /* RecipeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeEditorView.swift; sourceTree = "<group>"; };
 		A208A223001D666B39B03708 /* DoseWeighingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoseWeighingView.swift; sourceTree = "<group>"; };
 		A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceModels.swift; sourceTree = "<group>"; };
 		A52D9466670E09651FD3349C /* XBloomBrewLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomBrewLiveActivity.swift; sourceTree = "<group>"; };
+		AABC2A0AE23C9BF97C2372B7 /* BrewSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewSessionView.swift; sourceTree = "<group>"; };
+		AB78451B1B7161E927B8FA1E /* StudioChoiceControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioChoiceControls.swift; sourceTree = "<group>"; };
+		AB9989CD1593C66315B2E66A /* FavoriteRecipeButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoriteRecipeButton.swift; sourceTree = "<group>"; };
 		ABCF63F274EB4F27608114CE /* MaintenanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceView.swift; sourceTree = "<group>"; };
+		B1A6D3CBAEF9DCCA1AD6D518 /* RecipeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeDetailView.swift; sourceTree = "<group>"; };
+		B3DE8217755D04990EE08E53 /* AIJobRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIJobRow.swift; sourceTree = "<group>"; };
+		BC7E0500BA6E112904D0DE91 /* LocalLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLibrary.swift; sourceTree = "<group>"; };
+		BC95037E80A992C643657BC0 /* RecipeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeRow.swift; sourceTree = "<group>"; };
 		C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
+		CD025B6B151CAF4265AD160A /* BrewSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewSessionCoordinator.swift; sourceTree = "<group>"; };
 		CDB1FBD500EDF962502E6514 /* GrinderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrinderView.swift; sourceTree = "<group>"; };
+		D09A4398BA825D66BC56199F /* PreparedBeanImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparedBeanImage.swift; sourceTree = "<group>"; };
 		D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBloomBLEClient.swift; sourceTree = "<group>"; };
 		D5DFFA847B7A98439EE6958E /* BeanImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeanImportCoordinator.swift; sourceTree = "<group>"; };
 		D88E4B719592471EEF5650D3 /* RecipesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipesView.swift; sourceTree = "<group>"; };
 		DE378BDE43EE3E266B604B87 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		E536ADA10A2137F1F8C7D458 /* MaintenanceServiceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceServiceSheet.swift; sourceTree = "<group>"; };
+		E691C16ED3546246A2928C69 /* BeanPhotoImporterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeanPhotoImporterView.swift; sourceTree = "<group>"; };
+		EA5DC7D0059EFABD33902470 /* AIProcessingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProcessingViews.swift; sourceTree = "<group>"; };
 		EAC5A5AAF24A5BB4B324FDA9 /* xBloom app */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "xBloom app"; path = .; sourceTree = SOURCE_ROOT; };
+		F0FE5F289C313E389E22709C /* ConnectionAndSyncStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionAndSyncStatus.swift; sourceTree = "<group>"; };
+		F218ADBA3E4A2E8A2103B45B /* PourControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PourControls.swift; sourceTree = "<group>"; };
 		F44BF38C59DA5466E734084C /* ManualPourView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualPourView.swift; sourceTree = "<group>"; };
-		"TEMP_17954497-3BD5-46E3-B281-9867F92FCE29" /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		FFA1C9F48C2E31F8E676A8A6 /* BeanRefillView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeanRefillView.swift; sourceTree = "<group>"; };
+		"TEMP_5E8CDAF9-7497-43C2-8B7F-DF079C22481B" /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2F82E547EF9DEB9FA6E6CBFC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				11C1F535BE8CC75E1C0D1AF3 /* XBloomCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		58A9D7FF7E45FE26D7470D83 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -141,7 +216,9 @@
 		1280463AE47222B1CC0313CA /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				B3DE8217755D04990EE08E53 /* AIJobRow.swift */,
 				A325571EB0AE7AC21ACDB547 /* PersistenceModels.swift */,
+				D09A4398BA825D66BC56199F /* PreparedBeanImage.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -159,31 +236,61 @@
 			isa = PBXGroup;
 			children = (
 				2CBF68C3FAEE7459EEE1B31D /* XBloom.app */,
+				9A2B86545B507750813FF7FC /* XBloomAppTests.xctest */,
 				1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		423E5FAA5F10FE2924D00060 /* XBloomAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				532207214F1E9D5D568BB2D2 /* LibraryPersistenceTests.swift */,
+				7FB413F5A7A7FC6370730E8A /* RecipeGenerationTests.swift */,
+			);
+			path = XBloomAppTests;
 			sourceTree = "<group>";
 		};
 		62230E903A2A25267E8E09D2 /* Views */ = {
 			isa = PBXGroup;
 			children = (
 				16C68DB0343188910490219D /* AccountAIView.swift */,
+				EA5DC7D0059EFABD33902470 /* AIProcessingViews.swift */,
+				8CD94A1DB38F06794FABB445 /* AIRecipeDesignerView.swift */,
+				6D0B04AC425AA95472276EA2 /* BeanDetailView.swift */,
+				4C9B3103C4DC581CD20564D2 /* BeanEditorView.swift */,
+				E691C16ED3546246A2928C69 /* BeanPhotoImporterView.swift */,
+				FFA1C9F48C2E31F8E676A8A6 /* BeanRefillView.swift */,
 				71C5A662F8A8FAFF2121A83E /* BeansView.swift */,
+				AABC2A0AE23C9BF97C2372B7 /* BrewSessionView.swift */,
+				31D1867D954D845E3633D656 /* BrewSessionView+Presentation.swift */,
+				9B8F42A8961E4E8F1F5ED09C /* BrewSessionView+Runtime.swift */,
 				73B6AD0DD130E8DD29ED6908 /* BrewView.swift */,
 				00067031474B071C240BD8D2 /* CameraCaptureView.swift */,
+				F0FE5F289C313E389E22709C /* ConnectionAndSyncStatus.swift */,
 				5AE0FBAAF067E811884CDC78 /* DesignSystem.swift */,
 				A208A223001D666B39B03708 /* DoseWeighingView.swift */,
+				AB9989CD1593C66315B2E66A /* FavoriteRecipeButton.swift */,
 				CDB1FBD500EDF962502E6514 /* GrinderView.swift */,
 				7210B750C8D2A62B65AE67BC /* HistoryView.swift */,
 				DE378BDE43EE3E266B604B87 /* HomeView.swift */,
 				0A1E342608C8E9FC55B09ACB /* MachineDiagnosticsView.swift */,
+				E536ADA10A2137F1F8C7D458 /* MaintenanceServiceSheet.swift */,
 				ABCF63F274EB4F27608114CE /* MaintenanceView.swift */,
 				F44BF38C59DA5466E734084C /* ManualPourView.swift */,
+				F218ADBA3E4A2E8A2103B45B /* PourControls.swift */,
+				1F2F0C72A27ED811DA4E193E /* QuickBrewFeedback.swift */,
+				B1A6D3CBAEF9DCCA1AD6D518 /* RecipeDetailView.swift */,
+				9BC8B2D6300AAC4CF2F2A02F /* RecipeEditorView.swift */,
+				BC95037E80A992C643657BC0 /* RecipeRow.swift */,
 				D88E4B719592471EEF5650D3 /* RecipesView.swift */,
+				6A93339DD1CF09A190371D46 /* RepeatBrewSheet.swift */,
 				288AD2850F804ABEB0F63EC4 /* RootView.swift */,
 				2EB51229F947ABE48988CA68 /* ScaleView.swift */,
 				79E013F5D81849E8BB547B3D /* SettingsView.swift */,
+				AB78451B1B7161E927B8FA1E /* StudioChoiceControls.swift */,
 				49321FCC4F76BECD12162693 /* StudioComponents.swift */,
+				32F370B3DD1E7C1377E9A4FB /* StudioDialBox.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -194,10 +301,15 @@
 				D5DFFA847B7A98439EE6958E /* BeanImportCoordinator.swift */,
 				63419A369FC46A26018BBF8B /* BrewingReference.swift */,
 				3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */,
+				CD025B6B151CAF4265AD160A /* BrewSessionCoordinator.swift */,
 				1C0F5FE3F3A699F48FED91C3 /* GeminiService.swift */,
 				60FCDF65F4F9A3A749E27820 /* KeychainStore.swift */,
+				BC7E0500BA6E112904D0DE91 /* LocalLibrary.swift */,
+				8464D3F37608018E2E3E82FA /* LocalLibrary+PreviewFixtures.swift */,
 				3530DABDDE58B039409B5C97 /* MachineFeedback.swift */,
 				355AC9239C3402F3119CDD7C /* RecipeGenerationCoordinator.swift */,
+				62907616C3A0E9C97DC1180D /* RecipeJobPersistence.swift */,
+				4AEABBFFCD0DF0C816E1786B /* RecipeJobStore.swift */,
 				C4F8F052E3DACE7130B85F78 /* SupabaseService.swift */,
 				D30D09E56687CAF98FC3F187 /* XBloomBLEClient.swift */,
 			);
@@ -212,10 +324,19 @@
 			name = Packages;
 			sourceTree = "<group>";
 		};
+		A184006F4EE8D4C1015EE991 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				423E5FAA5F10FE2924D00060 /* XBloomAppTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
 		A1BF44D9E6BFF4B5004ABBCC = {
 			isa = PBXGroup;
 			children = (
 				7B88F7E2B3772D38438D5537 /* Packages */,
+				A184006F4EE8D4C1015EE991 /* Tests */,
 				B0FDFAABCB5AC00EDE21D4DC /* XBloomApp */,
 				24BF916F1522C34913520A4B /* XBloomLiveActivity */,
 				35423A6D0DEE1F03894627C1 /* Products */,
@@ -242,10 +363,10 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		"TEMP_7F9BDC87-049C-4075-8AA6-490268D66547" /* xBloom app */ = {
+		"TEMP_37BCB02E-9760-4EB7-8D47-A888A6AEE334" /* xBloom app */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_17954497-3BD5-46E3-B281-9867F92FCE29" /* Secrets.xcconfig */,
+				"TEMP_5E8CDAF9-7497-43C2-8B7F-DF079C22481B" /* Secrets.xcconfig */,
 			);
 			path = "xBloom app";
 			sourceTree = "<group>";
@@ -253,6 +374,26 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1B25E8EF94C9874387CA55EB /* XBloomAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8C64233A494111E517E9B032 /* Build configuration list for PBXNativeTarget "XBloomAppTests" */;
+			buildPhases = (
+				9241D76CBC370A1E1C9D8E2F /* Sources */,
+				2F82E547EF9DEB9FA6E6CBFC /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E167524DFEA5E0D5265E73A8 /* PBXTargetDependency */,
+			);
+			name = XBloomAppTests;
+			packageProductDependencies = (
+				16B43F7C6A97BB2FAAB2448F /* XBloomCore */,
+			);
+			productName = XBloomAppTests;
+			productReference = 9A2B86545B507750813FF7FC /* XBloomAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		8F2E3CF4CC0AD231AA056588 /* XBloomLiveActivity */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 682DA57BDD13213FD2545578 /* Build configuration list for PBXNativeTarget "XBloomLiveActivity" */;
@@ -333,6 +474,7 @@
 			projectRoot = "";
 			targets = (
 				ADB05F1BB29B083101FABBC1 /* XBloom */,
+				1B25E8EF94C9874387CA55EB /* XBloomAppTests */,
 				8F2E3CF4CC0AD231AA056588 /* XBloomLiveActivity */,
 			);
 		};
@@ -355,31 +497,58 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F33C21C8D491B0BCFA016FBE /* AIJobRow.swift in Sources */,
+				924236DBF108C6B421114965 /* AIProcessingViews.swift in Sources */,
+				EFA489E84EB749291CB2EAF9 /* AIRecipeDesignerView.swift in Sources */,
 				290E0226530B6696AA4E19F4 /* AccountAIView.swift in Sources */,
+				D3B3DED3AE7306A7070FC3A7 /* BeanDetailView.swift in Sources */,
+				B560845C57E30740EECB1B8A /* BeanEditorView.swift in Sources */,
 				9A4F67BC5D0A139A449C13BB /* BeanImportCoordinator.swift in Sources */,
+				88E435DD3A798DB45D9148F2 /* BeanPhotoImporterView.swift in Sources */,
+				A11385022C8B02F09789ADCE /* BeanRefillView.swift in Sources */,
 				D87049683A34826E86428065 /* BeansView.swift in Sources */,
 				C68FE583E0B5EA6C84C64712 /* BrewLiveActivityManager.swift in Sources */,
+				D3CE8C6B486338DE257D22B7 /* BrewSessionCoordinator.swift in Sources */,
+				24164F8C55B22FF005C4DFC3 /* BrewSessionView+Presentation.swift in Sources */,
+				DC955563E50767811BC0EE05 /* BrewSessionView+Runtime.swift in Sources */,
+				5252D5DC1AE5DEE55D727F19 /* BrewSessionView.swift in Sources */,
 				DBE663F2A2D320EFF7BDDA29 /* BrewView.swift in Sources */,
 				EEE890B93D89E4771718D598 /* BrewingReference.swift in Sources */,
 				D33E678FD500A3F406E29343 /* CameraCaptureView.swift in Sources */,
+				B5CAA857322320DA66857C14 /* ConnectionAndSyncStatus.swift in Sources */,
 				37A3D1A7AF48FBECD9CBA6C5 /* DesignSystem.swift in Sources */,
 				220A2352A2E96F54EFD37AE1 /* DoseWeighingView.swift in Sources */,
+				B601814E6EBEC4996EFA9878 /* FavoriteRecipeButton.swift in Sources */,
 				200C478580FED52EB0A8706D /* GeminiService.swift in Sources */,
 				684F1F9FA3D59F721B4B0555 /* GrinderView.swift in Sources */,
 				BD9C9803957ED9CE8D985C7D /* HistoryView.swift in Sources */,
 				D5808958217B7635A5CDB4ED /* HomeView.swift in Sources */,
 				DD735855BFE08C898D0C6C69 /* KeychainStore.swift in Sources */,
+				CA1F844E24DB5EF1144EBFEA /* LocalLibrary+PreviewFixtures.swift in Sources */,
+				584959F42380DCEC3B5DB022 /* LocalLibrary.swift in Sources */,
 				24AE48EB3F43420D8089A5A7 /* MachineDiagnosticsView.swift in Sources */,
 				2E0CBD06A36229067366FF2D /* MachineFeedback.swift in Sources */,
+				278E03B74E09A146FE68FA1C /* MaintenanceServiceSheet.swift in Sources */,
 				C721A74853A10E8C0728007D /* MaintenanceView.swift in Sources */,
 				DC7F97AC5464A229362ABA61 /* ManualPourView.swift in Sources */,
 				17888BBA92374F6E894F0166 /* PersistenceModels.swift in Sources */,
+				AAD1C2E749FB71A8F7755343 /* PourControls.swift in Sources */,
+				F3DFDE48A201D5CE8DD285AC /* PreparedBeanImage.swift in Sources */,
+				F4C2FBF1DA059E5ACC6E8CE6 /* QuickBrewFeedback.swift in Sources */,
+				40E7CC15BCA49CBD735A87ED /* RecipeDetailView.swift in Sources */,
+				94F51E91623B4A8F74EAFC94 /* RecipeEditorView.swift in Sources */,
 				0C7CD1C896B7BFB2CEE33437 /* RecipeGenerationCoordinator.swift in Sources */,
+				A40E01CFB46BE9894E2ED301 /* RecipeJobPersistence.swift in Sources */,
+				48391A2E2EFFD72A3367C053 /* RecipeJobStore.swift in Sources */,
+				B20CC36F50C4551A14A0EE45 /* RecipeRow.swift in Sources */,
 				629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */,
+				506D22B854E7BE6D62EAC44C /* RepeatBrewSheet.swift in Sources */,
 				E8A04612E1F5F04A2C3C32E4 /* RootView.swift in Sources */,
 				9C0C3A56B40FC3A2F477BE35 /* ScaleView.swift in Sources */,
 				79C41BBC938C16B7AC666171 /* SettingsView.swift in Sources */,
+				894D2481C68012C9A3DE7AAB /* StudioChoiceControls.swift in Sources */,
 				C80FB84C74016044044272D1 /* StudioComponents.swift in Sources */,
+				E680146177DD863FAD147EB5 /* StudioDialBox.swift in Sources */,
 				507AE287044BD4D4BD0CE334 /* SupabaseService.swift in Sources */,
 				450E1ED33F3C042BB2A893AF /* XBloomApp.swift in Sources */,
 				B0A60BDF676E785964240882 /* XBloomBLEClient.swift in Sources */,
@@ -395,6 +564,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9241D76CBC370A1E1C9D8E2F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E7E53C3C81ED26DAC1D30CDF /* LibraryPersistenceTests.swift in Sources */,
+				B007B290C9EC9F9561587A70 /* RecipeGenerationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -403,12 +581,17 @@
 			target = 8F2E3CF4CC0AD231AA056588 /* XBloomLiveActivity */;
 			targetProxy = FD86823CD7F04148F8FDF81A /* PBXContainerItemProxy */;
 		};
+		E167524DFEA5E0D5265E73A8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ADB05F1BB29B083101FABBC1 /* XBloom */;
+			targetProxy = 128FA2A6024BE0E45F490B70 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		346BE6AE436BDA4013D75904 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_17954497-3BD5-46E3-B281-9867F92FCE29" /* Secrets.xcconfig */;
+			baseConfigurationReference = "TEMP_5E8CDAF9-7497-43C2-8B7F-DF079C22481B" /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -601,7 +784,7 @@
 		};
 		C0E6B76C759A9E2E65B660D3 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_17954497-3BD5-46E3-B281-9867F92FCE29" /* Secrets.xcconfig */;
+			baseConfigurationReference = "TEMP_5E8CDAF9-7497-43C2-8B7F-DF079C22481B" /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -624,6 +807,42 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
+		};
+		E73F55C9DA2519E4130D0589 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = coffee.xbloom.XBloomAppTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xBloom.app/xBloom";
+			};
+			name = Release;
+		};
+		EE30014C10AC8B43671D1200 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = coffee.xbloom.XBloomAppTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xBloom.app/xBloom";
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -655,6 +874,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		8C64233A494111E517E9B032 /* Build configuration list for PBXNativeTarget "XBloomAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE30014C10AC8B43671D1200 /* Debug */,
+				E73F55C9DA2519E4130D0589 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -676,6 +904,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		16B43F7C6A97BB2FAAB2448F /* XBloomCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = XBloomCore;
+		};
 		4CDEAC636DE90A7943C97D61 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 46A80A83679F5C50DB28BE9D /* XCRemoteSwiftPackageReference "supabase-swift" */;

@@ -69,6 +69,22 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
 
+  XBloomAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/XBloomAppTests
+    dependencies:
+      - target: XBloom
+      - package: XBloomCore
+        product: XBloomCore
+    settings:
+      base:
+        SWIFT_VERSION: 6.0
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/xBloom.app/xBloom"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
   XBloomLiveActivity:
     type: app-extension
     platform: iOS
@@ -106,6 +122,9 @@ schemes:
     build:
       targets:
         XBloom: all
+    test:
+      targets:
+        - XBloomAppTests
     run:
       config: Debug
     archive:

@@ -24,6 +24,8 @@ final class XBloomBLEClient: NSObject {
 
     private(set) var connectionState: ConnectionState = .disconnected
     private(set) var telemetry = XBloomTelemetry(state: .disconnected)
+    /// A separate event counter also delivers repeated tares while the scale is already zero.
+    private(set) var scaleTareRevision = 0
     /// Machine-reported brew lifecycle. This, not the telemetry values, is what
     /// tells the app when grinding ends and extraction actually begins.
     private(set) var brewProgress = BrewProgressTracker()
@@ -599,6 +601,9 @@ final class XBloomBLEClient: NSObject {
     }
 
     private func merge(_ update: XBloomTelemetry) {
+        if update.lastCommand == XBloomNotification.weightCleared.rawValue {
+            scaleTareRevision += 1
+        }
         telemetry.lastCommand = update.lastCommand
         if let value = update.weight { telemetry.weight = value }
         if let value = update.temperature { telemetry.temperature = value }
