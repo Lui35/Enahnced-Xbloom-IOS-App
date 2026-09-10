@@ -195,7 +195,12 @@ struct HistoryView: View {
 
 struct BrewHistoryDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(BrewSessionCoordinator.self) private var brewSession
+    @State private var rebrewing = false
     @Environment(GeminiService.self) private var gemini
+    @Environment(RecipeGenerationCoordinator.self) private var generation
+    @Environment(\.selectedTab) private var selectedTab
+    @Environment(\.dismiss) private var dismiss
 
     let brew: StoredBrew
 
@@ -203,11 +208,9 @@ struct BrewHistoryDetailView: View {
     @State private var selectedFeedback: Set<String>
     @State private var selectedGoals: Set<RecipeFlavorGoal>
     @State private var notes: String
-    @State private var isEnhancing = false
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var enhancedRecipeID: UUID?
-    @State private var enhancementTask: Task<Void, Never>?
     @State private var fallbackRecipe: Recipe?
     @State private var fallbackBean: BeanProfile?
     @State private var loadedEnhancedRecipe: Recipe?
@@ -295,7 +298,7 @@ struct BrewHistoryDetailView: View {
     }
 
     private var canEnhance: Bool {
-        originalRecipe?.generatedByAI == true
+        originalRecipe != nil
             && originalBean != nil
             && rating > 0
             && (
@@ -304,7 +307,7 @@ struct BrewHistoryDetailView: View {
                     || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             )
             && gemini.hasAPIKey
-            && !isEnhancing
+            && !generation.pending.contains(where: { $0.sourceBrewID == brew.id })
     }
 
     private let feedbackOptions = [
@@ -328,15 +331,22 @@ struct BrewHistoryDetailView: View {
             ScrollView {
                 LazyVStack(spacing: 18) {
                     resultHero
+                    if entry?.recipeSnapshot != nil {
+                        Button { rebrewing = true } label: {
+                            Label("Brew again · exact saved recipe", systemImage: "arrow.clockwise")
+                        }.buttonStyle(PrimaryActionButtonStyle())
+                    }
                     resultMetrics
+                    if entry?.outcome == .stopped {
+                        Label("This brew was stopped early. Its measurements describe a partial extraction.",
+                              systemImage: "stop.circle")
+                            .font(.subheadline)
+                            .foregroundStyle(StudioTheme.warning)
+                    }
 
                     if let recipe = originalRecipe {
                         recipeContext(recipe)
-                        if recipe.generatedByAI {
-                            enhancementStudio(recipe)
-                        } else {
-                            feedbackOnlyCard
-                        }
+                        enhancementStudio(recipe)
                     } else {
                         missingRecipeCard
                     }
@@ -352,34 +362,17 @@ struct BrewHistoryDetailView: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
+        .sheet(isPresented: $rebrewing) {
+            if let entry { RepeatBrewSheet(entry: entry) }
+        }
         .navigationTitle(brew.recipeName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .preferredColorScheme(.dark)
-        .overlay {
-            if isEnhancing {
-                AIProcessingOverlay(
-                    title: "Refining your next cup",
-                    messages: [
-                        "Reading your rating and tasting notes…",
-                        "Tracing this exact bean and recipe…",
-                        "Adjusting extraction toward your goals…",
-                        "Building a new recipe without losing the original…",
-                    ],
-                    systemImage: "star.bubble.fill",
-                    tint: StudioTheme.mint
-                ) {
-                    enhancementTask?.cancel()
-                }
-            }
-        }
-        .task(id: enhancedRecipeID) {
+        .task(id: entry?.enhancedRecipeID) {
+            enhancedRecipeID = entry?.enhancedRecipeID
             loadRelatedRecords()
-        }
-        .onDisappear {
-            enhancementTask?.cancel()
-            enhancementTask = nil
         }
         .alert("Could not enhance recipe", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -573,7 +566,7 @@ struct BrewHistoryDetailView: View {
                 }
 
                 if !gemini.hasAPIKey {
-                    Label("Add your Gemini API key in Settings to create an enhanced recipe.", systemImage: "key.fill")
+                    Label("Sign in under Account & AI to enhance this recipe. You can save feedback without signing in.", systemImage: "key.fill")
                         .font(.footnote)
                         .foregroundStyle(StudioTheme.warning)
                 }
@@ -597,13 +590,9 @@ struct BrewHistoryDetailView: View {
                     .disabled(rating == 0)
 
                     Button {
-                        enhancementTask?.cancel()
-                        enhancementTask = Task { await enhance(recipe) }
+                        enhance(recipe)
                     } label: {
-                        HStack(spacing: 8) {
-                            if isEnhancing { ProgressView().tint(.black) }
-                            Label(isEnhancing ? "Enhancing…" : "Enhance", systemImage: "sparkles")
-                        }
+                        Label("Enhance", systemImage: "star.bubble.fill")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
@@ -614,17 +603,6 @@ struct BrewHistoryDetailView: View {
                     .disabled(!canEnhance)
                     .opacity(canEnhance ? 1 : 0.45)
                 }
-            }
-        }
-    }
-
-    private var feedbackOnlyCard: some View {
-        StudioCard {
-            VStack(alignment: .leading, spacing: 10) {
-                StudioSectionTitle(title: "Cup feedback", icon: "star.bubble.fill")
-                Text("AI enhancement is available for recipes originally designed with Gemini.")
-                    .font(.subheadline)
-                    .foregroundStyle(StudioTheme.muted)
             }
         }
     }
@@ -900,62 +878,40 @@ struct BrewHistoryDetailView: View {
         }
     }
 
-    private func saveFeedback(enhancedID: UUID? = nil) {
-        guard var value = entry else { return }
+    @discardableResult
+    private func saveFeedback() -> Bool {
+        guard var value = entry else { return false }
         value.rating = rating == 0 ? nil : rating
         value.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         value.feedbackTags = selectedFeedback.sorted()
         value.enhancementGoals = selectedGoals.map(\.rawValue).sorted()
-        if let enhancedID {
-            value.enhancedRecipeID = enhancedID
-        }
         brew.update(with: value)
         do {
             try modelContext.save()
-            statusMessage = enhancedID == nil ? "Feedback saved to this brew." : "Feedback and enhanced recipe are linked."
+            statusMessage = "Feedback saved to this brew."
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
     @MainActor
-    private func enhance(_ original: Recipe) async {
-        guard let bean = originalBean, let entry, canEnhance else { return }
-        isEnhancing = true
-        errorMessage = nil
-        statusMessage = nil
-        defer { isEnhancing = false }
-
-        do {
-            let result = try await gemini.enhanceRecipe(
-                original: original,
-                bean: bean,
-                brew: entry,
-                rating: rating,
-                feedbackTags: selectedFeedback.sorted(),
-                goals: selectedGoals.map(\.rawValue).sorted(),
-                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-            try Task.checkCancellation()
-            var improved = try result.recipe(
-                bean: bean,
-                cups: original.servings ?? 1,
-                requestedStyle: original.brewStyle == .iced ? .iced : .hot
-            )
-            improved.parentRecipeID = original.id
-            improved.sourceBrewID = entry.id
-            improved.generatedByAI = true
-            modelContext.insert(StoredRecipe(recipe: improved))
-            try modelContext.save()
-
-            enhancedRecipeID = improved.id
-            loadedEnhancedRecipe = improved
-            saveFeedback(enhancedID: improved.id)
-        } catch is CancellationError {
+    private func enhance(_ original: Recipe) {
+        guard let bean = originalBean, canEnhance, saveFeedback(), let entry else { return }
+        generation.clearLastCompleted()
+        guard generation.startEnhancement(
+            original: original, bean: bean, brew: entry, rating: rating,
+            feedbackTags: selectedFeedback.sorted(),
+            goals: selectedGoals.map(\.rawValue).sorted(),
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines), context: modelContext
+        ) != nil else {
+            errorMessage = generation.lastError
             return
-        } catch {
-            errorMessage = error.localizedDescription
         }
+        selectedTab?.wrappedValue = 1
+        dismiss()
+        if brewSession.presentation?.id == brew.id { brewSession.dismiss() }
     }
 
     private func loadRelatedRecords() {

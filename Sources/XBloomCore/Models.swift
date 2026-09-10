@@ -74,6 +74,7 @@ public struct Recipe: Codable, Equatable, Identifiable, Sendable {
     public var aiDescription: String?
     public var parentRecipeID: UUID?
     public var sourceBrewID: UUID?
+    public var isFavorite: Bool? = nil
     public var pours: [PourStep]
 
     public init(
@@ -298,6 +299,10 @@ public struct BrewSample: Codable, Equatable, Sendable {
     }
 }
 
+public enum BrewOutcome: String, Codable, Sendable {
+    case completed, stopped, failed
+}
+
 public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var recipeID: UUID?
@@ -319,6 +324,9 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
     public var enhancedRecipeID: UUID?
     /// `nil` for history created before simulation records were introduced.
     public var wasSimulated: Bool?
+    /// Unknown for old records; a stopped program is not a completed extraction.
+    public var outcome: BrewOutcome?
+    public var completedSteps: Int?
 
     public init(
         id: UUID = UUID(),
@@ -339,7 +347,9 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
         feedbackTags: [String]? = nil,
         enhancementGoals: [String]? = nil,
         enhancedRecipeID: UUID? = nil,
-        wasSimulated: Bool = false
+        wasSimulated: Bool = false,
+        outcome: BrewOutcome? = .completed,
+        completedSteps: Int? = nil
     ) {
         self.id = id
         self.recipeID = recipeID
@@ -360,5 +370,7 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
         self.enhancementGoals = enhancementGoals
         self.enhancedRecipeID = enhancedRecipeID
         self.wasSimulated = wasSimulated
+        self.outcome = outcome
+        self.completedSteps = completedSteps
     }
 }

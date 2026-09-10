@@ -1427,21 +1427,21 @@ private extension Data {
 
 /// History is the biggest thing the app stores — every brew carries its
 /// telemetry samples — and only the recent ones are ever read.
-@Test func brewHistoryKeepsTheNewestTwentyAndNothingElse() {
+@Test func brewTelemetryRetentionSelectsOnlyOlderRecords() {
     let now = Date()
     let brews = (0..<26).map { index in
         (id: UUID(), completedAt: now.addingTimeInterval(-Double(index) * 3_600))
     }
 
-    let pruned = BrewRetention.idsToPrune(brews)
+    let pruned = BrewRetention.idsToCompact(brews)
     #expect(pruned.count == 6)
     // The six oldest, and only those.
     #expect(Set(brews.suffix(6).map(\.id)) == pruned)
     #expect(pruned.isDisjoint(with: Set(brews.prefix(20).map(\.id))))
 
     // Under the limit nothing goes.
-    #expect(BrewRetention.idsToPrune(Array(brews.prefix(20))).isEmpty)
-    #expect(BrewRetention.idsToPrune([]).isEmpty)
+    #expect(BrewRetention.idsToCompact(Array(brews.prefix(20))).isEmpty)
+    #expect(BrewRetention.idsToCompact([]).isEmpty)
 
     // Two brews sharing a timestamp resolve the same way every time, on any
     // device — otherwise two phones prune different records and each restores
@@ -1449,8 +1449,8 @@ private extension Data {
     let stamp = Date()
     let a = (id: UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!, completedAt: stamp)
     let b = (id: UUID(uuidString: "00000000-0000-0000-0000-0000000000BB")!, completedAt: stamp)
-    #expect(BrewRetention.idsToPrune([a, b], limit: 1) == [a.id])
-    #expect(BrewRetention.idsToPrune([b, a], limit: 1) == [a.id])
+    #expect(BrewRetention.idsToCompact([a, b], limit: 1) == [a.id])
+    #expect(BrewRetention.idsToCompact([b, a], limit: 1) == [a.id])
 }
 
 @Test func validationIssueReportsItsOwnMessage() {

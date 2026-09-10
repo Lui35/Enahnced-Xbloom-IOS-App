@@ -38,6 +38,7 @@ struct XBloomApp: App {
                 StoredBrew.self,
                 StoredMaintenanceEvent.self,
                 CloudSyncMetadata.self,
+                StoredRecipeJobReceipt.self,
             ]
         )
     }
@@ -60,8 +61,9 @@ private struct CloudBootstrapView: View {
                 await cloud.refreshSession()
             }
             .task(id: cloud.userID) {
+                recipeGeneration.accountChanged()
                 guard cloud.isAuthenticated else { return }
-                try? await Task.sleep(for: .seconds(1))
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
                 _ = try? await cloud.sync(in: modelContext)
                 // A recipe the backend finished while the app was closed is
                 // collected here, and anything still running gets its card back.
@@ -74,7 +76,10 @@ private struct CloudBootstrapView: View {
             // sat on its row until the app was killed and started again.
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active, cloud.isAuthenticated else { return }
-                Task { await recipeGeneration.refresh(context: modelContext) }
+                Task {
+                    if !cloud.isSyncing { _ = try? await cloud.sync(in: modelContext) }
+                    await recipeGeneration.refresh(context: modelContext)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
                 guard let savedContext = notification.object as? ModelContext,

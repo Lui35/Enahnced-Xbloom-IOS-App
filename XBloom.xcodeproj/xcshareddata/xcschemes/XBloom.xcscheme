@@ -37,6 +37,17 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1B25E8EF94C9874387CA55EB"
+               BuildableName = "XBloomAppTests.xctest"
+               BlueprintName = "XBloomAppTests"
+               ReferencedContainer = "container:XBloom.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

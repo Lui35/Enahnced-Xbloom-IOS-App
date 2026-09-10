@@ -27,6 +27,9 @@ struct HomeView: View {
     @State private var recipeCount = 0
     @State private var nextCup: HomeCupRecommendation?
     @State private var lastCup: HomeLastCup?
+    @State private var favoriteRecipes: [StoredRecipe] = []
+    @State private var latestBrew: BrewHistoryEntry?
+    @State private var repeatingBrew: BrewHistoryEntry?
 
     var body: some View {
         NavigationStack {
@@ -35,9 +38,12 @@ struct HomeView: View {
                 ScrollView {
                     LazyVStack(spacing: 24) {
                         welcomeHeader
+                        ConnectionAndSyncStatus()
+                        nextCupCard
+                        favoritesSection
+                        repeatLastBrew
                         machineHero
                         machineTools
-                        nextCupCard
                         sinceLastCup
                         libraryOverview
                     }
@@ -63,6 +69,11 @@ struct HomeView: View {
                 }
             }
             .onAppear { refreshDashboard() }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
+                guard let context = notification.object as? ModelContext, context === modelContext else { return }
+                refreshDashboard()
+            }
+            .sheet(item: $repeatingBrew) { RepeatBrewSheet(entry: $0) }
         }
     }
 
@@ -71,11 +82,15 @@ struct HomeView: View {
     /// a decorative leaf tile, which pushed the one thing this screen exists to
     /// show — whether the machine is reachable — below the fold.
     private var welcomeHeader: some View {
-        Text("Ready for something exceptional?")
+        Text("Your coffee, ready when you are.")
             .font(.subheadline)
             .foregroundStyle(StudioTheme.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var isConnecting: Bool {
+        [.scanning, .connecting, .subscribing].contains(machine.connectionState)
     }
 
     private var machineHero: some View {
@@ -153,7 +168,7 @@ struct HomeView: View {
                 Button {
                     machine.connect()
                 } label: {
-                    Label("Connect xBloom", systemImage: "bolt.fill")
+                    Label(isConnecting ? "Connecting…" : "Connect xBloom", systemImage: "bolt.fill")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -164,6 +179,7 @@ struct HomeView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .disabled(isConnecting)
             }
 
             diagnosticMessage
@@ -262,7 +278,7 @@ struct HomeView: View {
 
     private var libraryOverview: some View {
         VStack(spacing: 14) {
-            StudioSectionTitle(title: "Your coffee", subtitle: "Everything stays on this iPhone")
+            StudioSectionTitle(title: "Your coffee", subtitle: "Your bags and saved recipes")
             HStack(spacing: 12) {
                 libraryButton(title: "Beans", value: activeBeans, icon: "leaf.fill", tint: StudioTheme.mint, tab: 2)
                 libraryButton(title: "Recipes", value: recipeCount, icon: "list.bullet.rectangle.fill", tint: StudioTheme.crema, tab: 1)
@@ -289,6 +305,7 @@ struct HomeView: View {
             )
         )) ?? []
 
+        favoriteRecipes = recipes.filter { $0.recipe?.isFavorite == true }
         let beans = (try? modelContext.fetch(activeDescriptor)) ?? []
         let beanProfiles = Dictionary(
             uniqueKeysWithValues: beans.compactMap { stored in
@@ -301,6 +318,7 @@ struct HomeView: View {
         )
         historyDescriptor.fetchLimit = 60
         let recentHistory = (try? modelContext.fetch(historyDescriptor)) ?? []
+        latestBrew = recentHistory.first(where: { $0.wasSimulated != true && $0.entry?.recipeSnapshot != nil })?.entry
         nextCup = makeNextCup(
             recipes: recipes,
             beans: beanProfiles,
@@ -317,7 +335,7 @@ struct HomeView: View {
     private var nextCupCard: some View {
         if let nextCup {
             VStack(spacing: 12) {
-                StudioSectionTitle(title: "Your next cup", subtitle: "Chosen locally from your coffee memory")
+                StudioSectionTitle(title: "Next brew", subtitle: "From your favorites and available coffee")
                 NavigationLink {
                     RecipeDetailView(stored: nextCup.stored, recipe: nextCup.recipe)
                 } label: {
@@ -390,6 +408,59 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
             }
+        } else {
+            StudioCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    StudioSectionTitle(title: "Next brew", icon: "cup.and.saucer.fill")
+                    Text("Choose a recipe and a bag with enough coffee for your next cup.")
+                        .font(.subheadline).foregroundStyle(StudioTheme.muted)
+                    Button("Explore recipes") { selectedTab = 1 }
+                        .buttonStyle(PrimaryActionButtonStyle())
+                }
+            }
+        }
+    }
+
+    private var favoritesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            StudioSectionTitle(title: "Favorites", icon: "heart.fill")
+            if favoriteRecipes.isEmpty {
+                Text("Tap the heart on a recipe to keep it close. Your favorites sync with your library.")
+                    .font(.subheadline).foregroundStyle(StudioTheme.muted)
+            } else {
+                ForEach(Array(favoriteRecipes.prefix(4))) { stored in
+                    if let recipe = stored.recipe {
+                        HStack {
+                            NavigationLink {
+                                RecipeDetailView(stored: stored, recipe: recipe)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(recipe.name).font(.headline)
+                                    Text(String(format: "%.1f g · %d ml · %@", recipe.dose, recipe.totalWater,
+                                                recipe.brewStyle == .iced ? "Iced" : "Hot"))
+                                        .font(.caption).foregroundStyle(StudioTheme.muted)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }.buttonStyle(.plain)
+                            FavoriteRecipeButton(stored: stored).labelStyle(.iconOnly)
+                        }.padding(15).background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: 16))
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var repeatLastBrew: some View {
+        if let latestBrew {
+            StudioCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    StudioSectionTitle(title: "Brew again", detail: "Last saved cup", icon: "arrow.clockwise")
+                    Text(latestBrew.recipeName).font(.headline)
+                    Text("Uses the exact saved dose and pours, even if you changed the recipe later.")
+                        .font(.caption).foregroundStyle(StudioTheme.muted)
+                    Button("Review & repeat") { repeatingBrew = latestBrew }
+                        .buttonStyle(PrimaryActionButtonStyle())
+                }
+            }
         }
     }
 
@@ -422,7 +493,7 @@ struct HomeView: View {
                     NavigationLink {
                         RecipeDetailView(stored: lastCup.stored, recipe: lastCup.recipe)
                     } label: {
-                        Label("Brew it again", systemImage: "arrow.clockwise")
+                        Label("Review current recipe", systemImage: "slider.horizontal.3")
                             .font(.subheadline.weight(.bold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 11)
@@ -514,6 +585,7 @@ struct HomeView: View {
         for stored in recipes {
             guard let recipe = stored.recipe else { continue }
             let bean = recipe.beanID.flatMap { beans[$0] }
+            if recipe.beanID != nil && bean == nil { continue }
             if let bean, bean.remainingWeightGrams < recipe.dose { continue }
 
             let recipeRatings = ratings[recipe.id] ?? []
@@ -524,7 +596,7 @@ struct HomeView: View {
                 max(0, Calendar.current.dateComponents([.day], from: $0, to: Date()).day ?? 0)
             }
 
-            var score = 0.0
+            var score = recipe.isFavorite == true ? 100.0 : 0.0
             if bean != nil { score += 24 }
             if recipe.id != lastRecipeID { score += 9 }
             if let averageRating { score += averageRating * 7 }
@@ -532,7 +604,10 @@ struct HomeView: View {
             if recipe.generatedByAI { score += 2 }
 
             let reason: String
-            if let bean, let roastAge, roastAge >= 12 {
+            if recipe.isFavorite == true {
+                reason = bean.map { "One of your favorites. \($0.name) has \(Int($0.remainingWeightGrams)) g left." }
+                    ?? "One of your favorites, ready to review and brew."
+            } else if let bean, let roastAge, roastAge >= 12 {
                 let doses = Int(floor(bean.remainingWeightGrams / max(1, recipe.dose)))
                 reason = "Use \(bean.name) while it is still expressive—roasted \(roastAge) days ago with about \(doses) doses remaining."
             } else if let averageRating, averageRating >= 4 {

@@ -13,6 +13,8 @@ struct MaintenanceView: View {
     @Query(sort: \StoredBrew.completedAt, order: .reverse) private var brews: [StoredBrew]
     @Query(sort: \StoredMaintenanceEvent.performedAt, order: .reverse)
     private var services: [StoredMaintenanceEvent]
+    @State private var recordingTask: MaintenanceTask?
+    @State private var errorMessage: String?
 
     var body: some View {
         ZStack {
@@ -20,9 +22,10 @@ struct MaintenanceView: View {
             ScrollView {
                 LazyVStack(spacing: 18) {
                     overview
-                    ForEach(MaintenanceTask.allCases) { task in
+                    ForEach(orderedTasks) { task in
                         card(for: task)
                     }
+                    recentServices
                     sourceNote
                 }
                 .padding(.horizontal, 18)
@@ -36,6 +39,14 @@ struct MaintenanceView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .preferredColorScheme(.dark)
         .task { importLegacyDatesIfNeeded() }
+        .sheet(item: $recordingTask) { task in
+            MaintenanceServiceSheet(task: task)
+        }
+        .alert("Could not save maintenance", isPresented: Binding(
+            get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: { Text(errorMessage ?? "") }
     }
 
     // MARK: - What the machine has done
@@ -46,8 +57,6 @@ struct MaintenanceView: View {
         brews.filter { $0.wasSimulated != true }
     }
 
-    private var firstBrewAt: Date? { realBrews.last?.completedAt }
-
     private func history(_ task: MaintenanceTask) -> [StoredMaintenanceEvent] {
         services.filter { $0.task == task.rawValue }
     }
@@ -56,18 +65,16 @@ struct MaintenanceView: View {
         history(task).first?.performedAt
     }
 
-    private func markDone(_ task: MaintenanceTask) {
-        modelContext.insert(StoredMaintenanceEvent(task: task))
-        try? modelContext.save()
-        MachineFeedback.acknowledged()
-    }
-
     /// Takes back the most recent record of this service. Only the latest, so
     /// a mis-tap is undone without erasing the history behind it.
     private func undoLast(_ task: MaintenanceTask) {
         guard let latest = history(task).first else { return }
         modelContext.delete(latest)
-        try? modelContext.save()
+        do { try modelContext.save() }
+        catch {
+            modelContext.insert(latest)
+            errorMessage = error.localizedDescription
+        }
     }
 
     /// Moves the three dates the first version kept in UserDefaults into the
@@ -80,41 +87,35 @@ struct MaintenanceView: View {
             (.grinderTablets, "maintenance.grinderTablets"),
             (.descale, "maintenance.descale"),
         ]
-        var imported = false
+        var inserted: [StoredMaintenanceEvent] = []
+        var importedKeys: [String] = []
         for (task, key) in keys {
             let stamp = defaults.double(forKey: key)
             guard stamp > 0 else { continue }
             if history(task).isEmpty {
-                modelContext.insert(
-                    StoredMaintenanceEvent(
-                        task: task,
-                        performedAt: Date(timeIntervalSince1970: stamp),
-                        note: "Imported from this device"
-                    )
+                let event = StoredMaintenanceEvent(
+                    task: task, performedAt: Date(timeIntervalSince1970: stamp),
+                    note: "Imported from this device"
                 )
-                imported = true
+                modelContext.insert(event)
+                inserted.append(event)
             }
-            defaults.removeObject(forKey: key)
+            importedKeys.append(key)
         }
-        if imported { try? modelContext.save() }
+        do {
+            if !inserted.isEmpty { try modelContext.save() }
+            importedKeys.forEach { defaults.removeObject(forKey: $0) }
+        } catch {
+            inserted.forEach { modelContext.delete($0) }
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func usage(for task: MaintenanceTask) -> MaintenanceUsage {
         let recorded = doneAt(task)
-        let since = recorded ?? firstBrewAt ?? Date()
-        let counted = realBrews.filter { $0.completedAt > since }
-        // The dose lives in the recipe snapshot, and only a recipe that grinds
-        // put beans through the burrs — a pre-ground brew wears nothing.
-        let ground = counted.compactMap { brew -> (Date, Double)? in
-            guard let recipe = brew.entry?.recipeSnapshot, recipe.useGrinder else { return nil }
-            return (brew.completedAt, max(0, recipe.dose))
-        }
-        return MaintenanceUsage(
-            since: since,
-            wasServiced: recorded != nil,
-            groundGrams: ground.reduce(0) { $0 + $1.1 },
-            brews: counted.count,
-            lastGrinderUseAt: ground.map(\.0).max()
+        return Maintenance.usage(
+            brews: realBrews.compactMap(\.entry),
+            servicedAt: recorded
         )
     }
 
@@ -124,43 +125,93 @@ struct MaintenanceView: View {
 
     // MARK: - Layout
 
-    private var overview: some View {
-        let due = MaintenanceTask.allCases.filter { status(for: $0).isDue }
-        return VStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .stroke(StudioTheme.raised, lineWidth: 12)
-                Circle()
-                    .trim(from: 0, to: due.isEmpty ? 1 : Double(3 - due.count) / 3)
-                    .stroke(
-                        due.isEmpty ? StudioTheme.mint : StudioTheme.warning,
-                        style: StrokeStyle(lineWidth: 12, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .animation(.smooth(duration: 0.3), value: due.count)
-                VStack(spacing: 1) {
-                    Text("\(3 - due.count)")
-                        .font(.system(size: 46, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                    Text("of 3 up to date")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(StudioTheme.muted)
-                }
-            }
-            .frame(width: 156, height: 156)
+    private var orderedTasks: [MaintenanceTask] {
+        MaintenanceTask.allCases.sorted {
+            let lhs = status(for: $0), rhs = status(for: $1)
+            if lhs.isDue != rhs.isDue { return lhs.isDue }
+            if lhs.progress != rhs.progress { return lhs.progress > rhs.progress }
+            return $0.rawValue < $1.rawValue
+        }
+    }
 
-            Text(due.isEmpty ? "Nothing needs doing" : due.map(\.title).joined(separator: " · "))
-                .font(.title3.weight(.bold))
-                .foregroundStyle(due.isEmpty ? StudioTheme.mint : StudioTheme.warning)
-                .multilineTextAlignment(.center)
-            Text("Counted from your brew history — grams ground, brews pulled, days since.")
+    private var overview: some View {
+        let due = orderedTasks.filter { status(for: $0).isDue }
+        let lifetime = Maintenance.usage(brews: realBrews.compactMap(\.entry), servicedAt: nil)
+        let tint = due.isEmpty ? StudioTheme.mint : StudioTheme.warning
+        return StudioCard(accent: tint) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 14) {
+                    IconBadge(systemImage: due.isEmpty ? "checkmark.shield.fill" : "wrench.and.screwdriver.fill",
+                              tint: tint, size: 48)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(due.isEmpty ? "Ready for your next cup" : "A little care is due")
+                            .font(.title2.weight(.bold))
+                        Text(due.isEmpty ? "No services are due from your recorded usage."
+                             : "\(due.count) service\(due.count == 1 ? " needs" : "s need") attention. Start below.")
+                            .font(.subheadline)
+                            .foregroundStyle(StudioTheme.muted)
+                    }
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 12) {
+                    usageMetric("Recorded brews", value: lifetime.brews.formatted(), icon: "cup.and.saucer.fill")
+                    usageMetric("Beans ground", value: lifetime.groundGrams >= 1_000
+                                ? String(format: "%.2f kg", lifetime.groundGrams / 1_000)
+                                : String(format: "%.0f g", lifetime.groundGrams), icon: "leaf.fill")
+                }
+                Label("Deleting bags or recipes keeps your brew history and these counts.",
+                      systemImage: "lock.shield")
+                    .font(.caption)
+                    .foregroundStyle(StudioTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func usageMetric(_ title: String, value: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: icon)
                 .font(.caption)
                 .foregroundStyle(StudioTheme.muted)
-                .multilineTextAlignment(.center)
+            Text(value)
+                .font(.title2.weight(.semibold).monospacedDigit())
+                .contentTransition(.numericText())
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var recentServices: some View {
+        StudioCard {
+            VStack(alignment: .leading, spacing: 14) {
+                StudioSectionTitle(title: "Recent care", detail: "\(services.count) recorded", icon: "clock.arrow.circlepath")
+                if services.isEmpty {
+                    Text("Finished a clean? Record it above, even if you did it on an earlier day.")
+                        .font(.subheadline)
+                        .foregroundStyle(StudioTheme.muted)
+                } else {
+                    ForEach(Array(services.prefix(5))) { service in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: service.maintenanceTask.map { icon(for: $0) } ?? "wrench.fill")
+                                .foregroundStyle(StudioTheme.mint)
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(service.maintenanceTask?.title ?? service.task)
+                                    .font(.subheadline.weight(.semibold))
+                                Text(service.performedAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(StudioTheme.muted)
+                                if let note = service.note, !note.isEmpty {
+                                    Text(note).font(.caption).foregroundStyle(StudioTheme.muted)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func card(for task: MaintenanceTask) -> some View {
@@ -180,7 +231,7 @@ struct MaintenanceView: View {
                             .foregroundStyle(StudioTheme.muted)
                     }
                     Spacer(minLength: 0)
-                    Text(state.isDue ? "Due" : state.isDormant ? "Idle" : "OK")
+                    Text(state.isDue ? "Due now" : state.isDormant ? "No use yet" : "On track")
                         .font(.caption2.weight(.heavy))
                         .foregroundStyle(state.isDue ? .black : tint)
                         .padding(.horizontal, 9)
@@ -244,9 +295,9 @@ struct MaintenanceView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        markDone(task)
+                        recordingTask = task
                     } label: {
-                        Label("Mark as done", systemImage: "checkmark")
+                        Label("Record service", systemImage: "checkmark.circle")
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(.black)
                             .frame(maxWidth: .infinity)
@@ -266,7 +317,7 @@ struct MaintenanceView: View {
                                 .background(StudioTheme.raised, in: Circle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Clear the recorded date")
+                        .accessibilityLabel("Undo the latest \(task.title.lowercased()) record")
                     }
                 }
             }
@@ -274,16 +325,10 @@ struct MaintenanceView: View {
     }
 
     private func progressBar(_ progress: Double, tint: Color) -> some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(StudioTheme.raised)
-                Capsule()
-                    .fill(tint)
-                    .frame(width: max(6, proxy.size.width * min(1, max(0, progress))))
-                    .animation(.smooth(duration: 0.3), value: progress)
-            }
-        }
-        .frame(height: 8)
+        ProgressView(value: min(1, max(0, progress)))
+            .tint(tint)
+            .accessibilityLabel("Service interval used")
+            .accessibilityValue("\(Int(min(1, max(0, progress)) * 100)) percent")
     }
 
     private var sourceNote: some View {
