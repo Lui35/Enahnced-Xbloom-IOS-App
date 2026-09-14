@@ -45,6 +45,7 @@ final class SupabaseService {
     private(set) var syncState = LibrarySyncState()
     private(set) var lastSyncError: String?
     private(set) var statusMessage: String?
+    private var recipeRestoreRequestedFor: UUID?
     private var automaticSyncTask: Task<Void, Never>?
 
     var isAuthenticated: Bool { hasValidSession && userID != nil }
@@ -70,7 +71,8 @@ final class SupabaseService {
             let session = try await client.auth.session
             apply(session: session)
         } catch {
-            apply(session: nil)
+            // Keep the cached account visible offline; network requests still require a refreshed session.
+            apply(session: client.auth.currentSession)
         }
     }
 
@@ -92,7 +94,8 @@ final class SupabaseService {
     func signIn(email: String, password: String) async throws {
         let session = try await client.auth.signIn(email: email, password: password)
         apply(session: session)
-        statusMessage = "Cloud account connected."
+        recipeRestoreRequestedFor = session.user.id
+        statusMessage = "Loading your cloud recipes…"
     }
 
     func signOut() async throws {
@@ -109,21 +112,20 @@ final class SupabaseService {
         enqueueAutomaticSync(in: context)
     }
 
-    private func enqueueAutomaticSync(in context: ModelContext) {
+    private func enqueueAutomaticSync(in context: ModelContext, delay: Double = 1) {
         automaticSyncTask?.cancel()
+        let account = userID
         automaticSyncTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(for: .seconds(1))
+                try await Task.sleep(for: .seconds(delay))
                 guard let self else { return }
-                while isSyncing {
-                    try await Task.sleep(for: .milliseconds(250))
-                }
-                guard isAuthenticated else { return }
+                while isSyncing { try await Task.sleep(for: .milliseconds(250)) }
+                guard isAuthenticated, userID == account else { return }
                 _ = try await sync(in: context)
             } catch is CancellationError {
-                // A newer local save replaced this pending sync.
+                // A newer save or an account change replaced this scheduled sync.
             } catch {
-                // sync(in:) exposes the failure through statusMessage.
+                // sync(in:) schedules an automatic retry and exposes its status.
             }
         }
     }
@@ -190,18 +192,19 @@ final class SupabaseService {
         var rows: [AIJobRow] = []
         let pageSize = 100
         while true {
-            let page: [AIJobRow] = try await client.schema("public").setAuth(session.accessToken)
+            let response = try await client.schema("public").setAuth(session.accessToken)
                 .from("ai_request_usage")
                 .select("request_id,action,status,error_code,context,response,created_at")
                 .eq("user_id", value: userID)
-                .in("action", values: ["generateRecipe", "enhanceRecipe"])
+                .in("action", values: ["generateRecipe", "enhanceRecipe", "importBean"])
                 .not("context", operator: .is, value: "null")
                 .is("consumed_at", value: nil)
                 .in("status", values: ["started", "succeeded", "failed"])
                 .order("created_at", ascending: true)
                 .order("request_id", ascending: true)
                 .range(from: rows.count, to: rows.count + pageSize - 1)
-                .execute().value
+                .execute()
+            let page = try AIJobRow.decodeRows(response.data)
             rows += page
             if page.count < pageSize { return rows }
         }
@@ -210,7 +213,7 @@ final class SupabaseService {
     func finishAIJob(_ requestID: UUID, for userID: UUID) async throws {
         guard try await updateAIJob(requestID, userID: userID,
                                     values: ["consumed_at": Self.timestamp()]) else {
-            throw CloudError.function("The recipe acknowledgement was not saved. It will be retried.")
+            throw CloudError.function("The AI result acknowledgement was not saved. It will be retried.")
         }
     }
 
@@ -282,7 +285,8 @@ final class SupabaseService {
         } catch {
             guard self.userID == accountAtStart else { throw error }
             lastSyncError = error.localizedDescription
-            statusMessage = "Sync failed: \(error.localizedDescription)"
+            statusMessage = "Sync paused. Your changes are saved on this iPhone and will retry automatically."
+            if isAuthenticated { enqueueAutomaticSync(in: context, delay: 30) }
             throw error
         }
     }
@@ -297,6 +301,9 @@ final class SupabaseService {
         var recipes = try context.fetch(FetchDescriptor<StoredRecipe>())
         var brews = try context.fetch(FetchDescriptor<StoredBrew>())
         var maintenance = try context.fetch(FetchDescriptor<StoredMaintenanceEvent>())
+        let replacingRecipeIDs = Set(recipes.map(\.id))
+        let restoreRecipes = metadata.recipeLibraryAccountID != userID.uuidString
+            || recipeRestoreRequestedFor == userID
 
         let remoteBeans: [CloudBeanRow] = try await fetchAll(
             table: "beans", columns: "user_id,id,name,roaster,remaining_weight_grams,archived,payload_json,client_updated_at,deleted_at",
@@ -314,6 +321,27 @@ final class SupabaseService {
             table: "maintenance_events", columns: "user_id,id,task,performed_at,note,client_updated_at,deleted_at",
             userID: userID, database: database
         )
+        guard self.userID == userID else { throw CancellationError() }
+        if restoreRecipes {
+            // Validate the complete response before removing any local recipes.
+            let snapshot = try remoteRecipes.filter { $0.deletedAt == nil }.map { row in
+                guard var recipe = row.decodedRecipe else {
+                    throw CloudError.function("A cloud recipe could not be read. Your local recipes have been kept.")
+                }
+                recipe.id = row.id
+                return (recipe: recipe, updatedAt: row.clientUpdatedAt)
+            }
+            try applyCloudChanges {
+                try LocalLibrary.restoreCloudRecipes(snapshot, replacingIDs: replacingRecipeIDs,
+                    userID: userID, metadata: metadata, in: context)
+            }
+            recipeRestoreRequestedFor = nil
+        }
+        // Include saves that occurred while the downloads were in flight.
+        beans = try context.fetch(FetchDescriptor<StoredBean>())
+        recipes = try context.fetch(FetchDescriptor<StoredRecipe>())
+        brews = try context.fetch(FetchDescriptor<StoredBrew>())
+        maintenance = try context.fetch(FetchDescriptor<StoredMaintenanceEvent>())
         try applyCloudChanges {
             merge(remoteBeans, into: &beans, known: metadata.knownIDs(for: .bean), context: context)
             merge(remoteRecipes, into: &recipes, known: metadata.knownIDs(for: .recipe), context: context)
@@ -438,6 +466,7 @@ final class SupabaseService {
                 existing.knownBrewIDs = Data()
                 existing.knownMaintenanceIDs = Data()
                 existing.lastSyncedAt = nil
+                existing.recipeLibraryAccountID = nil
             }
             return existing
         }
@@ -483,6 +512,10 @@ final class SupabaseService {
             apply(session: session)
             return session
         } catch {
+            if let cached = client.auth.currentSession {
+                apply(session: cached)
+                throw error // A refresh/network failure is not a sign-out; retry automatically.
+            }
             apply(session: nil)
             statusMessage = "Your Supabase session has expired. Sign in again to continue."
             throw CloudError.notSignedIn

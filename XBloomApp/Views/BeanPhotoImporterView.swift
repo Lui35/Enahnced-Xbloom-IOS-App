@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 import XBloomCore
 
 struct BeanPhotoImporterView: View {
+    @Environment(\.selectedTab) private var selectedTab
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(GeminiService.self) private var gemini
@@ -36,16 +37,16 @@ struct BeanPhotoImporterView: View {
                         if !gemini.hasAPIKey {
                             StudioCard(accent: StudioTheme.warning) {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    Label("Gemini key needed", systemImage: "key.fill")
+                                    Label("Sign in to import", systemImage: "person.crop.circle")
                                         .font(.headline)
                                         .foregroundStyle(StudioTheme.warning)
-                                    Text("Your key is stored securely in the iPhone Keychain. It is used only when you tap Read bag.")
+                                    Text("Sign in to your cloud account so imports can keep processing after you close the app.")
                                         .font(.subheadline)
                                         .foregroundStyle(StudioTheme.muted)
                                     NavigationLink {
                                         SettingsView()
                                     } label: {
-                                        Label("Open AI settings", systemImage: "gearshape.fill")
+                                        Label("Open account settings", systemImage: "gearshape.fill")
                                             .font(.subheadline.weight(.bold))
                                     }
                                 }
@@ -62,7 +63,7 @@ struct BeanPhotoImporterView: View {
                                 } else {
                                     Image(systemName: "sparkles")
                                 }
-                                Text(isWorking ? "Reading the label…" : "Import with AI")
+                                Text(isWorking ? "Uploading photos…" : "Import with photos")
                             }
                             .font(.headline)
                             .foregroundStyle(.black)
@@ -89,6 +90,7 @@ struct BeanPhotoImporterView: View {
             }
             .navigationTitle("Import bean")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(StudioTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -107,23 +109,6 @@ struct BeanPhotoImporterView: View {
             .onChange(of: selections) {
                 selectionTask?.cancel()
                 selectionTask = Task { await prepareSelections() }
-            }
-        }
-        .overlay {
-            if isWorking {
-                AIProcessingOverlay(
-                    title: "Discovering this coffee",
-                    messages: [
-                        "Reading the front and back labels…",
-                        "Finding origin, producer, and variety…",
-                        "Interpreting process and roast details…",
-                        "Preparing a bean profile for review…",
-                    ],
-                    systemImage: "doc.viewfinder.fill",
-                    tint: StudioTheme.mint,
-                    leaveTitle: "Back to Beans",
-                    onLeave: { dismiss() }
-                )
             }
         }
         .preferredColorScheme(.dark)
@@ -152,7 +137,7 @@ struct BeanPhotoImporterView: View {
                 .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             Text("Photograph the coffee bag")
                 .font(.title2.weight(.bold))
-            Text("Capture the front and back labels. The bag goes onto your shelf as soon as Gemini has read it, flagged for you to check.")
+            Text("Capture the front and back labels. Once uploaded, AI reads them in the background—even if you close the app. Your bag appears in Beans ready for review.")
                 .font(.subheadline)
                 .foregroundStyle(StudioTheme.muted)
                 .multilineTextAlignment(.center)
@@ -233,9 +218,14 @@ struct BeanPhotoImporterView: View {
         beanImport.clearLastImported()
         requestID = beanImport.start(
             images: preparedImages.map { ($0.data, "image/jpeg") },
-            gemini: gemini,
             context: modelContext
         )
+        if requestID != nil {
+            selectedTab?.wrappedValue = 2
+            dismiss()
+        } else {
+            errorMessage = beanImport.lastError
+        }
     }
 
     @MainActor

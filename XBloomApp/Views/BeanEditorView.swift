@@ -84,6 +84,7 @@ struct BeanEditorView: View {
             }
             .navigationTitle(storedBean == nil ? "New bean" : "Edit bean")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(StudioTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -132,7 +133,7 @@ struct BeanEditorView: View {
         .foregroundStyle(.black.opacity(0.78))
         .padding(20)
         .background(
-            LinearGradient(colors: [StudioTheme.mint, StudioTheme.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
+            StudioTheme.accent,
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
         .padding(.top, 8)

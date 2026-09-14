@@ -101,6 +101,7 @@ struct BrewView: View {
             }
             .navigationTitle("Brew")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .searchable(
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .always),

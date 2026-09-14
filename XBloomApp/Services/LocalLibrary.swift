@@ -20,7 +20,7 @@ enum LocalLibrary {
         var metadataDescriptor = FetchDescriptor<CloudSyncMetadata>()
         metadataDescriptor.fetchLimit = 1
         if let metadata = try context.fetch(metadataDescriptor).first,
-           !metadata.knownIDs(for: .recipe).isEmpty {
+           (metadata.recipeLibraryAccountID != nil || !metadata.knownIDs(for: .recipe).isEmpty) {
             // An empty library with known cloud IDs means the user deleted every
             // recipe. Do not recreate the bundled samples on the next launch.
             defaults.set(true, forKey: didSeedDefaultRecipesKey)
@@ -30,6 +30,55 @@ enum LocalLibrary {
         RecipeLibrary.defaults.forEach { context.insert(StoredRecipe(recipe: $0)) }
         try context.save()
         defaults.set(true, forKey: didSeedDefaultRecipesKey)
+    }
+
+    /// Restore only after every cloud page has downloaded and decoded successfully.
+    /// IDs created during the download belong to new user work and are kept for upload.
+    static func restoreCloudRecipes(
+        _ remote: [(recipe: Recipe, updatedAt: Date)], replacingIDs: Set<UUID>,
+        userID: UUID, metadata: CloudSyncMetadata, in context: ModelContext,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws {
+        // Checkpoint any edits made during download. This synchronous main-actor block
+        // has no await, so a failed replacement can roll back without losing user work.
+        try context.save()
+        let local = try context.fetch(FetchDescriptor<StoredRecipe>())
+        let byID = Dictionary(uniqueKeysWithValues: local.map { ($0.id, $0) })
+        let remoteIDs = Set(remote.map { $0.recipe.id })
+        let previousAccount = metadata.recipeLibraryAccountID
+        let previousKnown = metadata.knownRecipeIDs
+        let originals = local.compactMap { stored in
+            stored.recipe.map { (stored, $0, stored.updatedAt) }
+        }
+        for item in remote {
+            if let existing = byID[item.recipe.id] {
+                existing.update(with: item.recipe)
+                existing.updatedAt = item.updatedAt
+            } else {
+                let stored = StoredRecipe(recipe: item.recipe)
+                stored.updatedAt = item.updatedAt
+                context.insert(stored)
+            }
+        }
+        for stored in local where replacingIDs.contains(stored.id) && !remoteIDs.contains(stored.id) {
+            context.delete(stored)
+        }
+        // These are the server's baseline IDs, not local removals to upload as tombstones.
+        metadata.setKnownIDs(remoteIDs, for: .recipe)
+        metadata.recipeLibraryAccountID = userID.uuidString
+        do { try save(context) }
+        catch {
+            context.rollback()
+            // SwiftData can retain observed property values after rollback. Restore
+            // those values too, including the marker that controls the next retry.
+            for (stored, recipe, date) in originals {
+                stored.update(with: recipe)
+                stored.updatedAt = date
+            }
+            metadata.recipeLibraryAccountID = previousAccount
+            metadata.knownRecipeIDs = previousKnown
+            throw error
+        }
     }
 
     static func backfillIndexedMetadata(in context: ModelContext) async throws {

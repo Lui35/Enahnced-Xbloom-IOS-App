@@ -70,6 +70,7 @@ struct RepeatBrewSheet: View {
             .background(StudioTheme.background)
             .navigationTitle("Brew again")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
         .preferredColorScheme(.dark)

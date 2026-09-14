@@ -66,6 +66,7 @@ struct HistoryView: View {
         }
         .navigationTitle("History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar { MachineToolbar() }
@@ -367,6 +368,7 @@ struct BrewHistoryDetailView: View {
         }
         .navigationTitle(brew.recipeName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .preferredColorScheme(.dark)

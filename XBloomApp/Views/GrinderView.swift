@@ -44,6 +44,7 @@ struct GrinderView: View {
         }
         .navigationTitle("Grinder")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .preferredColorScheme(.dark)

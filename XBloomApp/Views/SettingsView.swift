@@ -30,73 +30,23 @@ struct SettingsView: View {
                     }
                     .studioCard()
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        StudioSectionTitle(title: "Account")
-                        NavigationLink {
-                            AccountAIView()
-                        } label: {
-                            settingsRow(
-                                icon: "person.crop.circle.fill",
-                                title: "Account & AI",
-                                subtitle: cloud.isAuthenticated
-                                    ? (cloud.email ?? "Signed in")
-                                    : "Sign in for sync and AI",
-                                tint: cloud.isAuthenticated ? StudioTheme.mint : StudioTheme.warning,
-                                isComplete: cloud.isAuthenticated
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
+                    settingsSection("Account & sync") {
+                        settingsLink("Account & AI", icon: "person.crop.circle.fill",
+                            subtitle: cloud.email ?? "Sign in for your cloud library and AI",
+                            tint: StudioTheme.accent) { AccountAIView() }
+                        Divider()
+                        automaticSyncSettings
                     }
-                    .studioCard()
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        StudioSectionTitle(title: "Library & privacy")
-                        NavigationLink {
-                            HistoryView()
-                        } label: {
-                            settingsRow(
-                                icon: "clock.arrow.circlepath",
-                                title: "Brew history",
-                                subtitle: "Sessions and telemetry",
-                                tint: StudioTheme.accent
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
-
+                    settingsSection("Coffee library") {
+                        settingsLink("Brew history", icon: "clock.arrow.circlepath",
+                            subtitle: "Your cups, ratings, and feedback", tint: StudioTheme.accent) { HistoryView() }
                         Divider()
+                        settingsLink("Recipe transfer", icon: "square.and.arrow.up.on.square.fill",
+                            subtitle: "Import and export recipe files", tint: StudioTheme.crema) { RecipeTransferView() }
+                    }
 
-                        NavigationLink {
-                            OnDeviceStorageView()
-                        } label: {
-                            settingsRow(
-                                icon: "internaldrive.fill",
-                                title: "On-device storage",
-                                subtitle: "Beans, recipes, history, and preferences",
-                                tint: StudioTheme.mint
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
-
-                        Divider()
-
-                        NavigationLink {
-                            RecipeTransferView()
-                        } label: {
-                            settingsRow(
-                                icon: "square.and.arrow.up.on.square.fill",
-                                title: "Recipe transfer",
-                                subtitle: "Export or import a complete library",
-                                tint: StudioTheme.crema
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
-
-                        Divider()
-
+                    settingsSection("Machine") {
                         Toggle(isOn: Binding(
                             get: { MachineFeedback.isSoundEnabled },
                             set: { enabled in
@@ -108,49 +58,28 @@ struct SettingsView: View {
                                 IconBadge(systemImage: "speaker.wave.2.fill", tint: StudioTheme.accent, size: 44)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("Connection sound").font(.headline)
-                                    Text("Chime when the machine pairs or drops")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    Text("Chime when the machine connects or disconnects")
+                                        .font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }
                         .tint(StudioTheme.mint)
-
                         Divider()
-
-                        NavigationLink {
-                            MaintenanceView()
-                        } label: {
-                            settingsRow(
-                                icon: "wrench.and.screwdriver.fill",
-                                title: "Maintenance",
-                                subtitle: "Brush, tablets, calibration, and descaling",
-                                tint: StudioTheme.crema
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
-
+                        settingsLink("Maintenance", icon: "wrench.and.screwdriver.fill",
+                            subtitle: "Cleaning, calibration, and descaling", tint: StudioTheme.crema) { MaintenanceView() }
                         Divider()
-
-                        NavigationLink {
-                            MachineDiagnosticsView()
-                        } label: {
-                            settingsRow(
-                                icon: "waveform.path.ecg",
-                                title: "Machine diagnostics",
-                                subtitle: "Record and share Bluetooth traffic",
-                                tint: StudioTheme.warning
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
-
+                        settingsLink("Diagnostics", icon: "waveform.path.ecg",
+                            subtitle: "Record and share Bluetooth traffic", tint: StudioTheme.warning) { MachineDiagnosticsView() }
                         Divider()
-
                         machineStopRow
                     }
-                    .studioCard()
+
+                    settingsSection("Storage & privacy") {
+                        settingsLink("On-device storage", icon: "internaldrive.fill",
+                            subtitle: "Offline library and storage usage", tint: StudioTheme.mint) { OnDeviceStorageView() }
+                        Text("Your library stays available offline. Signing in loads your account’s cloud recipes; changes then sync automatically.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
 
                     Text("xBloom Native · Version 0.1")
                         .font(.caption)
@@ -163,6 +92,57 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            StudioSectionTitle(title: title)
+            content()
+        }
+        .studioCard()
+    }
+
+    private func settingsLink<Destination: View>(
+        _ title: String, icon: String, subtitle: String, tint: Color,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            settingsRow(icon: icon, title: title, subtitle: subtitle, tint: tint)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var automaticSyncSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Automatic sync", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if cloud.isSyncing { ProgressView() }
+                else { Text(cloud.isAuthenticated ? "On" : "Sign-in needed").font(.caption).foregroundStyle(.secondary) }
+            }
+            Text(cloud.isAuthenticated
+                ? "Syncs when you open the app and after you make changes. Offline changes upload when you reconnect."
+                : "Sign in to load your cloud recipes and keep new changes in sync.")
+                .font(.caption).foregroundStyle(.secondary)
+            if cloud.isAuthenticated {
+                if cloud.lastSyncError != nil {
+                    Text("Sync paused. Your changes are saved on this iPhone. We’ll retry automatically.")
+                        .font(.caption).foregroundStyle(StudioTheme.warning)
+                } else if let date = cloud.lastSyncAt {
+                    Text("Last synced \(date.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Button {
+                    Task { _ = try? await cloud.sync(in: modelContext) }
+                } label: {
+                    Label("Sync now", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .disabled(cloud.isSyncing)
+            }
+        }
     }
 
     /// The last resort for a machine that is pouring when nothing in the app is
@@ -403,6 +383,7 @@ private struct RecipeTransferView: View {
         }
         .navigationTitle("Recipe Transfer")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [.xBloomRecipeLibrary, .json],
@@ -599,6 +580,7 @@ private struct OnDeviceStorageView: View {
         }
         .navigationTitle("On-device Storage")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
     private func storageMetric(

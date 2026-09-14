@@ -32,7 +32,6 @@ struct AccountAIView: View {
                     } else if cloud.isAuthenticated {
                         accountCard
                         modelCard
-                        syncCard
                     } else {
                         signInCard
                     }
@@ -56,6 +55,7 @@ struct AccountAIView: View {
         }
         .navigationTitle("Account & AI")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .preferredColorScheme(.dark)
@@ -224,31 +224,6 @@ struct AccountAIView: View {
         }
     }
 
-    private var syncCard: some View {
-        StudioCard(accent: StudioTheme.crema) {
-            VStack(alignment: .leading, spacing: 12) {
-                StudioSectionTitle(
-                    title: "Cloud sync",
-                    detail: "Beans, recipes, and history",
-                    icon: "arrow.triangle.2.circlepath"
-                )
-                Button {
-                    Task { await syncNow() }
-                } label: {
-                    Label(cloud.isSyncing ? "Syncing…" : "Sync now", systemImage: "icloud.and.arrow.up")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                        .background(StudioTheme.crema, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(cloud.isSyncing)
-                if cloud.isSyncing { ProgressView().frame(maxWidth: .infinity) }
-            }
-        }
-    }
-
     // MARK: - Signed out
 
     private var signInCard: some View {
@@ -259,6 +234,9 @@ struct AccountAIView: View {
                     detail: "For sync and AI",
                     icon: "person.crop.circle.badge.plus"
                 )
+                Text("Your cloud recipes replace the recipes currently on this iPhone. New recipes and edits then sync automatically.")
+                    .font(.caption)
+                    .foregroundStyle(StudioTheme.muted)
 
                 VStack(spacing: 10) {
                     TextField("Email", text: $email)
@@ -357,16 +335,6 @@ struct AccountAIView: View {
         do {
             try await cloud.signOut()
             statusMessage = cloud.statusMessage
-        } catch {
-            statusMessage = error.localizedDescription
-        }
-    }
-
-    private func syncNow() async {
-        do {
-            let summary = try await cloud.sync(in: modelContext)
-            statusMessage = "Synced \(summary.beans) beans, \(summary.recipes) recipes, "
-                + "and \(summary.brews) brews."
         } catch {
             statusMessage = error.localizedDescription
         }

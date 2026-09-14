@@ -1,97 +1,45 @@
 import SwiftUI
 
-/// The app's one visual system.
-///
-/// There used to be two — `AppTheme` on Home, Settings and diagnostics, and
-/// `StudioTheme` on every machine screen — with the same background, the same
-/// panel, the same accent under different names, and two greens a shade apart
-/// both meaning "good". Beans and History drew from both inside a single
-/// scroll view. One set of names now, so a colour cannot drift from its
-/// meaning.
+/// Original studio layout, with warm amber accents and neutral slate surfaces.
 enum StudioTheme {
-    // MARK: Surfaces, darkest first
+    static let background = Color(red: 0.12, green: 0.135, blue: 0.15)
+    static let panel = Color(red: 0.185, green: 0.205, blue: 0.225)
+    static let raised = Color(red: 0.245, green: 0.265, blue: 0.29)
+    static let line = Color.white.opacity(0.10)
+    static let accent = Color(red: 0.98, green: 0.78, blue: 0.56)
+    static let mint = Color(red: 0.48, green: 0.76, blue: 0.62)
+    static let crema = Color(red: 0.88, green: 0.72, blue: 0.53)
+    static let hot = Color(red: 1.0, green: 0.57, blue: 0.49)
+    static let iced = Color(red: 0.57, green: 0.75, blue: 0.86)
+    static let warning = Color(red: 0.94, green: 0.73, blue: 0.43)
+    static let danger = Color(red: 0.96, green: 0.53, blue: 0.49)
+    static let muted = Color(red: 0.74, green: 0.77, blue: 0.80)
 
-    /// The ground everything sits on.
-    static let background = Color(red: 0.045, green: 0.05, blue: 0.05)
-    /// A card lifted off the ground.
-    static let panel = Color(red: 0.10, green: 0.12, blue: 0.12)
-    /// A control or well inside a card.
-    static let raised = Color(red: 0.15, green: 0.18, blue: 0.18)
-
-    // MARK: Meaning
-
-    /// The single interactive tint: anything tappable, selected, or in
-    /// progress. Decoration is not its job.
-    static let accent = Color(red: 0.63, green: 0.79, blue: 0.80)
-    /// The far end of the accent, for the one gradient that carries a recipe's
-    /// identity. Two screens had it written out by hand.
-    static let accentDeep = Color(red: 0.52, green: 0.70, blue: 0.71)
-    /// Done, on target, connected.
-    static let mint = Color(red: 0.24, green: 0.82, blue: 0.56)
-    /// The warm half of the palette: coffee itself, roast, grind, and heat.
-    static let crema = Color(red: 0.84, green: 0.66, blue: 0.43)
-    /// The cold half: iced recipes and the ice that goes in them.
-    static let iced = Color(red: 0.45, green: 0.80, blue: 0.92)
-    /// Off target but usable; the brew still runs.
-    static let warning = Color(red: 0.98, green: 0.71, blue: 0.33)
-    /// Failed, refused, or destructive.
-    static let danger = Color(red: 0.98, green: 0.48, blue: 0.44)
-    /// Secondary text and inactive marks. Every value above clears 7:1 on
-    /// `background`; this one clears 5:1, which is the floor for body text.
-    static let muted = Color.white.opacity(0.52)
-
-    // MARK: Form
-
-    /// Corner radii. Cards hold the largest curve, controls a tighter one, so
-    /// nesting reads as depth instead of noise.
     enum Radius {
-        static let card: CGFloat = 24
-        static let tile: CGFloat = 18
-        static let control: CGFloat = 16
-        static let chip: CGFloat = 12
+        static let card: CGFloat = 22
+        static let tile: CGFloat = 16
+        static let control: CGFloat = 14
+        static let chip: CGFloat = 10
     }
-
-    /// Vertical rhythm. Sections breathe at `section`, rows inside a card at
-    /// `row`, and lines within a row at `line`.
     enum Space {
         static let section: CGFloat = 22
         static let card: CGFloat = 18
         static let row: CGFloat = 12
         static let line: CGFloat = 6
-        /// The screen's own left and right margin.
         static let margin: CGFloat = 18
     }
 
-    static let heroGradient = LinearGradient(
-        colors: [Color(red: 0.09, green: 0.13, blue: 0.13), Color(red: 0.12, green: 0.24, blue: 0.24)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
 }
 
-/// The ground plus a single warm bloom behind the top-trailing corner. One
-/// background for the whole app: the previous pair disagreed about the bloom's
-/// colour, size and offset, so moving between tabs shifted the light.
+/// Flat surfaces keep the familiar controls legible without a decorative glow.
 struct StudioBackground: View {
-    var body: some View {
-        StudioTheme.background
-            .ignoresSafeArea()
-            .overlay(alignment: .topTrailing) {
-                Circle()
-                    .fill(StudioTheme.accent.opacity(0.10))
-                    .frame(width: 320, height: 320)
-                    .blur(radius: 70)
-                    .offset(x: 130, y: -170)
-                    .allowsHitTesting(false)
-            }
-    }
+    var body: some View { StudioTheme.background.ignoresSafeArea() }
 }
 
-/// A panel with a hairline of its own accent. No shadow: on a ground this dark
-/// a black shadow is an effect nobody can see, and the hairline is what
-/// actually separates the card from the page.
+/// Neutral panel borders keep accent color on controls and meaningful status.
+
 struct StudioCardModifier: ViewModifier {
-    var accent: Color = StudioTheme.accent
+    var accent: Color? = nil
     var padding: CGFloat = StudioTheme.Space.card
 
     func body(content: Content) -> some View {
@@ -103,14 +51,14 @@ struct StudioCardModifier: ViewModifier {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
-                    .stroke(accent.opacity(0.20), lineWidth: 1)
+                    .strokeBorder(accent?.opacity(0.20) ?? StudioTheme.line, lineWidth: 1)
             }
     }
 }
 
 extension View {
     func studioCard(
-        accent: Color = StudioTheme.accent,
+        accent: Color? = nil,
         padding: CGFloat = StudioTheme.Space.card
     ) -> some View {
         modifier(StudioCardModifier(accent: accent, padding: padding))
@@ -118,7 +66,7 @@ extension View {
 }
 
 struct StudioCard<Content: View>: View {
-    var accent: Color = StudioTheme.accent
+    var accent: Color? = nil
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -211,6 +159,8 @@ struct MetricTile: View {
 
 /// The app's primary button: accent fill, black label, full width.
 struct PrimaryActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var tint: Color = StudioTheme.accent
 
     func makeBody(configuration: Configuration) -> some View {
@@ -223,7 +173,8 @@ struct PrimaryActionButtonStyle: ButtonStyle {
                 tint.opacity(configuration.isPressed ? 0.78 : 1),
                 in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous)
             )
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .opacity(isEnabled ? 1 : 0.4)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
             .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
     }
 }

@@ -4,6 +4,7 @@ import XBloomCore
 
 enum RecipeLibraryFilter: String, CaseIterable, Identifiable {
     case all = "All"
+    case favorites = "Favorites"
     case hot = "Hot"
     case iced = "Iced"
 
@@ -12,6 +13,7 @@ enum RecipeLibraryFilter: String, CaseIterable, Identifiable {
     func includes(_ recipe: Recipe) -> Bool {
         switch self {
         case .all: true
+        case .favorites: recipe.isFavorite == true
         case .hot: recipe.brewStyle == .hot
         case .iced: recipe.brewStyle == .iced
         }
@@ -22,19 +24,14 @@ struct RecipeLibraryFilterPicker: View {
     @Binding var selection: RecipeLibraryFilter
 
     var body: some View {
-        Picker("Recipe type", selection: $selection) {
+        Picker("Recipe collection", selection: $selection) {
             ForEach(RecipeLibraryFilter.allCases) { filter in
-                Label(
-                    filter.rawValue,
-                    systemImage: filter == .iced
-                        ? "snowflake"
-                        : filter == .hot ? "sun.max.fill" : "square.grid.2x2.fill"
-                )
+                Text(filter.rawValue)
                 .tag(filter)
             }
         }
         .pickerStyle(.segmented)
-        .accessibilityHint("Filters the recipe library by hot or iced pour-over")
+        .accessibilityHint("Show all recipes, favorites, hot recipes, or iced recipes")
     }
 }
 
@@ -47,7 +44,6 @@ struct RecipesView: View {
     @State private var draft: Recipe?
     @State private var isDesigningWithAI = false
     @State private var searchText = ""
-    @State private var favoritesOnly = false
     @State private var selectedFilter: RecipeLibraryFilter = .all
 
     /// Generations worth showing on the filter that is on screen.
@@ -55,6 +51,7 @@ struct RecipesView: View {
         generation.pending.filter { item in
             switch selectedFilter {
             case .all: true
+            case .favorites: false
             case .hot: item.style == .hot
             case .iced: item.style == .iced
             }
@@ -67,18 +64,11 @@ struct RecipesView: View {
         path = NavigationPath()
         selectedFilter = .all
         searchText = ""
-        favoritesOnly = false
     }
 
     private var filteredRecipes: [StoredRecipe] {
         recipes.filter { stored in
-            if selectedFilter != .all,
-               let style = stored.indexedBrewStyle,
-               (selectedFilter == .hot ? style != .hot : style != .iced) {
-                return false
-            }
-            guard let recipe = stored.recipe, selectedFilter.includes(recipe),
-                  !favoritesOnly || recipe.isFavorite == true else { return false }
+            guard let recipe = stored.recipe, selectedFilter.includes(recipe) else { return false }
             return recipe.matchesLibrarySearch(searchText)
         }
     }
@@ -106,10 +96,6 @@ struct RecipesView: View {
 
                         recipeSearchField
 
-                        Toggle(isOn: $favoritesOnly) {
-                            Label("Favorites", systemImage: favoritesOnly ? "heart.fill" : "heart")
-                        }
-                        .tint(StudioTheme.danger)
                         RecipeLibraryFilterPicker(selection: $selectedFilter)
                             .padding(.bottom, 4)
 
@@ -165,11 +151,11 @@ struct RecipesView: View {
 
                         if filteredRecipes.isEmpty, visiblePending.isEmpty {
                             ContentUnavailableView(
-                                searchText.isEmpty ? "No \(selectedFilter.rawValue.lowercased()) recipes" : "No recipes found",
+                                searchText.isEmpty ? (selectedFilter == .favorites ? "No favorites yet" : "No recipes in this collection") : "No recipes found",
                                 systemImage: searchText.isEmpty ? "cup.and.saucer" : "magnifyingglass",
                                 description: Text(
                                     searchText.isEmpty
-                                        ? "Create a recipe to add it to this collection."
+                                        ? (selectedFilter == .favorites ? "Use the heart on a recipe to save it here." : "Create a recipe to add it to this collection.")
                                         : "Try a different name, roaster, origin, or recipe type."
                                 )
                             )
@@ -210,6 +196,7 @@ struct RecipesView: View {
             }
             .navigationTitle("Recipes")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(StudioTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {

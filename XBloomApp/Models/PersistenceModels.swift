@@ -257,6 +257,9 @@ final class CloudSyncMetadata {
     /// Added after the first release, so it has to carry a default for the
     /// stores that were written without it.
     var knownMaintenanceIDs: Data = Data()
+    /// Marks the account whose cloud recipe library replaced the local starter library.
+    /// Nil on older stores so the first sync after upgrading establishes the cloud baseline.
+    var recipeLibraryAccountID: String? = nil
     var lastSyncedAt: Date?
 
     init(userID: UUID) {

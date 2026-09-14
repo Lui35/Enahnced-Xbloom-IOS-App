@@ -12,7 +12,7 @@ struct StudioTextField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon ?? "circle.fill")
+            Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(StudioTheme.muted)
             TextField(title, text: $text, axis: axis)
@@ -56,7 +56,7 @@ struct StudioValueStepper: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.caption.weight(.bold))
-                .frame(width: 30, height: 30)
+                .frame(width: 44, height: 44)
                 .background(.white.opacity(0.08), in: Circle())
         }
         .buttonStyle(.plain)

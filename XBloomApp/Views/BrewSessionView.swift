@@ -260,6 +260,7 @@ struct BrewSessionView: View {
         }
         .navigationTitle(mode == .simulation ? "Brew simulation" : "Live extraction")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {

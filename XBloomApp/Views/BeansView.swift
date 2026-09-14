@@ -32,12 +32,15 @@ struct BeansView: View {
                         // whether or not the importer sheet is still open.
                         ForEach(beanImport.pending) { item in
                             AIGeneratingCard(
-                                title: "Reading the bag",
-                                subtitle: item.photoCount == 1
-                                    ? "One photo · finding origin, process, and roast"
-                                    : "\(item.photoCount) photos · finding origin, process, and roast",
+                                title: beanImport.isUploading(item.id) ? "Uploading bag photos"
+                                    : item.serverAccepted ? "Discovering your coffee" : "Checking your import",
+                                subtitle: beanImport.isUploading(item.id)
+                                    ? "Uploading \(item.photoCount) photos.\nKeep the app open."
+                                    : item.serverAccepted
+                                        ? "Reading \(item.photoCount) photo\(item.photoCount == 1 ? "" : "s").\nYou can close the app."
+                                        : "Checking the server.\nPlease stay connected.",
                                 icon: "doc.viewfinder.fill",
-                                tint: StudioTheme.mint,
+                                tint: StudioTheme.crema,
                                 placeholderCount: 2
                             ) {
                                 beanImport.cancel(item.id)
@@ -61,16 +64,17 @@ struct BeansView: View {
                     .padding(.horizontal, 18)
                     .padding(.bottom, 30)
                 }
-                if beans.filter({ !$0.archived }).isEmpty {
+                if beans.filter({ !$0.archived }).isEmpty && beanImport.pending.isEmpty && beanImport.lastError == nil {
                     ContentUnavailableView(
                         "No beans",
                         systemImage: "leaf",
-                        description: Text("Add a bag manually or import its label with Gemini.")
+                        description: Text("Add a bag manually or scan its label.")
                     )
                 }
             }
             .navigationTitle("Beans")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 MachineToolbar()
                 ToolbarItem(placement: .topBarLeading) {
@@ -153,13 +157,13 @@ struct BeansView: View {
     private var beanShelfHero: some View {
         HStack(spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("PRIVATE COFFEE LIBRARY")
+                Text("COFFEE COLLECTION")
                     .font(.caption2.weight(.heavy))
                     .tracking(1.2)
-                    .foregroundStyle(StudioTheme.mint)
+                    .foregroundStyle(StudioTheme.crema)
                 Text("Your bean shelf")
                     .font(.title.weight(.bold))
-                Text("Origin, cup profile, freshness, and inventory—all stored on this iPhone.")
+                Text("Your coffee, tasting notes, and bag inventory.")
                     .font(.subheadline)
                     .foregroundStyle(StudioTheme.muted)
                     .lineLimit(3)
@@ -172,23 +176,19 @@ struct BeansView: View {
                 Text("BAGS")
                     .font(.caption2.weight(.heavy))
                     .tracking(1)
-                    .foregroundStyle(StudioTheme.mint)
+                    .foregroundStyle(StudioTheme.crema)
             }
             .frame(width: 76, height: 82)
-            .background(StudioTheme.mint.opacity(0.10), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(StudioTheme.crema.opacity(0.10), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .padding(20)
         .background(
-            LinearGradient(
-                colors: [StudioTheme.panel, Color(red: 0.08, green: 0.20, blue: 0.16)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
+            StudioTheme.panel,
             in: RoundedRectangle(cornerRadius: 28, style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(StudioTheme.mint.opacity(0.25), lineWidth: 1)
+                .stroke(StudioTheme.crema.opacity(0.25), lineWidth: 1)
         }
     }
 
@@ -214,15 +214,11 @@ struct BeansView: View {
                         ZStack {
                             RoundedRectangle(cornerRadius: 20, style: .continuous)
                                 .fill(
-                                    LinearGradient(
-                                        colors: [StudioTheme.mint.opacity(0.28), StudioTheme.accent.opacity(0.10)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                                    StudioTheme.accent.opacity(0.14)
                                 )
                             Image(systemName: "leaf.fill")
                                 .font(.title2.weight(.semibold))
-                                .foregroundStyle(StudioTheme.mint)
+                                .foregroundStyle(StudioTheme.crema)
                         }
                         .frame(width: 62, height: 62)
 
@@ -245,7 +241,7 @@ struct BeansView: View {
                             if !originLine.isEmpty {
                                 Text(originLine)
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(StudioTheme.mint)
+                                    .foregroundStyle(StudioTheme.crema)
                                     .lineLimit(1)
                             }
                         }
@@ -281,14 +277,12 @@ struct BeansView: View {
                                 .font(.headline.monospacedDigit())
                             Text("· \(remainingPercent)%")
                                 .font(.caption.weight(.bold).monospacedDigit())
-                                .foregroundStyle(StudioTheme.mint)
+                                .foregroundStyle(StudioTheme.crema)
                         }
                         ProgressView(value: remaining, total: initialWeight)
-                            .tint(StudioTheme.mint)
-                            .scaleEffect(x: 1, y: 1.8, anchor: .center)
-                    }
-                    .padding(13)
-                    .background(.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .tint(StudioTheme.crema)
+                        }
+                    .padding(.top, 4)
                 }
                 .padding(17)
             }
@@ -305,7 +299,7 @@ struct BeansView: View {
                             .frame(width: 32, height: 32)
                             .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("Design an AI recipe")
+                            Text("Design with AI")
                                 .font(.subheadline.weight(.bold))
                             Text("You choose style and cups")
                                 .font(.caption2)
@@ -336,11 +330,7 @@ struct BeansView: View {
             }
         }
         .background(
-            LinearGradient(
-                colors: [StudioTheme.panel, Color(red: 0.075, green: 0.11, blue: 0.10)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
+            StudioTheme.panel,
             in: RoundedRectangle(cornerRadius: 27, style: .continuous)
         )
         .overlay {

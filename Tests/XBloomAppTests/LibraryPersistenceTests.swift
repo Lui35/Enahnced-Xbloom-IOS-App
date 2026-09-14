@@ -201,3 +201,119 @@ struct LibraryPersistenceTests {
         #expect(try context.fetchCount(FetchDescriptor<StoredBrew>()) == 1)
     }
 }
+
+@Suite(.serialized)
+@MainActor
+struct CloudRecipeRestoreTests {
+    @Test func cloudLibraryReplacesSamplesAndWinsOverNewerLocalCopy() throws {
+        let container = try testContainer()
+        let context = container.mainContext
+        let user = UUID()
+        let metadata = CloudSyncMetadata(userID: user)
+        context.insert(metadata)
+        let sample = StoredRecipe(recipe: RecipeLibrary.defaults[0])
+        context.insert(sample)
+        var cloudRecipe = RecipeLibrary.defaults[1]
+        cloudRecipe.name = "Cloud favorite"
+        cloudRecipe.isFavorite = true
+        let local = StoredRecipe(recipe: cloudRecipe)
+        var localRecipe = cloudRecipe
+        localRecipe.name = "Local copy"
+        local.update(with: localRecipe)
+        context.insert(local)
+        try context.save()
+        let remoteDate = Date(timeIntervalSince1970: 1_700_000_000)
+        try LocalLibrary.restoreCloudRecipes([(cloudRecipe, remoteDate)],
+            replacingIDs: [sample.id, local.id], userID: user, metadata: metadata, in: context)
+        let recipes = try context.fetch(FetchDescriptor<StoredRecipe>())
+        #expect(recipes.count == 1)
+        #expect(recipes.first?.recipe?.name == "Cloud favorite")
+        #expect(recipes.first?.recipe?.isFavorite == true)
+        #expect(recipes.first?.updatedAt == remoteDate)
+        #expect(metadata.knownIDs(for: .recipe) == [cloudRecipe.id])
+        #expect(metadata.recipeLibraryAccountID == user.uuidString)
+    }
+
+    @Test func emptyCloudLibraryStaysEmptyAndDoesNotUploadStarterDeletions() throws {
+        let container = try testContainer()
+        let context = container.mainContext
+        let user = UUID()
+        let metadata = CloudSyncMetadata(userID: user)
+        context.insert(metadata)
+        let sample = StoredRecipe(recipe: RecipeLibrary.defaults[0])
+        context.insert(sample)
+        metadata.setKnownIDs([sample.id], for: .recipe)
+        try context.save()
+        try LocalLibrary.restoreCloudRecipes([], replacingIDs: [sample.id],
+            userID: user, metadata: metadata, in: context)
+        #expect(try context.fetchCount(FetchDescriptor<StoredRecipe>()) == 0)
+        #expect(metadata.knownIDs(for: .recipe).isEmpty)
+        #expect(metadata.recipeLibraryAccountID == user.uuidString)
+        try LocalLibrary.seedIfNeeded(in: context)
+        #expect(try context.fetchCount(FetchDescriptor<StoredRecipe>()) == 0)
+    }
+
+    @Test func recipeCreatedDuringCloudDownloadSurvivesRestore() throws {
+        let container = try testContainer()
+        let context = container.mainContext
+        let user = UUID()
+        let metadata = CloudSyncMetadata(userID: user)
+        context.insert(metadata)
+        let sample = StoredRecipe(recipe: RecipeLibrary.defaults[0])
+        context.insert(sample)
+        let startIDs: Set<UUID> = [sample.id]
+        var draft = RecipeLibrary.defaults[1]
+        draft.id = UUID()
+        draft.name = "Just designed"
+        context.insert(StoredRecipe(recipe: draft))
+        try context.save()
+        try LocalLibrary.restoreCloudRecipes([], replacingIDs: startIDs,
+            userID: user, metadata: metadata, in: context)
+        let recipes = try context.fetch(FetchDescriptor<StoredRecipe>())
+        #expect(recipes.map(\.id) == [draft.id])
+        #expect(metadata.knownIDs(for: .recipe).isEmpty) // New work still needs uploading.
+    }
+
+    @Test func failedRestoreSaveKeepsLocalRecipesAndDoesNotMarkRestored() throws {
+        struct SaveFailure: Error {}
+        let container = try testContainer()
+        let context = container.mainContext
+        let user = UUID()
+        let metadata = CloudSyncMetadata(userID: user)
+        context.insert(metadata)
+        let original = StoredRecipe(recipe: RecipeLibrary.defaults[0])
+        context.insert(original)
+        try context.save()
+        #expect(throws: SaveFailure.self) {
+            try LocalLibrary.restoreCloudRecipes([], replacingIDs: [original.id],
+                userID: user, metadata: metadata, in: context, save: { _ in throw SaveFailure() })
+        }
+        #expect(try context.fetchCount(FetchDescriptor<StoredRecipe>()) == 1)
+        #expect(metadata.recipeLibraryAccountID == nil)
+        #expect(original.recipe == RecipeLibrary.defaults[0])
+        // The next attempt must still restore, rather than upload the starter recipe.
+        try LocalLibrary.restoreCloudRecipes([], replacingIDs: [original.id],
+            userID: user, metadata: metadata, in: context)
+        #expect(try context.fetchCount(FetchDescriptor<StoredRecipe>()) == 0)
+    }
+
+    @Test func accountRestoreDoesNotDeleteBrewHistory() throws {
+        let container = try testContainer()
+        let context = container.mainContext
+        let user = UUID()
+        let metadata = CloudSyncMetadata(userID: user)
+        context.insert(metadata)
+        let recipe = RecipeLibrary.defaults[0]
+        context.insert(StoredRecipe(recipe: recipe))
+        let brew = BrewHistoryEntry(recipeID: recipe.id, recipeName: recipe.name,
+            beanID: nil, beanName: nil, duration: 120, water: 250,
+            coffeeWeight: 220, steps: recipe.pours.count, recipeSnapshot: recipe)
+        context.insert(StoredBrew(entry: brew))
+        try context.save()
+        try LocalLibrary.restoreCloudRecipes([], replacingIDs: [recipe.id],
+            userID: user, metadata: metadata, in: context)
+        let history = try context.fetch(FetchDescriptor<StoredBrew>())
+        #expect(history.count == 1)
+        #expect(history.first?.entry?.recipeSnapshot == recipe)
+    }
+}

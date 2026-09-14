@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import Supabase
 import Testing
 import XBloomCore
 @testable import xBloom
@@ -45,7 +46,7 @@ private final class JobStore: RecipeJobStore {
 }
 
 @MainActor
-private final class Generator: RecipeJobGenerating {
+private final class Generator: RecipeJobGenerating, BeanJobGenerating {
     var gate: Gate?
     var startedID: UUID?
     var onSubmitted: ((UUID) -> Void)?
@@ -64,6 +65,18 @@ private final class Generator: RecipeJobGenerating {
         enhancementContext = context
         if let gate { await gate.wait() }
         onSubmitted?(requestID)
+    }
+    func startBeanJob(requestID: UUID, userID: UUID, context: AIJobRow.Context,
+                      images: [(data: Data, mimeType: String)]) async throws {
+        startedID = requestID
+        enhancementContext = context
+        if let gate { await gate.wait() }
+        onSubmitted?(requestID)
+    }
+    func beanResult(from response: String) throws -> BeanPhotoResult {
+        if response == "invalid" { throw TestFailure.unavailable }
+        return BeanPhotoResult(name: "Recovered coffee", roaster: "Test roaster",
+                               roastDate: "2026-09-01", confidence: [:])
     }
     func recipeResult(from response: String) throws -> AIRecipeResult {
         if response == "invalid" { throw TestFailure.unavailable }
@@ -327,5 +340,230 @@ struct RecipeGenerationTests {
         await refresh.value
         #expect(store.acknowledgements == 0)
         #expect(try container.mainContext.fetchCount(FetchDescriptor<StoredRecipe>()) == 0)
+    }
+}
+
+
+private func beanJob(_ id: UUID = UUID(), status: String = "succeeded", response: String = "valid") -> AIJobRow {
+    AIJobRow(requestID: id, action: "importBean", status: status, errorCode: nil,
+        context: .init(beanID: nil, beanName: "Bag photos", style: "hot", cups: 1,
+                       useGrinder: false, photoCount: 2), response: response, createdAt: Date())
+}
+
+@Suite(.serialized)
+@MainActor
+struct BeanImportJobTests {
+    private func defaults() -> UserDefaults { UserDefaults(suiteName: "bean-jobs-test-\(UUID())")! }
+
+    @Test func savedBeanAndReceiptSurviveReopeningTheDiskStore() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("beans.store")
+        func openStore() throws -> ModelContainer {
+            try ModelContainer(for: StoredBean.self, StoredRecipeJobReceipt.self,
+                               configurations: ModelConfiguration(url: url))
+        }
+        let store = JobStore()
+        let id = UUID()
+        store.rows = [beanJob(id)]
+        store.acknowledgeFails = true
+        do {
+            let firstLaunch = try openStore()
+            let coordinator = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                                   defaults: defaults(), automaticallyPoll: false)
+            await coordinator.refresh(context: firstLaunch.mainContext)
+            #expect(try firstLaunch.mainContext.fetchCount(FetchDescriptor<StoredBean>()) == 1)
+        }
+        store.acknowledgeFails = false
+        let secondLaunch = try openStore()
+        let recovered = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                             defaults: defaults(), automaticallyPoll: false)
+        await recovered.refresh(context: secondLaunch.mainContext)
+        let beans = try secondLaunch.mainContext.fetch(FetchDescriptor<StoredBean>())
+        #expect(beans.count == 1)
+        #expect(beans.first?.id == id)
+        #expect(recovered.lastImported == nil) // Existing receipt prevented replay.
+        #expect(store.rows.isEmpty)
+    }
+
+    @Test func relaunchRecoversBeanAndReceiptBeforeAcknowledgement() async throws {
+        let container = try testContainer()
+        let store = JobStore()
+        let generator = Generator()
+        let row = beanJob()
+        store.rows = [row, job()]
+        store.beforeAcknowledge = {
+            let beans = try container.mainContext.fetch(FetchDescriptor<StoredBean>())
+            #expect(beans.count == 1)
+            #expect(beans.first?.id == row.id)
+            #expect(beans.first?.needsVerification == true)
+            #expect(beans.first?.profile?.roastDate != nil)
+            #expect(beans.first?.profile?.process == "") // Unknown label facts are not invented.
+            #expect(try container.mainContext.fetchCount(FetchDescriptor<StoredRecipeJobReceipt>()) == 1)
+        }
+        // A new coordinator has no photos, no pending task and no in-memory request IDs.
+        let relaunched = BeanImportCoordinator(cloud: store, gemini: generator,
+                                               defaults: defaults(), automaticallyPoll: false)
+        await relaunched.refresh(context: container.mainContext)
+        #expect(relaunched.lastImported?.id == row.id)
+        #expect(store.rows.count == 1)
+        #expect(store.rows.first?.action == "generateRecipe")
+        #expect(relaunched.pending.isEmpty)
+    }
+
+    @Test func failedAcknowledgementAndDeletedBeanDoNotReplayAfterRelaunch() async throws {
+        let container = try testContainer()
+        let store = JobStore()
+        store.rows = [beanJob()]
+        store.acknowledgeFails = true
+        let coordinator = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                               defaults: defaults(), automaticallyPoll: false)
+        await coordinator.refresh(context: container.mainContext)
+        #expect(coordinator.pending.count == 1)
+        let bean = try #require(container.mainContext.fetch(FetchDescriptor<StoredBean>()).first)
+        container.mainContext.delete(bean)
+        try container.mainContext.save()
+        store.acknowledgeFails = false
+        let relaunched = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                               defaults: defaults(), automaticallyPoll: false)
+        await relaunched.refresh(context: container.mainContext)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<StoredBean>()) == 0)
+        #expect(store.rows.isEmpty)
+    }
+
+    @Test func failedLocalSaveKeepsServerResultRecoverable() async throws {
+        let container = try testContainer()
+        let store = JobStore()
+        store.rows = [beanJob()]
+        let coordinator = BeanImportCoordinator(cloud: store, gemini: Generator(),
+            defaults: defaults(), automaticallyPoll: false, save: { _ in throw TestFailure.unavailable })
+        await coordinator.refresh(context: container.mainContext)
+        #expect(store.acknowledgements == 0)
+        #expect(store.rows.count == 1)
+        let relaunched = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                               defaults: defaults(), automaticallyPoll: false)
+        await relaunched.refresh(context: container.mainContext)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<StoredBean>()) == 1)
+        #expect(store.rows.isEmpty)
+    }
+
+    @Test func importsAndRecipesRecoverOnlyTheirOwnCards() async throws {
+        let container = try testContainer()
+        let store = JobStore()
+        store.rows = [beanJob(status: "started"), job(status: "started")]
+        let beans = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                         defaults: defaults(), automaticallyPoll: false)
+        let recipes = RecipeGenerationCoordinator(cloud: store, gemini: Generator(),
+                                                  defaults: defaults(), automaticallyPoll: false)
+        await beans.refresh(context: container.mainContext)
+        await recipes.refresh(context: container.mainContext)
+        #expect(beans.pending.count == 1)
+        #expect(beans.pending.first?.photoCount == 2)
+        #expect(beans.pending.first?.serverAccepted == true)
+        #expect(!beans.isUploading(store.rows[0].id))
+        #expect(recipes.pending.count == 1)
+        #expect(recipes.pending.first?.id == store.rows[1].id)
+    }
+
+    @Test func cancelDuringUploadSurvivesRelaunch() async throws {
+        let container = try testContainer()
+        let store = JobStore()
+        let generator = Generator()
+        let gate = Gate()
+        generator.gate = gate
+        let prefs = defaults()
+        let coordinator = BeanImportCoordinator(cloud: store, gemini: generator,
+                                               defaults: prefs, automaticallyPoll: false)
+        let id = try #require(coordinator.start(images: [(Data([1]), "image/jpeg")],
+                                                context: container.mainContext))
+        #expect(coordinator.isUploading(id))
+        #expect(coordinator.pending.first?.serverAccepted == false)
+        while generator.startedID == nil { await Task.yield() }
+        #expect(generator.enhancementContext?.photoCount == 1)
+        store.cancelFails = true
+        coordinator.cancel(id)
+        generator.onSubmitted = { store.rows = [beanJob($0)] }
+        gate.release()
+        for _ in 0..<100 { await Task.yield() }
+        let relaunched = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                               defaults: prefs, automaticallyPoll: false)
+        store.cancelFails = false
+        await relaunched.refresh(context: container.mainContext)
+        #expect(store.rows.isEmpty)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<StoredBean>()) == 0)
+    }
+
+    @Test func invalidImportIsAcknowledgedWithoutCreatingBag() async throws {
+        let container = try testContainer()
+        let store = JobStore()
+        store.rows = [beanJob(response: "invalid")]
+        let coordinator = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                               defaults: defaults(), automaticallyPoll: false)
+        await coordinator.refresh(context: container.mainContext)
+        #expect(coordinator.lastError != nil)
+        #expect(store.rows.isEmpty)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<StoredBean>()) == 0)
+    }
+
+    @Test func accountSwitchDuringRecoveryDoesNotImportPreviousUsersBag() async throws {
+        let container = try testContainer()
+        let store = JobStore()
+        store.rows = [beanJob()]
+        let gate = Gate()
+        store.fetchGate = gate
+        let coordinator = BeanImportCoordinator(cloud: store, gemini: Generator(),
+                                               defaults: defaults(), automaticallyPoll: false)
+        let refresh = Task { await coordinator.refresh(context: container.mainContext) }
+        while store.fetches == 0 { await Task.yield() }
+        store.userID = UUID()
+        coordinator.accountChanged()
+        gate.release()
+        await refresh.value
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<StoredBean>()) == 0)
+        #expect(store.acknowledgements == 0)
+        #expect(coordinator.pending.isEmpty)
+    }
+}
+
+
+@Suite
+struct AIJobDateCompatibilityTests {
+    @Test func legacySnapshotCannotBlockCompletedBeanAndRecipeJobs() throws {
+        let roastDate = Date(timeIntervalSinceReferenceDate: 810_000_000)
+        let bean = BeanProfile(name: "Synthetic label", roastDate: roastDate)
+        let snapshot = try JSONSerialization.jsonObject(with: JSONEncoder().encode(bean))
+        let context: [String: Any] = ["beanName": "Synthetic label", "style": "hot", "cups": 1,
+                                     "useGrinder": true, "beanSnapshot": snapshot]
+        let rows: [[String: Any]] = [
+            ["request_id": UUID().uuidString, "action": "enhanceRecipe", "status": "failed",
+             "context": context, "created_at": "2026-09-10T05:24:08.158053+00:00"],
+            ["request_id": UUID().uuidString, "action": "importBean", "status": "succeeded",
+             "created_at": "2026-09-13T16:44:18.625591+00:00", "response": "synthetic"],
+            ["request_id": UUID().uuidString, "action": "generateRecipe", "status": "succeeded",
+             "created_at": "2026-09-13T15:44:04+00:00", "response": "synthetic"],
+        ]
+        let data = try JSONSerialization.data(withJSONObject: rows)
+        #expect(throws: DecodingError.self) {
+            try PostgrestClient.Configuration.jsonDecoder.decode([AIJobRow].self, from: data)
+        }
+        let decoded = try AIJobRow.decodeRows(data)
+        #expect(decoded.count == 3)
+        #expect(decoded.first?.context?.beanSnapshot?.roastDate == roastDate)
+        #expect(decoded[1].action == "importBean")
+        #expect(decoded[2].status == "succeeded")
+    }
+
+    @Test func modernISOSnapshotAndFractionalDatabaseTimestampsDecodeTogether() throws {
+        let bean = BeanProfile(name: "Synthetic label", roastDate: Date(timeIntervalSince1970: 1_789_000_000))
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let context = AIJobRow.Context(beanID: nil, beanName: bean.name, style: "hot", cups: 1,
+                                       useGrinder: true, beanSnapshot: bean)
+        let row: [String: Any] = ["request_id": UUID().uuidString, "action": "enhanceRecipe",
+            "status": "succeeded", "context": try JSONSerialization.jsonObject(with: encoder.encode(context)),
+            "created_at": "2026-09-13T16:44:18.625591+00:00"]
+        let decoded = try AIJobRow.decodeRows(JSONSerialization.data(withJSONObject: [row]))
+        #expect(decoded.first?.context?.beanSnapshot?.roastDate == bean.roastDate)
     }
 }

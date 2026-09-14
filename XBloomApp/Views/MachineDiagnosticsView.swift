@@ -32,6 +32,7 @@ struct MachineDiagnosticsView: View {
         }
         .navigationTitle("Machine diagnostics")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .sheet(isPresented: $showingTranscript) {
             NavigationStack {
                 ScrollView([.horizontal, .vertical]) {
@@ -42,6 +43,7 @@ struct MachineDiagnosticsView: View {
                 }
                 .navigationTitle("Traffic transcript")
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbarColorScheme(.dark, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Done") { showingTranscript = false }

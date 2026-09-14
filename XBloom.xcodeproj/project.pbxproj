@@ -114,7 +114,7 @@
 		1F2F0C72A27ED811DA4E193E /* QuickBrewFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickBrewFeedback.swift; sourceTree = "<group>"; };
 		1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = XBloomLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		288AD2850F804ABEB0F63EC4 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		2CBF68C3FAEE7459EEE1B31D /* XBloom.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = XBloom.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2CBF68C3FAEE7459EEE1B31D /* xBloom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = xBloom.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2EB51229F947ABE48988CA68 /* ScaleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScaleView.swift; sourceTree = "<group>"; };
 		3104BE0D07ACA96A5A93A57D /* BrewLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrewLiveActivityManager.swift; sourceTree = "<group>"; };
 		31D1867D954D845E3633D656 /* BrewSessionView+Presentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrewSessionView+Presentation.swift"; sourceTree = "<group>"; };
@@ -235,7 +235,7 @@
 		35423A6D0DEE1F03894627C1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				2CBF68C3FAEE7459EEE1B31D /* XBloom.app */,
+				2CBF68C3FAEE7459EEE1B31D /* xBloom.app */,
 				9A2B86545B507750813FF7FC /* XBloomAppTests.xctest */,
 				1FB730B9B343E9226886D332 /* XBloomLiveActivity.appex */,
 			);
@@ -324,6 +324,14 @@
 			name = Packages;
 			sourceTree = "<group>";
 		};
+		9578F45430534A860029DF97 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				"TEMP_5E8CDAF9-7497-43C2-8B7F-DF079C22481B" /* Secrets.xcconfig */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		A184006F4EE8D4C1015EE991 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
@@ -340,6 +348,7 @@
 				B0FDFAABCB5AC00EDE21D4DC /* XBloomApp */,
 				24BF916F1522C34913520A4B /* XBloomLiveActivity */,
 				35423A6D0DEE1F03894627C1 /* Products */,
+				9578F45430534A860029DF97 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -361,14 +370,6 @@
 				58F9B9FD28A6B79B1F04C8E6 /* XBloomApp.swift */,
 			);
 			path = App;
-			sourceTree = "<group>";
-		};
-		"TEMP_37BCB02E-9760-4EB7-8D47-A888A6AEE334" /* xBloom app */ = {
-			isa = PBXGroup;
-			children = (
-				"TEMP_5E8CDAF9-7497-43C2-8B7F-DF079C22481B" /* Secrets.xcconfig */,
-			);
-			path = "xBloom app";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -433,7 +434,7 @@
 				4CDEAC636DE90A7943C97D61 /* Supabase */,
 			);
 			productName = XBloom;
-			productReference = 2CBF68C3FAEE7459EEE1B31D /* XBloom.app */;
+			productReference = 2CBF68C3FAEE7459EEE1B31D /* xBloom.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -450,7 +451,6 @@
 						ProvisioningStyle = Automatic;
 					};
 					ADB05F1BB29B083101FABBC1 = {
-						DevelopmentTeam = WWJ39PU569;
 						ProvisioningStyle = Automatic;
 					};
 				};

@@ -33,6 +33,7 @@ struct MaintenanceServiceSheet: View {
             .background(StudioTheme.background)
             .navigationTitle("Record service")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

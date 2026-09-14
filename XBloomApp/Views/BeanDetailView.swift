@@ -72,6 +72,7 @@ struct BeanDetailView: View {
         }
         .navigationTitle(bean.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
@@ -373,7 +374,7 @@ struct BeanDetailView: View {
         .foregroundStyle(.black.opacity(0.78))
         .padding(20)
         .background(
-            LinearGradient(colors: [StudioTheme.mint, StudioTheme.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
+            StudioTheme.accent,
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
         .padding(.top, 8)

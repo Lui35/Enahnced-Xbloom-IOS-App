@@ -42,9 +42,9 @@ const GEMINI_TIMEOUT_MS = 75_000;
 /// Leaves time for bounded retries while persisting the result.
 const GEMINI_RETRY_TIMEOUT_MS = 30_000;
 
-/// Design and feedback enhancement share the recoverable job path. Older clients
+/// Recipe design, feedback enhancement and photo imports share the recoverable job path. Older clients
 /// without a request ID still receive their result inline.
-const BACKGROUND_ACTIONS = new Set<Action>(["generateRecipe", "enhanceRecipe"]);
+const BACKGROUND_ACTIONS = new Set<Action>(["generateRecipe", "enhanceRecipe", "importBean"]);
 
 function json(status: number, value: unknown): Response {
   return new Response(JSON.stringify(value), { status, headers: JSON_HEADERS });
