@@ -128,11 +128,7 @@ private struct StartupLoadingView: View {
                     Image(systemName: "leaf.fill")
                         .font(.system(size: 48, weight: .medium))
                         .foregroundStyle(
-                            LinearGradient(
-                                colors: [StudioTheme.mint, StudioTheme.accent],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                            StudioTheme.accent
                         )
                         .symbolEffect(.pulse.byLayer, options: .repeating)
                 }

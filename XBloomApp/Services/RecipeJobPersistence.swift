@@ -2,7 +2,8 @@ import Foundation
 import SwiftData
 import XBloomCore
 
-/// A durable receipt prevents replay after failed acknowledgements, even if the recipe is deleted.
+/// A durable receipt prevents replay after failed acknowledgements, even if the recipe or bean is deleted.
+/// The model name is retained to keep existing on-device receipt stores compatible.
 @Model
 final class StoredRecipeJobReceipt {
     @Attribute(.unique) var id: UUID
@@ -75,5 +76,58 @@ enum RecipeJobPersistence {
             throw error
         }
         return (inserted?.recipe, receipt.rejection)
+    }
+}
+
+extension RecipeJobPersistence {
+    /// Uses the existing receipt model for both job types; request IDs are unique across actions.
+    /// The bean and receipt commit together before the server result is acknowledged.
+    static func collectBean(
+        _ row: AIJobRow, userID: UUID, in context: ModelContext,
+        save: (ModelContext) throws -> Void, decode: () throws -> BeanPhotoResult
+    ) throws -> (bean: BeanProfile?, rejection: String?) {
+        let id = row.id
+        let receipts = FetchDescriptor<StoredRecipeJobReceipt>(predicate: #Predicate { $0.id == id })
+        if let receipt = try context.fetch(receipts).first(where: { $0.userID == userID }) {
+            return (nil, receipt.rejection)
+        }
+        let query = FetchDescriptor<StoredBean>(predicate: #Predicate { $0.id == id })
+        let receipt = StoredRecipeJobReceipt(id: id, userID: userID)
+        var inserted: StoredBean?
+        if try context.fetch(query).isEmpty {
+            do {
+                let result = try decode()
+                let name = result.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { throw GeminiError.invalidResponse }
+                let dateFormatter = DateFormatter()
+                dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+                dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+                dateFormatter.dateFormat = "yyyy-MM-dd"
+                dateFormatter.isLenient = false
+                let bean = BeanProfile(
+                    id: id, name: name, roaster: result.roaster ?? "",
+                    country: result.country ?? "", region: result.region ?? "",
+                    producer: result.producer ?? "", species: result.species ?? "",
+                    variety: result.variety ?? "", process: result.process ?? "",
+                    processDetail: result.processDetail ?? "", altitudeMASL: result.altitudeMASL,
+                    roastLevel: result.roastLevel ?? "",
+                    roastDate: result.roastDate.flatMap { dateFormatter.date(from: $0) },
+                    acidityLevel: result.acidityLevel.map { min(5, max(1, $0)) },
+                    tastingNotes: result.tastingNotes ?? ""
+                )
+                inserted = StoredBean(profile: bean, needsVerification: true)
+            } catch {
+                receipt.rejection = "The label could not be read. Please try clearer photos."
+            }
+        }
+        if let inserted { context.insert(inserted) }
+        context.insert(receipt)
+        do { try save(context) }
+        catch {
+            if let inserted { context.delete(inserted) }
+            context.delete(receipt)
+            throw error
+        }
+        return (inserted?.profile, receipt.rejection)
     }
 }

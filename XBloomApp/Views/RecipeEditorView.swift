@@ -42,6 +42,7 @@ struct RecipeEditorView: View {
             }
             .navigationTitle("Coffee")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(StudioTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -151,11 +152,7 @@ struct RecipeEditorView: View {
         }
         .padding(20)
         .background(
-            LinearGradient(
-                colors: [StudioTheme.accent, StudioTheme.accentDeep],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
+            StudioTheme.accent,
             in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
         )
         .overlay {

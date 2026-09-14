@@ -5,6 +5,7 @@ import UIKit
 #endif
 
 struct AIProcessingOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let messages: [String]
     var systemImage = "sparkles"
@@ -35,7 +36,7 @@ struct AIProcessingOverlay: View {
                         .trim(from: 0.05, to: 0.72)
                         .stroke(
                             AngularGradient(
-                                colors: [tint.opacity(0.18), tint, StudioTheme.mint, tint.opacity(0.18)],
+                                colors: [tint.opacity(0.18), tint, tint, tint.opacity(0.18)],
                                 center: .center
                             ),
                             style: StrokeStyle(lineWidth: 7, lineCap: .round)
@@ -51,7 +52,7 @@ struct AIProcessingOverlay: View {
 
                     ForEach(0..<3, id: \.self) { index in
                         Circle()
-                            .fill(index == 1 ? StudioTheme.mint : tint)
+                            .fill(index == 1 ? tint : tint)
                             .frame(width: index == 1 ? 8 : 6, height: index == 1 ? 8 : 6)
                             .offset(y: -56)
                             .rotationEffect(.degrees(Double(index) * 120 + (rotates ? 360 : 0)))
@@ -86,7 +87,7 @@ struct AIProcessingOverlay: View {
                         let message = messages.isEmpty
                             ? "Working with Gemini…"
                             : messages[
-                                Int(context.date.timeIntervalSinceReferenceDate / 1.6)
+                                (reduceMotion ? 0 : Int(context.date.timeIntervalSinceReferenceDate / 1.6))
                                     % messages.count
                             ]
                         Text(message)
@@ -103,7 +104,7 @@ struct AIProcessingOverlay: View {
                 HStack(spacing: 7) {
                     ForEach(0..<3, id: \.self) { index in
                         Capsule()
-                            .fill(index == 1 ? StudioTheme.mint : tint)
+                            .fill(index == 1 ? tint : tint)
                             .frame(width: breathes == (index != 1) ? 18 : 7, height: 7)
                             .opacity(breathes == (index == 2) ? 0.45 : 1)
                     }
@@ -141,6 +142,7 @@ struct AIProcessingOverlay: View {
             .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
         }
         .onAppear {
+            guard !reduceMotion else { return }
             withAnimation(.linear(duration: 4.2).repeatForever(autoreverses: false)) {
                 rotates = true
             }
@@ -148,8 +150,7 @@ struct AIProcessingOverlay: View {
                 breathes = true
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title). Gemini is processing your request.")
+        .accessibilityElement(children: .contain)
         .transition(.opacity)
         .zIndex(100)
     }
@@ -163,6 +164,8 @@ struct AIProcessingOverlay: View {
 /// whenever the surrounding list re-renders — which, in a screen fed by live
 /// queries, is constantly. That is why the first version sat still.
 struct AIGeneratingCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .body) private var contentHeight: CGFloat = 128
     let title: String
     let subtitle: String
     var icon = "wand.and.sparkles"
@@ -174,8 +177,8 @@ struct AIGeneratingCard: View {
     private let shape = RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
 
     var body: some View {
-        TimelineView(.animation) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+            let time = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
             let turn = Angle.degrees(time.truncatingRemainder(dividingBy: 3) / 3 * 360)
             // A second, slower rotation keeps the glow from looking welded to
             // the border it travels along.
@@ -210,7 +213,7 @@ struct AIGeneratingCard: View {
                 tint.opacity(0.05),
                 tint.opacity(0.05),
                 tint,
-                StudioTheme.mint,
+                tint,
                 tint.opacity(0.05),
                 tint.opacity(0.05),
             ],
@@ -227,7 +230,7 @@ struct AIGeneratingCard: View {
                 Circle()
                     .trim(from: 0.06, to: 0.7)
                     .stroke(
-                        AngularGradient(colors: [tint.opacity(0.1), tint, StudioTheme.mint], center: .center),
+                        AngularGradient(colors: [tint.opacity(0.1), tint, tint], center: .center),
                         style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
                     )
                     .frame(width: 74, height: 74)
@@ -241,11 +244,11 @@ struct AIGeneratingCard: View {
             VStack(alignment: .leading, spacing: 7) {
                 Text(title)
                     .font(.headline)
+                    .lineLimit(2, reservesSpace: true)
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(StudioTheme.muted)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2, reservesSpace: true)
 
                 HStack(spacing: 8) {
                     ForEach(0..<placeholderCount, id: \.self) { index in
@@ -266,26 +269,19 @@ struct AIGeneratingCard: View {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(StudioTheme.muted)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
                         .background(StudioTheme.raised, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Cancel")
             }
         }
+        .frame(minHeight: contentHeight)
         .padding(16)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title). \(subtitle)")
+        .accessibilityElement(children: .contain)
     }
 }
 
-/// The way a finished thing should arrive in a list: a small pop rather than a
-/// fade, so the eye catches the row that was not there a moment ago.
 extension AnyTransition {
-    static var popIn: AnyTransition {
-        .asymmetric(
-            insertion: .scale(scale: 0.82).combined(with: .opacity),
-            removal: .opacity
-        )
-    }
+    static var popIn: AnyTransition { .opacity }
 }

@@ -118,7 +118,7 @@ struct StudioDialBox: View {
         .clipShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
-                .stroke(tint.opacity(0.85), lineWidth: 2)
+                .strokeBorder(tint.opacity(dragStart == nil ? 0.3 : 0.8), lineWidth: 1)
         }
         .contentShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
         .overlay {

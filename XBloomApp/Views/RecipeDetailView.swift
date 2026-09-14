@@ -18,7 +18,6 @@ struct RecipeDetailView: View {
             StudioBackground()
             ScrollView {
                 VStack(spacing: 18) {
-                    HStack { Spacer(); FavoriteRecipeButton(stored: stored) }
                     detailIdentity
                     coffeeSummary
                     pourOverview
@@ -30,6 +29,7 @@ struct RecipeDetailView: View {
         }
         .navigationTitle(recipe.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
@@ -150,6 +150,11 @@ struct RecipeDetailView: View {
                         .foregroundStyle(.black.opacity(0.56))
                 }
                 Spacer(minLength: 0)
+                FavoriteRecipeButton(stored: stored, iconOnly: true)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(stored.recipe?.isFavorite == true
+                        ? Color(red: 0.52, green: 0.12, blue: 0.17)
+                        : .black.opacity(0.55))
             }
             HStack(alignment: .center, spacing: 8) {
                 Text("1:\(String(format: "%.1f", recipe.ratio))")
@@ -174,7 +179,7 @@ struct RecipeDetailView: View {
         .foregroundStyle(.black.opacity(0.76))
         .padding(StudioTheme.Space.card)
         .background(
-            LinearGradient(colors: [StudioTheme.accent, StudioTheme.accentDeep], startPoint: .topLeading, endPoint: .bottomTrailing),
+            StudioTheme.accent,
             in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
         )
         .padding(.top, 8)

@@ -77,6 +77,7 @@ struct BeanRefillView: View {
             }
             .navigationTitle("Refill bag")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(StudioTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -313,7 +314,7 @@ struct BeanRefillView: View {
         defer { isReadingLabel = false }
         do {
             let images = preparedImages.map { ($0.data, "image/jpeg") }
-            let result = try await gemini.importBean(images: images)
+            let result = try await gemini.readRefillLabel(images: images)
             try Task.checkCancellation()
             scannedLabel = result
             if let parsedDate = parseRoastDate(result.roastDate) {

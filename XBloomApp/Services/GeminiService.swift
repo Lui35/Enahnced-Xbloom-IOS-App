@@ -113,9 +113,28 @@ final class GeminiService {
         _ = try await request(body: body, action: "testConnection")
     }
 
-    func importBean(images: [(data: Data, mimeType: String)]) async throws -> BeanPhotoResult {
+    func startBeanJob(
+        requestID: UUID, userID: UUID, context: AIJobRow.Context,
+        images: [(data: Data, mimeType: String)]
+    ) async throws {
+        let body = try beanPhotoBody(images: images)
+        try await cloud.invokeAI(
+            action: "importBean", model: model, body: body,
+            requestID: requestID, context: try jobContext(context), expectedUserID: userID
+        )
+    }
+
+    /// A refill reads a label for review before changing an existing bag; it creates no new bag.
+    func readRefillLabel(images: [(data: Data, mimeType: String)]) async throws -> BeanPhotoResult {
+        try decodeModelResponse(
+            try await request(body: beanPhotoBody(images: images), action: "importBean"),
+            as: BeanPhotoResult.self
+        )
+    }
+
+    private func beanPhotoBody(images: [(data: Data, mimeType: String)]) throws -> [String: Any] {
         guard !images.isEmpty else { throw GeminiError.missingImages }
-        guard images.reduce(0, { $0 + $1.data.count }) <= 18_000_000 else {
+        guard images.reduce(0, { $0 + $1.data.count }) <= 14_000_000 else {
             throw GeminiError.imagesTooLarge
         }
         var parts: [[String: Any]] = [[
@@ -132,17 +151,17 @@ final class GeminiService {
         parts.append(contentsOf: images.map {
             ["inlineData": ["mimeType": $0.mimeType, "data": $0.data.base64EncodedString()]]
         })
-        let body: [String: Any] = [
+        return [
             "contents": [["role": "user", "parts": parts]],
             "generationConfig": [
                 "responseMimeType": "application/json",
                 "responseJsonSchema": BeanPhotoResult.schema,
             ],
         ]
-        return try decodeModelResponse(
-            try await request(body: body, action: "importBean"),
-            as: BeanPhotoResult.self
-        )
+    }
+
+    func beanResult(from response: String) throws -> BeanPhotoResult {
+        try decodeModelResponse(Data(response.utf8), as: BeanPhotoResult.self)
     }
 
     /// - Parameters:
@@ -324,7 +343,9 @@ final class GeminiService {
     }
 
     private func jobContext(_ context: AIJobRow.Context) throws -> [String: Any] {
-        let data = try JSONEncoder().encode(context)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(context)
         return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
     }
 

@@ -18,6 +18,7 @@ extension Recipe {
 }
 
 struct RecipeRow: View {
+    @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 112
     let recipe: Recipe
 
     var body: some View {
@@ -104,13 +105,21 @@ struct RecipeRow: View {
 
                 Text(sourceTitle)
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.46))
+                    .foregroundStyle(StudioTheme.muted)
                     .lineLimit(1)
             }
 
             Image(systemName: "chevron.right")
                 .font(.caption.bold())
                 .foregroundStyle(.white.opacity(0.35))
+        }
+        .frame(height: rowHeight)
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(recipe.brewStyle == .iced ? StudioTheme.iced : StudioTheme.hot)
+                .frame(width: 3)
+                .offset(x: -9)
+                .accessibilityHidden(true)
         }
         .contentShape(Rectangle())
     }

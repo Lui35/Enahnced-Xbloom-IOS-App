@@ -3,10 +3,12 @@ import Observation
 import SwiftData
 import XBloomCore
 
-/// Submits account-scoped jobs and collects results after durable, idempotent local storage.
+/// Shared lifecycle for recipe and bean jobs: account isolation, polling, cancellation
+/// and collection after durable, idempotent local storage. Each instance owns one library.
 @MainActor
 @Observable
 final class RecipeGenerationCoordinator {
+    enum Library { case recipes, beans }
     struct Pending: Identifiable, Equatable {
         let id: UUID
         let beanID: UUID?
@@ -15,6 +17,8 @@ final class RecipeGenerationCoordinator {
         let cups: Int
         let startedAt: Date
         var sourceBrewID: UUID? = nil
+        var photoCount: Int = 0
+        var serverAccepted: Bool = true
 
         var isEnhancement: Bool { sourceBrewID != nil }
     }
@@ -22,9 +26,12 @@ final class RecipeGenerationCoordinator {
     private static let staleAfter: TimeInterval = 240
     private(set) var pending: [Pending] = []
     private(set) var lastCompleted: Recipe?
+    private(set) var lastImported: BeanProfile?
     private(set) var lastError: String?
     private(set) var libraryRequestID: UUID?
 
+    @ObservationIgnored private let library: Library
+    @ObservationIgnored private let beanGenerator: (any BeanJobGenerating)?
     @ObservationIgnored private let cloud: any RecipeJobStore
     @ObservationIgnored private let gemini: any RecipeJobGenerating
     @ObservationIgnored private let defaults: UserDefaults
@@ -33,8 +40,9 @@ final class RecipeGenerationCoordinator {
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var context: ModelContext?
     @ObservationIgnored private var accountID: UUID?
-    @ObservationIgnored private var submitting: Set<UUID> = []
+    private var submitting: Set<UUID> = []
     @ObservationIgnored private var cancellations: Set<UUID> = []
+    @ObservationIgnored private var lookupFailed = false
     @ObservationIgnored private var isRefreshing = false
     @ObservationIgnored private var refreshRequested = false
 
@@ -43,8 +51,11 @@ final class RecipeGenerationCoordinator {
     init(
         cloud: any RecipeJobStore, gemini: any RecipeJobGenerating,
         defaults: UserDefaults = .standard, automaticallyPoll: Bool = true,
+        library: Library = .recipes, beanGenerator: (any BeanJobGenerating)? = nil,
         save: @escaping (ModelContext) throws -> Void = { try $0.save() }
     ) {
+        self.library = library
+        self.beanGenerator = beanGenerator
         self.cloud = cloud
         self.gemini = gemini
         self.defaults = defaults
@@ -67,8 +78,10 @@ final class RecipeGenerationCoordinator {
         pending = []
         submitting = []
         lastCompleted = nil
+        lastImported = nil
         libraryRequestID = nil
         lastError = nil
+        lookupFailed = false
         cancellations = Set((next.flatMap { defaults.stringArray(forKey: cancellationKey($0)) } ?? [])
             .compactMap(UUID.init(uuidString:)))
     }
@@ -141,14 +154,53 @@ final class RecipeGenerationCoordinator {
         return id
     }
 
+    func isSubmitting(_ id: UUID) -> Bool { submitting.contains(id) }
+
+    @discardableResult
+    func startBeanImport(images: [(data: Data, mimeType: String)], context: ModelContext) -> UUID? {
+        accountChanged()
+        guard let userID = accountID else {
+            lastError = CloudError.notSignedIn.localizedDescription
+            return nil
+        }
+        guard library == .beans, let beanGenerator, !images.isEmpty else {
+            lastError = GeminiError.missingImages.localizedDescription
+            return nil
+        }
+        guard images.reduce(0, { $0 + $1.data.count }) <= 14_000_000 else {
+            lastError = GeminiError.imagesTooLarge.localizedDescription
+            return nil
+        }
+        let id = UUID()
+        self.context = context
+        pending.append(Pending(id: id, beanID: nil, beanName: "Bag photos", style: .hot,
+                               cups: 1, startedAt: Date(), photoCount: images.count, serverAccepted: false))
+        submitting.insert(id)
+        libraryRequestID = id
+        lastError = nil
+        submit(id: id, userID: userID, context: context) {
+            try await beanGenerator.startBeanJob(
+                requestID: id, userID: userID,
+                context: .init(beanID: nil, beanName: "Bag photos", style: "hot", cups: 1,
+                               useGrinder: false, photoCount: images.count), images: images
+            )
+        }
+        return id
+    }
+
     private func submit(
         id: UUID, userID: UUID, context: ModelContext,
         operation: @escaping @MainActor () async throws -> Void
     ) {
         Task { [weak self] in
             guard let self else { return }
-            do { try await operation() }
-            catch {
+            do {
+                try await operation()
+                guard isCurrent(userID) else { return }
+                if let index = pending.firstIndex(where: { $0.id == id }) {
+                    pending[index].serverAccepted = true
+                }
+            } catch {
                 guard isCurrent(userID) else { return }
                 if !cancellations.contains(id) { lastError = error.localizedDescription }
                 // A lost acknowledgement may still have created a job. Reconcile with the server.
@@ -183,11 +235,21 @@ final class RecipeGenerationCoordinator {
         guard isCurrent(userID) else { return }
         let rows: [AIJobRow]
         do {
-            rows = try await cloud.openAIJobs(for: userID)
+            rows = try await cloud.openAIJobs(for: userID).filter {
+                library == .beans ? $0.action == "importBean"
+                    : ["generateRecipe", "enhanceRecipe"].contains($0.action)
+            }
         } catch {
-            return // Keep known work until connectivity returns.
+            guard isCurrent(userID) else { return }
+            lookupFailed = true
+            lastError = "Could not check AI results. Your result may already be ready; it will be checked again when the connection recovers."
+            return // Keep known work until connectivity returns; do not imply AI is still running.
         }
         guard isCurrent(userID) else { return }
+        if lookupFailed {
+            lastError = nil
+            lookupFailed = false
+        }
         var running: [Pending] = []
         for row in rows where !cancellations.contains(row.id) {
             guard isCurrent(userID) else { return }
@@ -195,7 +257,7 @@ final class RecipeGenerationCoordinator {
             case "started":
                 if Date().timeIntervalSince(row.createdAt) > Self.staleAfter {
                     // Never consume an unfinished result: a late result must remain recoverable.
-                    lastError = "The recipe is taking longer than expected. Reopen the app to check again, or design another."
+                    lastError = "This \(library == .beans ? "import" : "recipe") is taking longer than expected. Reopen the app to check again. A result saved later will still be recovered."
                 } else {
                     running.append(card(row))
                 }
@@ -204,7 +266,9 @@ final class RecipeGenerationCoordinator {
                     running.append(card(row)) // Failed saves/acknowledgements must continue polling.
                 }
             case "failed":
-                lastError = Self.message(forErrorCode: row.errorCode)
+                lastError = library == .beans
+                    ? "The bag could not be imported. Please try the photos again. (\(row.errorCode ?? "unknown error"))"
+                    : Self.message(forErrorCode: row.errorCode)
                 do { try await cloud.finishAIJob(row.id, for: userID) }
                 catch { running.append(card(row)) }
             default: break
@@ -247,6 +311,20 @@ final class RecipeGenerationCoordinator {
 
     private func collect(_ row: AIJobRow, userID: UUID, context: ModelContext) async -> Bool {
         do {
+            if library == .beans {
+                guard let beanGenerator else { throw GeminiError.invalidResponse }
+                let result = try RecipeJobPersistence.collectBean(row, userID: userID, in: context, save: save) {
+                    guard let response = row.response else { throw GeminiError.invalidResponse }
+                    return try beanGenerator.beanResult(from: response)
+                }
+                if let bean = result.bean {
+                    lastImported = bean
+                    MachineFeedback.acknowledged()
+                }
+                if let rejection = result.rejection { lastError = rejection }
+                try await cloud.finishAIJob(row.id, for: userID)
+                return true
+            }
             let result = try RecipeJobPersistence.collect(
                 row, userID: userID, in: context, save: save
             ) { bean in
@@ -287,18 +365,18 @@ final class RecipeGenerationCoordinator {
                 beanName: row.context?.beanName ?? "No bean attached",
                 style: row.context.flatMap { BrewStyle(rawValue: $0.style) } ?? .hot,
                 cups: row.context?.cups ?? 1, startedAt: row.createdAt,
-                sourceBrewID: row.context?.sourceBrewID)
+                sourceBrewID: row.context?.sourceBrewID, photoCount: row.context?.photoCount ?? 1)
     }
 
-    private func cancellationKey(_ userID: UUID) -> String { "recipeJobs.cancelled.\(userID)" }
+    private func cancellationKey(_ userID: UUID) -> String { "\(library == .beans ? "beanJobs" : "recipeJobs").cancelled.\(userID)" }
     private func persistCancellations(_ userID: UUID) {
         defaults.set(cancellations.map(\.uuidString), forKey: cancellationKey(userID))
     }
 
     private func startPolling() {
-        guard automaticallyPoll, pollTask == nil, !pending.isEmpty, let userID = accountID else { return }
+        guard automaticallyPoll, pollTask == nil, (!pending.isEmpty || lookupFailed), let userID = accountID else { return }
         pollTask = Task { [weak self] in
-            while let self, !self.pending.isEmpty, self.isCurrent(userID), !Task.isCancelled {
+            while let self, (!self.pending.isEmpty || self.lookupFailed), self.isCurrent(userID), !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(3)) } catch { break }
                 guard !Task.isCancelled, let context = self.context else { break }
                 await self.refresh(context: context)
@@ -307,6 +385,7 @@ final class RecipeGenerationCoordinator {
         }
     }
 
+    func clearLastImported() { lastImported = nil }
     func clearLastCompleted() { lastCompleted = nil }
     func clearError() { lastError = nil }
 
@@ -323,7 +402,7 @@ final class RecipeGenerationCoordinator {
     func seedPreviewPendingIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-seedPendingRecipe"), pending.isEmpty else { return }
         pending.append(Pending(id: UUID(), beanID: nil, beanName: "Relationship Preview Bean",
-                               style: .hot, cups: 1, startedAt: Date()))
+                               style: .hot, cups: 1, startedAt: Date(), photoCount: library == .beans ? 2 : 0))
     }
     #endif
 }

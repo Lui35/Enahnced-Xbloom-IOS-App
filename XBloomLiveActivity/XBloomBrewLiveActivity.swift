@@ -7,7 +7,7 @@ struct XBloomBrewLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: BrewActivityAttributes.self) { context in
             LockScreenBrewView(context: context)
-                .activityBackgroundTint(Color(red: 0.055, green: 0.065, blue: 0.065))
+                .activityBackgroundTint(Color(red: 0.12, green: 0.135, blue: 0.15))
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
             DynamicIsland {
@@ -170,7 +170,7 @@ private struct Metric: View {
         HStack(spacing: 5) {
             Image(systemName: icon)
                 .font(.caption.bold())
-                .foregroundStyle(Color(red: 0.50, green: 0.84, blue: 0.81))
+                .foregroundStyle(Color(red: 0.98, green: 0.78, blue: 0.56))
             VStack(alignment: .leading, spacing: 0) {
                 Text(value)
                     .font(.caption.bold().monospacedDigit())
@@ -221,9 +221,9 @@ private func phaseColor(_ phase: BrewProgramPhase) -> Color {
     switch phase {
     case .preparing: Color(red: 0.70, green: 0.73, blue: 0.72)
     case .grinding: Color(red: 0.84, green: 0.65, blue: 0.43)
-    case .blooming, .pouring: Color(red: 0.50, green: 0.84, blue: 0.81)
+    case .blooming, .pouring: Color(red: 0.98, green: 0.78, blue: 0.56)
     case .resting: Color(red: 0.54, green: 0.69, blue: 0.91)
-    case .complete: Color(red: 0.39, green: 0.87, blue: 0.65)
+    case .complete: Color(red: 0.48, green: 0.76, blue: 0.62)
     case .error: .red
     }
 }

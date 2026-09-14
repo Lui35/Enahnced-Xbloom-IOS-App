@@ -13,6 +13,7 @@ function fixture() {
   const tasks: Promise<unknown>[] = [];
   const state = {
     providerCalls: 0,
+    providerGate: undefined as Promise<void> | undefined,
     patches: 0,
     countStatus: 200,
     patchStatuses: [] as number[],
@@ -41,6 +42,7 @@ function fixture() {
       }
       if (url.hostname === "generativelanguage.googleapis.com") {
         state.providerCalls++;
+        await state.providerGate;
         if (state.cancelDuringGeneration) {
           for (const row of rows.values()) {
             row.status = "cancelled";
@@ -199,6 +201,44 @@ Deno.test("feedback enhancement returns a job and persists its result", async ()
 Deno.test("older enhancement clients without a job ID still receive a response", async () => {
   const f = fixture();
   const response = await f.handler(f.request(null, "enhanceRecipe"));
+  equal(response.status, 200);
+  equal(await response.json(), { recipe: "provider result" });
+  await Promise.all(f.tasks);
+});
+
+
+Deno.test("photo import finishes and saves its response after the client request ends", async () => {
+  const f = fixture();
+  let finish!: () => void;
+  f.state.providerGate = new Promise<void>((resolve) => { finish = resolve; });
+  const id = crypto.randomUUID();
+  const request = f.request(id, "importBean");
+  const abort = new AbortController();
+  const response = await f.handler(new Request(request, { signal: abort.signal }));
+  equal(response.status, 202);
+  equal(f.tasks.length, 1);
+  equal(f.rows.get(id)?.status, "started");
+  abort.abort(); // Phone disconnects after accepting the job.
+  finish();
+  await Promise.all(f.tasks);
+  equal(f.rows.get(id)?.status, "succeeded");
+  equal(JSON.parse(String(f.rows.get(id)?.response)), { recipe: "provider result" });
+  equal(f.state.providerCalls, 1);
+});
+
+Deno.test("retrying a photo import cannot create a second paid job", async () => {
+  const f = fixture();
+  const id = crypto.randomUUID();
+  equal((await f.handler(f.request(id, "importBean"))).status, 202);
+  equal((await f.handler(f.request(id, "importBean"))).status, 202);
+  await Promise.all(f.tasks);
+  equal(f.state.providerCalls, 1);
+  equal(f.rows.size, 1);
+});
+
+Deno.test("legacy photo import and refill clients still receive their result inline", async () => {
+  const f = fixture();
+  const response = await f.handler(f.request(null, "importBean"));
   equal(response.status, 200);
   equal(await response.json(), { recipe: "provider result" });
   await Promise.all(f.tasks);

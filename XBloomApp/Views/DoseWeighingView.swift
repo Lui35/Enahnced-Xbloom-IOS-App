@@ -130,6 +130,7 @@ struct DoseWeighingView: View {
             }
             .navigationTitle(stage == .weighing ? "Weigh your dose" : "Load the machine")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(StudioTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {

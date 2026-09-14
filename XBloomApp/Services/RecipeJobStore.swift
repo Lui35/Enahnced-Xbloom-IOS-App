@@ -29,3 +29,12 @@ protocol RecipeJobGenerating: AnyObject {
 }
 
 extension GeminiService: RecipeJobGenerating {}
+
+@MainActor
+protocol BeanJobGenerating: AnyObject {
+    func startBeanJob(requestID: UUID, userID: UUID, context: AIJobRow.Context,
+                      images: [(data: Data, mimeType: String)]) async throws
+    func beanResult(from response: String) throws -> BeanPhotoResult
+}
+
+extension GeminiService: BeanJobGenerating {}
