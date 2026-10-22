@@ -228,8 +228,7 @@ struct RecipesView: View {
             }
             .sheet(item: $draft) { recipe in
                 RecipeEditorView(recipe: recipe) { saved in
-                    modelContext.insert(StoredRecipe(recipe: saved))
-                    try? modelContext.save()
+                    try LocalLibrary.saveRecipe(saved, in: modelContext)
                 }
             }
         }

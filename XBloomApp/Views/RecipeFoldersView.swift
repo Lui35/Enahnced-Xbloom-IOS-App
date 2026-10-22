@@ -195,8 +195,7 @@ private struct RecipeFolderDetailView: View {
         }
         .sheet(item: $draft) { recipe in
             RecipeEditorView(recipe: recipe) { saved in
-                modelContext.insert(StoredRecipe(recipe: saved))
-                do { try modelContext.save() } catch { linkError = error.localizedDescription }
+                try LocalLibrary.saveRecipe(saved, in: modelContext)
             }
         }
         .sheet(isPresented: $showingRecipePicker) {

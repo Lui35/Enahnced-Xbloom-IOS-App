@@ -50,29 +50,3 @@ public struct BeanBrewWindow: Sendable {
         daysRemaining = age < 0 ? nil : min(365, max(1, targetDays)) - age
     }
 }
-
-public struct BeanBrewSuggestion: Equatable, Sendable {
-    public let beanID: UUID
-    public let recipeID: UUID
-    public let daysRemaining: Int
-
-    public static func next(beans: [BeanProfile], recipes: [Recipe], targetDays: Int,
-                            now: Date = Date(), calendar: Calendar = .current) -> Self? {
-        let eligible = beans.filter { !$0.archived }
-        var candidates: [(suggestion: Self, roastDate: Date, stock: Double)] = []
-        for bean in eligible {
-            let window = BeanBrewWindow(roastDate: bean.roastDate, targetDays: targetDays, now: now, calendar: calendar)
-            guard let days = window.daysRemaining, days >= 0, let roastDate = bean.roastDate,
-                  bean.remainingWeightGrams.isFinite else { continue }
-            for recipe in recipes where recipe.beanID == bean.id {
-                guard recipe.dose.isFinite, recipe.dose > 0, bean.remainingWeightGrams >= recipe.dose else { continue }
-                candidates.append((Self(beanID: bean.id, recipeID: recipe.id, daysRemaining: days), roastDate, bean.remainingWeightGrams))
-            }
-        }
-        return candidates.sorted {
-            if $0.suggestion.daysRemaining != $1.suggestion.daysRemaining { return $0.suggestion.daysRemaining < $1.suggestion.daysRemaining }
-            if $0.stock != $1.stock { return $0.stock < $1.stock }
-            return $0.suggestion.recipeID.uuidString < $1.suggestion.recipeID.uuidString
-        }.first?.suggestion
-    }
-}

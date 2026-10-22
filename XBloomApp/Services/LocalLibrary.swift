@@ -7,6 +7,30 @@ enum LocalLibrary {
     private static let didSeedDefaultRecipesKey = "localLibrary.didSeedDefaultRecipes"
 
     @discardableResult
+    static func saveRecipe(
+        _ recipe: Recipe, replacing existing: StoredRecipe? = nil, in context: ModelContext,
+        save: (ModelContext) throws -> Void = { try $0.save() }
+    ) throws -> StoredRecipe {
+        let original = existing?.recipe
+        let originalDate = existing?.updatedAt
+        guard existing == nil || original != nil else {
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
+        let stored = existing ?? StoredRecipe(recipe: recipe)
+        if existing == nil { context.insert(stored) }
+        else { stored.update(with: recipe) }
+        do { try save(context) }
+        catch {
+            if let original, let originalDate {
+                stored.update(with: original)
+                stored.updatedAt = originalDate
+            } else { context.delete(stored) }
+            throw error
+        }
+        return stored
+    }
+
+    @discardableResult
     static func importSharedRecipe(_ recipe: Recipe, in context: ModelContext) throws -> StoredRecipe {
         let stored = StoredRecipe(recipe: try RecipeShareLink.importedCopy(of: recipe))
         context.insert(stored)

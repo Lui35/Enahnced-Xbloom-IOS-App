@@ -35,20 +35,3 @@ import Testing
     #expect(BeanBrewWindow(roastDate: nil, targetDays: 30, now: now).daysRemaining == nil)
     #expect(BeanBrewWindow(roastDate: now.addingTimeInterval(86_400), targetDays: 30, now: now, calendar: calendar).daysRemaining == nil)
 }
-
-@Test func brewSuggestionHonorsStockWindowAndArchiveStatus() {
-    let now = Date()
-    let older = BeanProfile(name: "Use first", roastDate: now.addingTimeInterval(-25 * 86_400), remainingWeightGrams: 20)
-    let newer = BeanProfile(name: "Newer", roastDate: now.addingTimeInterval(-10 * 86_400))
-    var first = RecipeLibrary.defaults[0]; first.beanID = older.id; first.dose = 18
-    var second = first; second.id = UUID(); second.beanID = newer.id
-    let suggestion = BeanBrewSuggestion.next(beans: [newer, older], recipes: [second, first], targetDays: 30, now: now)
-    #expect(suggestion?.beanID == older.id)
-    var empty = older; empty.remainingWeightGrams = 17
-    #expect(BeanBrewSuggestion.next(beans: [empty], recipes: [first], targetDays: 30, now: now) == nil)
-    var archived = older; archived.archived = true
-    #expect(BeanBrewSuggestion.next(beans: [archived], recipes: [first], targetDays: 30, now: now) == nil)
-    #expect(BeanBrewSuggestion.next(beans: [older], recipes: [first], targetDays: 14, now: now) == nil)
-    first.dose = .nan
-    #expect(BeanBrewSuggestion.next(beans: [older], recipes: [first], targetDays: 30, now: now) == nil)
-}

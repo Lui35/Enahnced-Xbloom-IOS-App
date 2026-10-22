@@ -54,7 +54,7 @@ parameters and planned graph markers remain distinguishable from telemetry.
 
 ## Verification
 
-The current app builds for the iPhone 17 Pro simulator, and all 84 core tests
+The current app builds for the iPhone 17 Pro simulator, and all 83 core tests
 pass. Local preview checks cover recipe layouts, bean edit routing, shared stock
 styling, and the extraction preparation/pour/rest states. README images are
 simulator examples; the brew image shows simulation, not hardware verification.

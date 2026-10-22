@@ -16,6 +16,50 @@ func testContainer() throws -> ModelContainer {
 @Suite(.serialized)
 @MainActor
 struct LibraryPersistenceTests {
+    @Test func failedRecipeInsertCanBeRetriedWithoutLeavingAPhantomRecord() throws {
+        struct SaveFailure: Error {}
+        let container = try testContainer()
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        var draft = RecipeLibrary.defaults[0]
+        draft.id = UUID()
+        draft.name = "Unsaved draft"
+
+        #expect(throws: SaveFailure.self) {
+            try LocalLibrary.saveRecipe(draft, in: context, save: { _ in throw SaveFailure() })
+        }
+        try context.save()
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<StoredRecipe>()) == 0)
+
+        try LocalLibrary.saveRecipe(draft, in: context)
+        let saved = try ModelContext(container).fetch(FetchDescriptor<StoredRecipe>())
+        #expect(saved.count == 1)
+        #expect(saved.first?.recipe == draft)
+    }
+
+    @Test func failedRecipeEditRestoresTheOriginalAndItsSyncTimestamp() throws {
+        struct SaveFailure: Error {}
+        let container = try testContainer()
+        let context = container.mainContext
+        let original = RecipeLibrary.defaults[0]
+        let stored = try LocalLibrary.saveRecipe(original, in: context)
+        let originalDate = stored.updatedAt
+        var edited = original
+        edited.name = "Failed edit"
+        edited.beanID = UUID()
+        #expect(throws: SaveFailure.self) {
+            try LocalLibrary.saveRecipe(edited, replacing: stored, in: context, save: { _ in throw SaveFailure() })
+        }
+        #expect(stored.recipe == original)
+        #expect(stored.updatedAt == originalDate)
+        try context.save()
+        let reloaded = try #require(ModelContext(container).fetch(FetchDescriptor<StoredRecipe>()).first)
+        #expect(reloaded.recipe == original)
+        #expect(reloaded.updatedAt == originalDate)
+        try LocalLibrary.saveRecipe(edited, replacing: stored, in: context)
+        #expect(stored.recipe == edited)
+    }
+
     @Test func quickFeedbackUpdatesExistingBrewWithoutChangingUsageOrLineage() throws {
         let container = try testContainer()
         let context = container.mainContext

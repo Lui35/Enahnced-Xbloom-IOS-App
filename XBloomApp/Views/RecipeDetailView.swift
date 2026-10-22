@@ -90,9 +90,8 @@ struct RecipeDetailView: View {
         }
         .sheet(item: $editing) { value in
             RecipeEditorView(recipe: value) { updated in
+                try LocalLibrary.saveRecipe(updated, replacing: stored, in: modelContext)
                 recipe = updated
-                stored.update(with: updated)
-                try? modelContext.save()
             }
         }
         .sheet(isPresented: $weighingDose) {

@@ -288,7 +288,7 @@ swift test
 ```
 
 Core tests also cover bag-identity grouping, unlinked and unavailable-bean
-collections, calendar-based roast targets, stock-aware recommendation rules, and
+collections, calendar-based roast targets, and
 low-water report/clear handling.
 
 Those tests are written against the recordings: the verified recipe encoding,
