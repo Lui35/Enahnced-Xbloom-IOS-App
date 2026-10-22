@@ -205,6 +205,55 @@ struct LibraryPersistenceTests {
 @Suite(.serialized)
 @MainActor
 struct CloudRecipeRestoreTests {
+    @Test func newAccountKeepsGuestRecipesForItsFirstUpload() throws {
+        let container = try testContainer()
+        let context = container.mainContext
+        let user = UUID()
+        let metadata = CloudSyncMetadata(userID: user)
+        context.insert(metadata)
+        var recipe = RecipeLibrary.defaults[0]
+        recipe.name = "My guest recipe"
+        context.insert(StoredRecipe(recipe: recipe))
+        try context.save()
+        try LocalLibrary.restoreCloudRecipes([], replacingIDs: [recipe.id],
+            userID: user, metadata: metadata, in: context, preserveLocalRecipes: true)
+        #expect(try context.fetchCount(FetchDescriptor<StoredRecipe>()) == 1)
+        #expect(try context.fetch(FetchDescriptor<StoredRecipe>()).first?.recipe == recipe)
+        #expect(metadata.knownIDs(for: .recipe).isEmpty)
+        #expect(metadata.recipeLibraryAccountID == user.uuidString)
+    }
+
+    @Test func sharedRecipeImportCannotOverwriteAnExistingRecipe() throws {
+        let container = try testContainer()
+        let context = container.mainContext
+        var original = RecipeLibrary.defaults[0]
+        original.beanID = UUID()
+        original.isFavorite = true
+        context.insert(StoredRecipe(recipe: original))
+        try context.save()
+        var incoming = original
+        incoming.name = "Shared variation"
+        let first = try LocalLibrary.importSharedRecipe(incoming, in: context)
+        let second = try LocalLibrary.importSharedRecipe(incoming, in: context)
+        #expect(first.id != original.id)
+        #expect(first.id != second.id)
+        #expect(first.recipe?.beanID == nil)
+        #expect(first.recipe?.isFavorite == nil)
+        let restored = try ModelContext(container).fetch(FetchDescriptor<StoredRecipe>())
+        #expect(restored.count == 3)
+        #expect(restored.first(where: { $0.id == original.id })?.recipe == original)
+    }
+
+    @Test func unsafeSharedRecipeIsNotInserted() throws {
+        let container = try testContainer()
+        var recipe = RecipeLibrary.defaults[0]
+        recipe.pours[0].volume = Int.max
+        #expect(throws: (any Error).self) {
+            try LocalLibrary.importSharedRecipe(recipe, in: container.mainContext)
+        }
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<StoredRecipe>()) == 0)
+    }
+
     @Test func cloudLibraryReplacesSamplesAndWinsOverNewerLocalCopy() throws {
         let container = try testContainer()
         let context = container.mainContext

@@ -48,6 +48,16 @@
                ReferencedContainer = "container:XBloom.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "AF37C54E92B52B5036F31E4F"
+               BuildableName = "XBloomUITests.xctest"
+               BlueprintName = "XBloomUITests"
+               ReferencedContainer = "container:XBloom.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

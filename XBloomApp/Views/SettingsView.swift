@@ -11,6 +11,7 @@ struct SettingsView: View {
     @Environment(BrewSessionCoordinator.self) private var brewSession
     @State private var confirmingMachineStop = false
     @State private var machineStopMessage: String?
+    @State private var showingGuide = false
 
     var body: some View {
         ZStack {
@@ -44,6 +45,16 @@ struct SettingsView: View {
                         Divider()
                         settingsLink("Recipe transfer", icon: "square.and.arrow.up.on.square.fill",
                             subtitle: "Import and export recipe files", tint: StudioTheme.crema) { RecipeTransferView() }
+                        Divider()
+                        settingsLink("Import recipe link", icon: "link",
+                            subtitle: "Preview and save a shared recipe", tint: StudioTheme.mint) { RecipeLinkImportView() }
+                    }
+
+                    settingsSection("Getting started") {
+                        Button { showingGuide = true } label: {
+                            settingsRow(icon: "book.closed.fill", title: "App guide",
+                                subtitle: "Connecting, brewing, features, and account choices", tint: StudioTheme.accent)
+                        }.buttonStyle(.plain)
                     }
 
                     settingsSection("Machine") {
@@ -93,6 +104,9 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .sheet(isPresented: $showingGuide) {
+            OnboardingView(isGuide: true) { showingGuide = false }
+        }
     }
 
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

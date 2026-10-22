@@ -15,6 +15,9 @@ and come back for the second when you want sync and AI.
 
 ## 1. Get the app onto your iPhone
 
+For the new first-launch tour, native Apple sign-in setup, and single-recipe
+links, see [Onboarding, accounts, and recipe links](docs/onboarding-and-sharing.md).
+
 ### What you need
 
 | | |
@@ -235,3 +238,9 @@ That table came in the second migration. Run it.
 
 **The app builds but Bluetooth does nothing in the simulator.**
 It cannot. The simulator has no Bluetooth stack; use a real iPhone.
+
+### Running on a personal iPhone
+
+Open `XBloom.xcodeproj` (not the repository folder or `Package.swift`), select the **XBloom** app scheme and your iPhone, then press **Run** (⌘R). The package library scheme is **XBloomCore** and cannot launch an app.
+
+Debug builds on a physical iPhone use Personal Team compatible signing and offer email sign-in or guest access. Simulator builds keep the Apple button for UI previews. Release builds retain the Sign in with Apple entitlement and require a paid Apple Developer team. To debug Apple sign-in with a paid team, remove the Debug `CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]` override and `XBLOOM_PERSONAL_TEAM` compilation condition in `project.yml`, set your team, and regenerate with `xcodegen generate`.

@@ -12,6 +12,7 @@ struct RecipeDetailView: View {
     @State private var editing: Recipe?
     @State private var errorMessage: String?
     @State private var weighingDose = false
+    @State private var shareURL: URL?
 
     var body: some View {
         ZStack {
@@ -37,6 +38,10 @@ struct RecipeDetailView: View {
             HStack(spacing: 12) {
                 Menu {
                     Button("Edit recipe", systemImage: "pencil") { editing = recipe }
+                    Button("Share recipe link", systemImage: "square.and.arrow.up") {
+                        do { shareURL = try RecipeShareLink.make(for: recipe) }
+                        catch { errorMessage = error.localizedDescription }
+                    }
                     Button("Preview without the machine", systemImage: "play.rectangle.on.rectangle") {
                         brewSession.present(recipe: recipe, mode: .simulation)
                     }
@@ -77,7 +82,7 @@ struct RecipeDetailView: View {
             .padding(.top, 10)
             .background(.ultraThinMaterial)
         }
-        .alert("Brew error", isPresented: .constant(errorMessage != nil)) {
+        .alert("Recipe", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
@@ -98,6 +103,11 @@ struct RecipeDetailView: View {
                 var brewed = recipe
                 brewed.dose = measuredDose
                 brewSession.present(recipe: brewed, mode: .live)
+            }
+        }
+        .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
+            if let shareURL {
+                RecipeLinkShareSheet(recipeName: recipe.name, url: shareURL)
             }
         }
         .onChange(of: stored.payload) { _, _ in

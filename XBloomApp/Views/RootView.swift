@@ -19,6 +19,7 @@ extension EnvironmentValues {
 }
 
 struct RootView: View {
+    var recipeImportCount = 0
     @Environment(\.modelContext) private var modelContext
     @Environment(BrewSessionCoordinator.self) private var brewSession
     @State private var selectedTab = 0
@@ -51,6 +52,7 @@ struct RootView: View {
             }
         }
         .environment(\.selectedTab, $selectedTab)
+        .onChange(of: recipeImportCount) { _, _ in selectedTab = 1 }
         .tint(StudioTheme.accent)
         .preferredColorScheme(.dark)
         .task {
@@ -151,26 +153,11 @@ private struct StartupLoadingView: View {
     }
 }
 
+/// Consistent machine access on the leading side of every main page.
 struct MachineToolbar: ToolbarContent {
-    @Environment(XBloomBLEClient.self) private var machine
-
     var body: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                machine.isConnected ? machine.disconnect() : machine.connect()
-            } label: {
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(machine.isConnected ? StudioTheme.mint : .secondary)
-                        .frame(width: 7, height: 7)
-                    Text(machine.isConnected ? "Connected" : "Connect")
-                        .font(.caption.weight(.bold))
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 7)
-                .background(.thinMaterial, in: Capsule())
-            }
-            .accessibilityLabel(machine.isConnected ? "Disconnect \(machine.machineName)" : "Connect xBloom")
+        ToolbarItem(placement: .topBarLeading) {
+            MachineConnectionButton()
         }
     }
 }

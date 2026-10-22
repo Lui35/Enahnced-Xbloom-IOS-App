@@ -26,6 +26,10 @@ authenticated Edge Function, so no provider key is ever shipped in the app.
 
 **[Installation guide →](INSTALLATION.md)**
 
+First launch includes a guided tour, Apple/email account options, and guest access.
+Share a single recipe from its menu and import a copy directly in xBloom—even
+offline. See [onboarding, account setup, and recipe links](docs/onboarding-and-sharing.md).
+
 ---
 
 ## What it does that the official app does not

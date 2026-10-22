@@ -14,12 +14,9 @@ struct AccountAIView: View {
     @Environment(SupabaseService.self) private var cloud
     @Environment(GeminiService.self) private var gemini
 
-    @State private var email = ""
-    @State private var password = ""
     @State private var model = ""
     @State private var statusMessage: String?
     @State private var isTesting = false
-    @State private var isAuthenticating = false
     @State private var testTask: Task<Void, Never>?
 
     var body: some View {
@@ -33,7 +30,7 @@ struct AccountAIView: View {
                         accountCard
                         modelCard
                     } else {
-                        signInCard
+                        AccountAccessView()
                     }
                     if let message = statusMessage ?? cloud.statusMessage {
                         Text(message)
@@ -226,62 +223,6 @@ struct AccountAIView: View {
 
     // MARK: - Signed out
 
-    private var signInCard: some View {
-        StudioCard(accent: StudioTheme.warning) {
-            VStack(alignment: .leading, spacing: 13) {
-                StudioSectionTitle(
-                    title: "Sign in",
-                    detail: "For sync and AI",
-                    icon: "person.crop.circle.badge.plus"
-                )
-                Text("Your cloud recipes replace the recipes currently on this iPhone. New recipes and edits then sync automatically.")
-                    .font(.caption)
-                    .foregroundStyle(StudioTheme.muted)
-
-                VStack(spacing: 10) {
-                    TextField("Email", text: $email)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Divider()
-                    SecureField("Password (8+ characters)", text: $password)
-                        .textContentType(.password)
-                }
-                .font(.subheadline)
-                .padding(13)
-                .background(StudioTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                Button {
-                    Task { await authenticate(createAccount: false) }
-                } label: {
-                    Text(isAuthenticating ? "Signing in…" : "Sign in")
-                        .font(.headline)
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .background(StudioTheme.accent, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(isAuthenticating)
-
-                Button {
-                    Task { await authenticate(createAccount: true) }
-                } label: {
-                    Text("Create an account")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(StudioTheme.accent)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                }
-                .buttonStyle(.plain)
-                .disabled(isAuthenticating)
-
-                if isAuthenticating { ProgressView().frame(maxWidth: .infinity) }
-            }
-        }
-    }
-
     private var privacyNote: some View {
         StudioCard {
             Label(
@@ -308,27 +249,6 @@ struct AccountAIView: View {
         model = trimmed
         statusMessage = "Model set to \(trimmed)."
         MachineFeedback.acknowledged()
-    }
-
-    private func authenticate(createAccount: Bool) async {
-        guard password.count >= 8 else {
-            statusMessage = "Use a password with at least 8 characters."
-            return
-        }
-        isAuthenticating = true
-        defer { isAuthenticating = false }
-        do {
-            let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
-            if createAccount {
-                try await cloud.signUp(email: address, password: password)
-            } else {
-                try await cloud.signIn(email: address, password: password)
-            }
-            password = ""
-            statusMessage = cloud.statusMessage
-        } catch {
-            statusMessage = error.localizedDescription
-        }
     }
 
     private func signOut() async {

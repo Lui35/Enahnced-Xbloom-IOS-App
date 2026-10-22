@@ -77,7 +77,7 @@ struct BeansView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 MachineToolbar()
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Add manually", systemImage: "square.and.pencil") {
                             showingManualEditor = true

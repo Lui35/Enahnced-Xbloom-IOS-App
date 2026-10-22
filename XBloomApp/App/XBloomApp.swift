@@ -1,6 +1,7 @@
 import Combine
 import SwiftData
 import SwiftUI
+import XBloomCore
 
 @main
 struct XBloomApp: App {
@@ -12,6 +13,11 @@ struct XBloomApp: App {
     @State private var beanImport: BeanImportCoordinator
 
     init() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-resetOnboarding") {
+            UserDefaults.standard.removeObject(forKey: "onboarding.completed.v1")
+        }
+        #endif
         let cloud = SupabaseService()
         let gemini = GeminiService(cloud: cloud)
         _cloud = State(initialValue: cloud)
@@ -24,7 +30,9 @@ struct XBloomApp: App {
 
     var body: some Scene {
         WindowGroup {
-            CloudBootstrapView()
+            LaunchExperienceView {
+                CloudBootstrapView()
+            }
                 .environment(machine)
                 .environment(cloud)
                 .environment(gemini)
@@ -46,14 +54,29 @@ struct XBloomApp: App {
 }
 
 private struct CloudBootstrapView: View {
+    @Environment(XBloomBLEClient.self) private var machine
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
     @Environment(SupabaseService.self) private var cloud
     @Environment(RecipeGenerationCoordinator.self) private var recipeGeneration
     @Environment(BeanImportCoordinator.self) private var beanImport
+    @AppStorage("onboarding.completed.v1") private var hasCompletedOnboarding = false
+    @State private var sharedRecipe: SharedRecipePreview?
+    @State private var recipeLinkError: String?
+    @State private var recipeImportCount = 0
 
     var body: some View {
-        RootView()
+        Group {
+            if hasCompletedOnboarding {
+                RootView(recipeImportCount: recipeImportCount)
+            } else {
+                OnboardingView { hasCompletedOnboarding = true }
+            }
+        }
+            .task(id: hasCompletedOnboarding) {
+                guard hasCompletedOnboarding else { return }
+                machine.connectOnLaunch()
+            }
             .task {
                 #if DEBUG
                 recipeGeneration.seedPreviewPendingIfRequested()
@@ -61,10 +84,10 @@ private struct CloudBootstrapView: View {
                 #endif
                 await cloud.refreshSession()
             }
-            .task(id: cloud.userID) {
+            .task(id: "\(cloud.userID?.uuidString ?? "guest")-\(hasCompletedOnboarding)") {
                 recipeGeneration.accountChanged()
                 beanImport.accountChanged()
-                guard cloud.isAuthenticated else { return }
+                guard hasCompletedOnboarding, cloud.isAuthenticated else { return }
                 do { try await Task.sleep(for: .seconds(1)) } catch { return }
                 _ = try? await cloud.sync(in: modelContext)
                 // Recover recipe and bag results saved while the app was closed.
@@ -73,7 +96,7 @@ private struct CloudBootstrapView: View {
             }
             // Also recover late results when returning from the background.
             .onChange(of: scenePhase) { _, phase in
-                guard phase == .active, cloud.isAuthenticated else { return }
+                guard phase == .active, hasCompletedOnboarding, cloud.isAuthenticated else { return }
                 Task {
                     if !cloud.isSyncing { _ = try? await cloud.sync(in: modelContext) }
                     await recipeGeneration.refresh(context: modelContext)
@@ -86,9 +109,23 @@ private struct CloudBootstrapView: View {
                 cloud.scheduleAutomaticSync(in: modelContext)
             }
             .onOpenURL { url in
-                Task {
-                    await cloud.handleOpenURL(url)
+                if RecipeShareLink.recognizes(url) {
+                    do { sharedRecipe = SharedRecipePreview(recipe: try RecipeShareLink.decode(url)) }
+                    catch { recipeLinkError = error.localizedDescription }
+                } else {
+                    Task { await cloud.handleOpenURL(url) }
                 }
             }
+            .sheet(item: Binding(
+                get: { hasCompletedOnboarding ? sharedRecipe : nil },
+                set: { sharedRecipe = $0 }
+            )) { item in
+                SharedRecipeView(recipe: item.recipe) { recipeImportCount += 1 }
+            }
+            .alert("Couldn’t open recipe", isPresented: Binding(
+                get: { recipeLinkError != nil }, set: { if !$0 { recipeLinkError = nil } }
+            )) {
+                Button("OK") { recipeLinkError = nil }
+            } message: { Text(recipeLinkError ?? "") }
     }
 }

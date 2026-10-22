@@ -201,7 +201,7 @@ struct RecipesView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 MachineToolbar()
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Create with AI", systemImage: "wand.and.sparkles") {
                             isDesigningWithAI = true

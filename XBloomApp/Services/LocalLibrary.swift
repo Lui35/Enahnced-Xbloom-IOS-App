@@ -6,6 +6,18 @@ import XBloomCore
 enum LocalLibrary {
     private static let didSeedDefaultRecipesKey = "localLibrary.didSeedDefaultRecipes"
 
+    @discardableResult
+    static func importSharedRecipe(_ recipe: Recipe, in context: ModelContext) throws -> StoredRecipe {
+        let stored = StoredRecipe(recipe: try RecipeShareLink.importedCopy(of: recipe))
+        context.insert(stored)
+        do { try context.save() }
+        catch {
+            context.delete(stored)
+            throw error
+        }
+        return stored
+    }
+
     static func seedIfNeeded(in context: ModelContext) throws {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: didSeedDefaultRecipesKey) else { return }
@@ -37,6 +49,7 @@ enum LocalLibrary {
     static func restoreCloudRecipes(
         _ remote: [(recipe: Recipe, updatedAt: Date)], replacingIDs: Set<UUID>,
         userID: UUID, metadata: CloudSyncMetadata, in context: ModelContext,
+        preserveLocalRecipes: Bool = false,
         save: (ModelContext) throws -> Void = { try $0.save() }
     ) throws {
         // Checkpoint any edits made during download. This synchronous main-actor block
@@ -60,7 +73,7 @@ enum LocalLibrary {
                 context.insert(stored)
             }
         }
-        for stored in local where replacingIDs.contains(stored.id) && !remoteIDs.contains(stored.id) {
+        for stored in local where !preserveLocalRecipes && replacingIDs.contains(stored.id) && !remoteIDs.contains(stored.id) {
             context.delete(stored)
         }
         // These are the server's baseline IDs, not local removals to upload as tombstones.
