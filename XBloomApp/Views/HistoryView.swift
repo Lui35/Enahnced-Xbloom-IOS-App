@@ -429,12 +429,12 @@ struct BrewHistoryDetailView: View {
                 title: waterTileCaption,
                 value: "\(Int((entry?.water ?? 0).rounded())) ml",
                 icon: "drop.fill",
-                tint: .blue
+                tint: StudioTheme.water
             )
             MetricTile(
                 title: "Coffee collected",
                 value: "\(String(format: "%.1f", entry?.coffeeWeight ?? 0)) g",
-                icon: "scalemass.fill",
+                icon: StudioSymbol.weight,
                 tint: StudioTheme.mint
             )
         }
@@ -450,7 +450,7 @@ struct BrewHistoryDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 StudioSectionTitle(title: "What you brewed", detail: styleTitle(recipe.brewStyle), icon: "doc.text.fill")
                 if let bean = originalBean {
-                    contextRow("Bean", value: bean.name, icon: "leaf.fill")
+                    contextRow("Bean", value: bean.name, icon: StudioSymbol.bean)
                     contextRow("Origin", value: [bean.country, bean.process].filter { !$0.isEmpty }.joined(separator: " · "), icon: "globe")
                 }
                 contextRow("Cup", value: "\(recipe.servings ?? 1) cup\(recipe.servings == 1 ? "" : "s") · \(styleTitle(recipe.brewStyle))", icon: recipe.brewStyle == .iced ? "snowflake" : "flame.fill")
@@ -656,7 +656,7 @@ struct BrewHistoryDetailView: View {
                                 series: .value("Metric", "Water")
                             )
                             .interpolationMethod(.monotone)
-                            .foregroundStyle(StudioTheme.accent)
+                            .foregroundStyle(StudioTheme.water)
                             .lineStyle(StrokeStyle(lineWidth: 3.4, lineCap: .round, lineJoin: .round))
 
                             LineMark(
@@ -753,7 +753,7 @@ struct BrewHistoryDetailView: View {
                         telemetryLegend(
                             title: "Water",
                             value: "\(Int(entry.water.rounded())) / \(Int(telemetryWaterTarget.rounded())) ml",
-                            tint: StudioTheme.accent,
+                            tint: StudioTheme.water,
                             dashed: false
                         )
                         telemetryLegend(

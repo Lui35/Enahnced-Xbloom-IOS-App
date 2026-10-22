@@ -36,7 +36,7 @@ struct RepeatBrewSheet: View {
                             }
                         }
                         if let beanID = recipe.beanID, !beans.contains(where: { $0.id == beanID }) {
-                            Label("The original bag is no longer in your library. Its inventory will not be changed.", systemImage: "leaf")
+                            Label("The original bag is no longer in your library. Its inventory will not be changed.", systemImage: StudioSymbol.bean)
                                 .font(.subheadline).foregroundStyle(StudioTheme.warning)
                         }
                         Text(recipe.useGrinder

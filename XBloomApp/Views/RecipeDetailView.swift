@@ -37,7 +37,7 @@ struct RecipeDetailView: View {
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
                 Menu {
-                    Button("Edit recipe", systemImage: "pencil") { editing = recipe }
+                    Button("Edit recipe", systemImage: "square.and.pencil") { editing = recipe }
                     Button("Share recipe link", systemImage: "square.and.arrow.up") {
                         do { shareURL = try RecipeShareLink.make(for: recipe) }
                         catch { errorMessage = error.localizedDescription }
@@ -47,6 +47,7 @@ struct RecipeDetailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
+                        .foregroundStyle(StudioTheme.accent)
                         .font(.title3.weight(.bold))
                         .frame(width: 54, height: 54)
                         .background(StudioTheme.raised, in: Circle())
@@ -60,7 +61,7 @@ struct RecipeDetailView: View {
                     if recipe.useGrinder {
                         brewAction(
                             "Weigh dose",
-                            icon: "scalemass.fill",
+                            icon: StudioSymbol.weight,
                             tint: StudioTheme.mint
                         ) {
                             weighingDose = true

@@ -29,6 +29,15 @@ final class XBloomBLEClient: NSObject {
     /// Machine-reported brew lifecycle. This, not the telemetry values, is what
     /// tells the app when grinding ends and extraction actually begins.
     private(set) var brewProgress = BrewProgressTracker()
+    private(set) var waterTankWarning: WaterTankWarning = {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-previewLowWaterWarning") {
+            return WaterTankWarning(lastLowReportAt: Date())
+        }
+        #endif
+        guard let id = UserDefaults.standard.string(forKey: "xbloomPeripheralID") else { return WaterTankWarning() }
+        return WaterTankWarning(lastLowReportAt: UserDefaults.standard.object(forKey: "xbloom.waterWarning." + id) as? Date)
+    }()
     private(set) var machineName = "xBloom Studio"
     private(set) var lastError: String?
     private(set) var isSendingRecipe = false
@@ -455,6 +464,9 @@ final class XBloomBLEClient: NSObject {
         connectionWatchdogTask?.cancel()
         central.stopScan()
         self.peripheral = peripheral
+        waterTankWarning = WaterTankWarning(lastLowReportAt: UserDefaults.standard.object(
+            forKey: "xbloom.waterWarning." + peripheral.identifier.uuidString
+        ) as? Date)
         machineName = peripheral.name ?? "xBloom Studio"
         peripheral.delegate = self
         connectionState = .connecting
@@ -627,6 +639,13 @@ final class XBloomBLEClient: NSObject {
     }
 
     private func merge(_ update: XBloomTelemetry) {
+        let previousWarning = waterTankWarning
+        waterTankWarning.ingest(command: update.lastCommand, value: update.eventValue, waterLevelOK: update.waterLevelOK)
+        if previousWarning != waterTankWarning, let id = peripheral?.identifier.uuidString {
+            let key = "xbloom.waterWarning." + id
+            if let date = waterTankWarning.lastLowReportAt { UserDefaults.standard.set(date, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
         if update.lastCommand == XBloomNotification.weightCleared.rawValue {
             scaleTareRevision += 1
         }

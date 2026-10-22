@@ -5,6 +5,8 @@ import SwiftUI
 import XBloomCore
 
 struct BrewSessionView: View {
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.modelContext) var modelContext
     @Environment(XBloomBLEClient.self) var machine
     @Environment(BrewSessionCoordinator.self) var brewSession
@@ -53,6 +55,7 @@ struct BrewSessionView: View {
     @State var waterBaseline: Double?
     @State var reconnectAttempted = false
     @State var confirmingStop = false
+    @State var confirmingWaterTank = false
     /// Held mid-recipe. The machine keeps the program loaded, so this is a
     /// hold rather than the stop that ends a session.
     @State var isPaused = false
@@ -231,12 +234,6 @@ struct BrewSessionView: View {
                     if finished, mode == .live, let savedBrew {
                         QuickBrewFeedback(brew: savedBrew)
                     }
-                    sessionTiming
-                    if let activePour, [.blooming, .pouring, .resting].contains(currentPhase) {
-                        activePourCard(activePour)
-                    } else if !finished {
-                        preparationCard
-                    }
                     if let machineWarning {
                         Label(machineWarning, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
@@ -296,13 +293,19 @@ struct BrewSessionView: View {
                     + "Stop the machine now."
             )
         }
+        .confirmationDialog("Check the water tank", isPresented: $confirmingWaterTank, titleVisibility: .visible) {
+            Button("Tank checked — start brew") { Task { await launchSession(tankChecked: true) } }
+            Button("Cancel", role: .cancel) { brewSession.dismiss() }
+        } message: {
+            Text("The machine last reported low water. The tank may be empty. Refill and firmly reseat it before continuing. This does not clear the machine’s warning.")
+        }
         .task { await launchSession() }
         .onDisappear {
             liveTicker?.cancel()
             liveTicker = nil
         }
         .onChange(of: machine.telemetry) {
-            guard mode == .live else { return }
+            guard mode == .live, hasStarted else { return }
             captureTelemetry()
         }
         .onChange(of: machine.brewProgress) {

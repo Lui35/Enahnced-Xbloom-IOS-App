@@ -16,6 +16,7 @@ struct ManualPourView: View {
     @State private var agitation = false
     @State private var status: MachineToolStatus = .idle
     @State private var isStarting = false
+    @State private var confirmingWaterTank = false
     @State private var isRunning = false
 
     private var pour: ManualPour {
@@ -53,6 +54,12 @@ struct ManualPourView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .confirmationDialog("Check the water tank", isPresented: $confirmingWaterTank, titleVisibility: .visible) {
+            Button("Tank checked — start pour") { Task { await start(tankChecked: true) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The machine last reported low water. Refill and firmly reseat the tank before continuing. This does not clear the machine’s warning.")
+        }
         .preferredColorScheme(.dark)
         .onChange(of: machine.brewProgress) {
             guard isRunning, machine.brewProgress.completedAt != nil else { return }
@@ -137,7 +144,7 @@ struct ManualPourView: View {
                     step: 0.1,
                     unit: "ml/s",
                     decimals: 1,
-                    tint: .blue
+                    tint: StudioTheme.water
                 )
             }
             .opacity(isRunning ? 0.45 : 1)
@@ -218,7 +225,12 @@ struct ManualPourView: View {
         }
     }
 
-    private func start() async {
+    private func start(tankChecked: Bool = false) async {
+        guard !isStarting, !isRunning else { return }
+        if machine.waterTankWarning.needsCheck, !tankChecked {
+            confirmingWaterTank = true
+            return
+        }
         isStarting = true
         defer { isStarting = false }
         do {

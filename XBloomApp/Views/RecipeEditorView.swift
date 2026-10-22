@@ -414,7 +414,7 @@ struct RecipeEditorView: View {
                     step: 0.1,
                     unit: "ml/s",
                     decimals: 1,
-                    tint: .blue,
+                    tint: StudioTheme.water,
                     height: 84
                 )
                 StudioDialBox(

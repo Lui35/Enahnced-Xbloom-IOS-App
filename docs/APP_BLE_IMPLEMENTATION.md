@@ -433,3 +433,20 @@ in — so a short bag brews a knowingly weaker cup instead of a failed one.
   actually delivers. Never weighed.
 - Simulated previews debit the bean bag (§13).
 - `8023` page numbers beyond 1, 2, 15, 29–31, 34, 35.
+
+### Remembered water-tank warning and preflight
+
+The existing nonzero-only `40522` rule now also feeds `WaterTankWarning`.
+Home retains the last low-water warning for the peripheral's identifier across
+reconnects and app relaunches. A `40522` zero payload or explicit affirmative
+water-OK machine-info report clears it. A missing payload, unrelated traffic,
+missing machine info, or a numeric reservoir level alone cannot clear or create
+a warning. Only the trusted status notification channel updates this state.
+
+A new live session prompts before any recipe command, timer, or Live Activity
+starts; manual pouring has the same check. Existing-session restoration and
+simulation do not start a new preflight. The user can cancel or confirm that the
+tank was checked for that attempt. Confirmation does not clear the retained
+machine warning, and refilling is not inferred from a reconnect. No new Bluetooth
+opcodes or unverified tank-level thresholds were added. The recording still does
+not establish an exact empty volume: the captured zero report was harmless.

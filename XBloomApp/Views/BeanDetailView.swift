@@ -11,7 +11,7 @@ struct BeanDetailView: View {
     @Query(sort: \StoredRecipe.updatedAt, order: .reverse) private var storedRecipes: [StoredRecipe]
     @Query(sort: \StoredBrew.completedAt, order: .reverse) private var storedBrews: [StoredBrew]
     @State private var aiBean: BeanProfile?
-    @State private var showingEditor = false
+    @State var showingEditor = false
     @State private var showingRefill = false
 
     private var linkedRecipes: [(stored: StoredRecipe, recipe: Recipe)] {
@@ -63,7 +63,7 @@ struct BeanDetailView: View {
                 } else {
                     ContentUnavailableView(
                         "Bean unavailable",
-                        systemImage: "leaf",
+                        systemImage: StudioSymbol.bean,
                         description: Text("This local bean record could not be decoded.")
                     )
                 }
@@ -87,6 +87,7 @@ struct BeanDetailView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
+                            .foregroundStyle(StudioTheme.accent)
                     }
                     .accessibilityLabel("Bean actions")
                 }
@@ -199,10 +200,10 @@ struct BeanDetailView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Image(systemName: "scalemass.fill")
-                        .foregroundStyle(StudioTheme.mint)
+                    Image(systemName: StudioSymbol.weight)
+                        .foregroundStyle(StudioTheme.inventory)
                         .frame(width: 36, height: 36)
-                        .background(StudioTheme.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .background(StudioTheme.inventory.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("About \(estimatedDoses) dose\(estimatedDoses == 1 ? "" : "s") remaining")
                             .font(.subheadline.weight(.bold))
@@ -351,33 +352,7 @@ struct BeanDetailView: View {
     }
 
     private func detailHero(_ profile: BeanProfile) -> some View {
-        HStack(spacing: 16) {
-            Image(systemName: "leaf.fill")
-                .font(.largeTitle)
-                .foregroundStyle(.black.opacity(0.72))
-                .frame(width: 74, height: 74)
-                .background(.white.opacity(0.28), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
-            VStack(alignment: .leading, spacing: 5) {
-                Text("COFFEE LIBRARY")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1.3)
-                    .foregroundStyle(.black.opacity(0.5))
-                Text(profile.name)
-                    .font(.title2.weight(.bold))
-                    .lineLimit(2)
-                Text(profile.roaster.isEmpty ? "Roaster not provided" : profile.roaster)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.black.opacity(0.58))
-            }
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(.black.opacity(0.78))
-        .padding(20)
-        .background(
-            StudioTheme.accent,
-            in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-        )
-        .padding(.top, 8)
+        BeanLibraryHeader(name: profile.name, roaster: profile.roaster)
     }
 
     private func originCard(_ profile: BeanProfile) -> some View {
@@ -387,7 +362,7 @@ struct BeanDetailView: View {
                 detailRow("Country", value: profile.country, icon: "flag.fill")
                 detailRow("Region", value: profile.region, icon: "map.fill")
                 detailRow("Producer", value: profile.producer, icon: "person.2.fill")
-                detailRow("Variety", value: profile.variety, icon: "leaf.fill")
+                detailRow("Variety", value: profile.variety, icon: StudioSymbol.bean)
                 detailRow(
                     "Altitude",
                     value: profile.altitudeMASL.map { "\($0) masl" } ?? "",
@@ -434,7 +409,7 @@ struct BeanDetailView: View {
     private func inventoryCard(_ profile: BeanProfile) -> some View {
         let remaining = max(0, min(profile.remainingWeightGrams, profile.initialWeightGrams))
         let fraction = profile.initialWeightGrams > 0 ? remaining / profile.initialWeightGrams : 0
-        return StudioCard(accent: StudioTheme.mint) {
+        return StudioCard(accent: StudioTheme.inventory) {
             VStack(spacing: 14) {
                 StudioSectionTitle(
                     title: "Bag inventory",
@@ -453,8 +428,7 @@ struct BeanDetailView: View {
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .foregroundStyle(StudioTheme.muted)
                 }
-                ProgressView(value: remaining, total: max(1, profile.initialWeightGrams))
-                    .tint(StudioTheme.mint)
+                BagInventoryProgress(remainingGrams: remaining, totalGrams: profile.initialWeightGrams)
                     .scaleEffect(x: 1, y: 1.8, anchor: .center)
 
                 Button {
@@ -469,10 +443,10 @@ struct BeanDetailView: View {
                             .foregroundStyle(StudioTheme.muted)
                     }
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(StudioTheme.mint)
+                    .foregroundStyle(StudioTheme.inventory)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
-                    .background(StudioTheme.mint.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(StudioTheme.inventory.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }

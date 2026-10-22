@@ -36,6 +36,7 @@
 		629C07D42FAEFA5F4A774596 /* RecipesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D88E4B719592471EEF5650D3 /* RecipesView.swift */; };
 		684F1F9FA3D59F721B4B0555 /* GrinderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDB1FBD500EDF962502E6514 /* GrinderView.swift */; };
 		6BE814CAF21C11E434544B58 /* XBloomCore in Frameworks */ = {isa = PBXBuildFile; productRef = C00EDAF742C0A316EE940850 /* XBloomCore */; };
+		74F48A6043D50FAA0FDDCD39 /* RecipeFoldersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2804D2950C4154E1476427 /* RecipeFoldersView.swift */; };
 		79C41BBC938C16B7AC666171 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79E013F5D81849E8BB547B3D /* SettingsView.swift */; };
 		7EA7FA107CAC30C40335C24B /* LaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63C63D9EF228F3E1B299B586 /* LaunchUITests.swift */; };
 		88E435DD3A798DB45D9148F2 /* BeanPhotoImporterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E691C16ED3546246A2928C69 /* BeanPhotoImporterView.swift */; };
@@ -196,6 +197,7 @@
 		E691C16ED3546246A2928C69 /* BeanPhotoImporterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeanPhotoImporterView.swift; sourceTree = "<group>"; };
 		EA5DC7D0059EFABD33902470 /* AIProcessingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProcessingViews.swift; sourceTree = "<group>"; };
 		EAC5A5AAF24A5BB4B324FDA9 /* xBloom app */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "xBloom app"; path = .; sourceTree = SOURCE_ROOT; };
+		EE2804D2950C4154E1476427 /* RecipeFoldersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeFoldersView.swift; sourceTree = "<group>"; };
 		F0FE5F289C313E389E22709C /* ConnectionAndSyncStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionAndSyncStatus.swift; sourceTree = "<group>"; };
 		F1583A126FC3005050AA3B57 /* XBloom.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = XBloom.entitlements; sourceTree = "<group>"; };
 		F218ADBA3E4A2E8A2103B45B /* PourControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PourControls.swift; sourceTree = "<group>"; };
@@ -337,6 +339,7 @@
 				1F2F0C72A27ED811DA4E193E /* QuickBrewFeedback.swift */,
 				B1A6D3CBAEF9DCCA1AD6D518 /* RecipeDetailView.swift */,
 				9BC8B2D6300AAC4CF2F2A02F /* RecipeEditorView.swift */,
+				EE2804D2950C4154E1476427 /* RecipeFoldersView.swift */,
 				9CDB10A981A69955AB4C1D0C /* RecipeLinkShareSheet.swift */,
 				BC95037E80A992C643657BC0 /* RecipeRow.swift */,
 				D88E4B719592471EEF5650D3 /* RecipesView.swift */,
@@ -625,6 +628,7 @@
 				F4C2FBF1DA059E5ACC6E8CE6 /* QuickBrewFeedback.swift in Sources */,
 				40E7CC15BCA49CBD735A87ED /* RecipeDetailView.swift in Sources */,
 				94F51E91623B4A8F74EAFC94 /* RecipeEditorView.swift in Sources */,
+				74F48A6043D50FAA0FDDCD39 /* RecipeFoldersView.swift in Sources */,
 				0C7CD1C896B7BFB2CEE33437 /* RecipeGenerationCoordinator.swift in Sources */,
 				A40E01CFB46BE9894E2ED301 /* RecipeJobPersistence.swift in Sources */,
 				48391A2E2EFFD72A3367C053 /* RecipeJobStore.swift in Sources */,

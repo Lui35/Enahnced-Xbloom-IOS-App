@@ -13,6 +13,9 @@ enum StudioTheme {
     static let iced = Color(red: 0.57, green: 0.75, blue: 0.86)
     static let warning = Color(red: 0.94, green: 0.73, blue: 0.43)
     static let danger = Color(red: 0.96, green: 0.53, blue: 0.49)
+    // Semantic roles shared across screens.
+    static let inventory = crema
+    static let water = iced
     static let muted = Color(red: 0.74, green: 0.77, blue: 0.80)
 
     enum Radius {
@@ -191,4 +194,10 @@ struct IconBadge: View {
             .frame(width: size, height: size)
             .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: size * 0.34, style: .continuous))
     }
+}
+
+/// Use the same symbols wherever these concepts appear.
+enum StudioSymbol {
+    static let weight = "scalemass.fill"
+    static let bean = "leaf.fill"
 }

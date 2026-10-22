@@ -133,75 +133,110 @@ extension BrewSessionView {
     }
 
     var extractionHero: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .stroke(StudioTheme.raised, lineWidth: 10)
-                Circle()
-                    .trim(from: 0, to: max(0.015, progress))
-                    .stroke(finished ? StudioTheme.mint : StudioTheme.accent, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.smooth(duration: 0.25), value: progress)
-                VStack(spacing: 3) {
-                    Image(systemName: phaseIcon)
-                        .font(.title2.weight(.bold))
-                    Text("\(Int(progress * 100))%")
-                        .font(.title3.weight(.bold).monospacedDigit())
+        VStack(spacing: 8) {
+            // Phase text must never choose the layout. Only accessibility text
+            // sizes use a vertical arrangement, consistently for the whole brew.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 14) {
+                    extractionProgressRing
+                    sessionTiming
                 }
-                .foregroundStyle(finished ? StudioTheme.mint : StudioTheme.accent)
+            } else {
+                HStack(spacing: 20) {
+                    extractionProgressRing
+                    sessionTiming
+                }
             }
-            .frame(width: 132, height: 132)
-
-            Text(stage)
-                .font(.title2.weight(.bold))
-            Text(
-                mode == .simulation
-                    ? String(format: "Realistic %.1f× preview · no machine commands", simulationSpeed)
-                    : machine.machineName
-            )
-                .font(.subheadline)
-                .foregroundStyle(StudioTheme.muted)
+            if !recipe.pours.isEmpty {
+                Text("Long ticks mark pauses")
+                .font(.caption2).foregroundStyle(StudioTheme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Small ring ticks show where pours end. Longer ticks show programmed rests. Ring progress follows water, not time.")
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 12)
+        .padding(.vertical, 10)
+    }
+
+    private var extractionProgressRing: some View {
+        ZStack {
+            Circle().stroke(StudioTheme.raised, lineWidth: 8).padding(10)
+            Circle()
+                .trim(from: 0, to: max(0.015, progress))
+                .stroke(finished ? StudioTheme.mint : StudioTheme.accent,
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .padding(10)
+                .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: progress)
+            ringCheckpoints
+            VStack(spacing: 5) {
+                if !finished, [.blooming, .pouring].contains(currentPhase), let activePour {
+                    PourPatternMark(pattern: activePour.pattern, color: StudioTheme.accent, size: 26)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(patternTitle(activePour.pattern))
+                } else {
+                    Image(systemName: phaseIcon)
+                        .font(.title3.weight(.semibold))
+                        .accessibilityHidden(true)
+                }
+                Text(stage)
+                    .font(.subheadline.weight(.bold))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(Int(progress * 100))%")
+                    .font(.caption.monospacedDigit())
+            }
+            .foregroundStyle(finished ? StudioTheme.mint : StudioTheme.accent)
+            .padding(25)
+        }
+        .frame(width: 160, height: 160)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Positions are cumulative water shares, never estimated phase durations.
+    private var ringCheckpoints: some View {
+        ForEach(Array(recipe.pours.enumerated()), id: \.element.id) { index, pour in
+            let delivered = recipe.pours.prefix(index + 1).reduce(0) { $0 + max(0, $1.volume) }
+            let fraction = min(1, max(0, Double(delivered) / Double(max(1, recipe.totalWater))))
+            let angle = fraction * 2 * Double.pi - Double.pi / 2
+            let nextPause = recipe.pours.indices.contains(index + 1) ? recipe.pours[index + 1].pauseBefore : 0
+            // The last endpoint is also the start of the circle, so it can
+            // represent the first pour's pre-pause without overlapping markers.
+            let firstPause = index == recipe.pours.count - 1 ? recipe.pours.first?.pauseBefore ?? 0 : 0
+            let hasPause = pour.pauseAfter > 0 || nextPause > 0 || firstPause > 0
+            let isRestingHere = !finished && currentPhase == .resting && index == activePourIndex
+            Capsule()
+                .fill(isRestingHere ? StudioTheme.accent.opacity(0.85) : StudioTheme.muted.opacity(0.45))
+                .frame(width: 1.5, height: hasPause ? 12 : 7)
+                .rotationEffect(.radians(angle + .pi / 2))
+                .offset(x: CGFloat(cos(angle)) * 70, y: CGFloat(sin(angle)) * 70)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Pour \(index + 1) ends at \(delivered) millilitres. \(pour.pauseAfter > 0 ? "Rest after this pour: \(pour.pauseAfter) seconds." : "") \(nextPause > 0 ? "Pause before next pour: \(nextPause) seconds." : "") \(firstPause > 0 ? "Start of ring: \(firstPause) seconds before the first pour." : "")")
+        }
     }
 
     var sessionTiming: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            HStack(spacing: 10) {
-                timingCell(
-                    title: finished ? "Completed in" : "Elapsed",
-                    value: durationText(
-                        finished
-                            ? brewElapsed
-                            : mode == .simulation
-                                ? extractionElapsed
-                                : brewingStartedAt.map { machineElapsed(since: $0, at: context.date) } ?? 0
-                    ),
-                    icon: "timer"
+            VStack(alignment: .leading, spacing: 6) {
+                Label(mode == .simulation ? "Simulated elapsed" : finished ? "Completed in" : "Elapsed",
+                      systemImage: "timer")
+                    .font(.caption).foregroundStyle(StudioTheme.muted)
+                Text(
+                    mode == .live && !finished && brewingStartedAt == nil
+                        ? "—"
+                        : durationText(finished ? brewElapsed : mode == .simulation ? extractionElapsed
+                            : brewingStartedAt.map { machineElapsed(since: $0, at: context.date) } ?? 0)
                 )
-                timingCell(
-                    title: mode == .simulation ? "Preview time" : "Estimated",
-                    value: durationText(mode == .simulation ? simulationWallDuration : estimatedExtractionDuration),
-                    icon: "hourglass"
-                )
-            }
-        }
-    }
+                .font(.system(.title, design: .rounded).weight(.semibold).monospacedDigit())
+                .contentTransition(.numericText())
+                Text(mode == .simulation ? "Preview · no machine commands" : machine.machineName)
+                    .font(.caption).foregroundStyle(StudioTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
 
-    func timingCell(title: String, value: String, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: icon)
-                .font(.caption2)
-                .foregroundStyle(StudioTheme.muted)
-            Text(value)
-                .font(.subheadline.weight(.bold).monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.control, style: .continuous))
     }
 
     var reconnectCard: some View {
@@ -213,55 +248,6 @@ extension BrewSessionView {
                 Text("The xBloom recipe keeps running on the machine. Reconnecting only attaches to telemetry — it will not stop the brew or send the recipe again.")
                     .font(.subheadline)
                     .foregroundStyle(StudioTheme.muted)
-            }
-        }
-    }
-
-    var preparationCard: some View {
-        StudioCard(accent: phaseTint) {
-            HStack(spacing: 15) {
-                Image(systemName: phaseIcon)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(phaseTint)
-                    .frame(width: 58, height: 58)
-                    .background(phaseTint.opacity(0.14), in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous))
-                // The hero above already names the phase and draws this icon.
-                // Repeating "Grinding beans" here made the viewport say it
-                // three times; the card's job is the detail underneath it.
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(preparationDetail)
-                        .font(.subheadline.weight(.semibold))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-                ProgressView()
-                    .tint(phaseTint)
-            }
-        }
-    }
-
-    func activePourCard(_ pour: PourStep) -> some View {
-        StudioCard(accent: StudioTheme.accent) {
-            HStack(spacing: 15) {
-                PourPatternMark(pattern: pour.pattern, size: 58)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(activePourIndex == 0 ? "Bloom" : "Pour \(activePourIndex + 1)")
-                        .font(.title3.weight(.bold))
-                    Text("\(pour.volume) ml · \(pour.temperature)°C · \(String(format: "%.1f", pour.flowRate)) ml/s")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(StudioTheme.muted)
-                    Text(patternTitle(pour.pattern))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(StudioTheme.accent)
-                }
-                Spacer()
-                if pour.agitationBefore || pour.agitationAfter {
-                    AgitationTimingMarks(
-                        before: pour.agitationBefore,
-                        after: pour.agitationAfter,
-                        size: 29
-                    )
-                }
             }
         }
     }
@@ -303,7 +289,7 @@ extension BrewSessionView {
                             series: .value("Metric", "Water")
                         )
                         .interpolationMethod(.monotone)
-                        .foregroundStyle(StudioTheme.accent)
+                        .foregroundStyle(StudioTheme.water)
                         .lineStyle(StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
                         LineMark(
                             x: .value("Time", sample.elapsed),
@@ -408,12 +394,12 @@ extension BrewSessionView {
                     chartLegend(
                         "Water",
                         value: "\(Int(water.rounded())) / \(recipe.totalWater) ml",
-                        color: StudioTheme.accent
+                        color: StudioTheme.water
                     )
                     chartLegend(
                         "Cup yield",
                         value: hasYieldSignal
-                            ? "\(Int(weight.rounded())) / \(Int(expectedCupYield.rounded())) g"
+                            ? "\(Int(weight.rounded())) g"
                             : "no reading",
                         color: hasYieldSignal ? StudioTheme.mint : StudioTheme.muted
                     )
@@ -437,7 +423,7 @@ extension BrewSessionView {
                     Label(
                         "The machine's scale is not reporting the cup. Check that the "
                             + "cup is on the scale plate and that nothing is leaning on it.",
-                        systemImage: "scalemass"
+                        systemImage: StudioSymbol.weight
                     )
                     .font(.caption2)
                     .foregroundStyle(StudioTheme.warning)

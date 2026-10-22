@@ -39,6 +39,7 @@ struct HomeView: View {
                         SettingsView()
                     } label: {
                         Image(systemName: "gearshape")
+                            .foregroundStyle(StudioTheme.accent)
                             .frame(width: 44, height: 44)
                     }
                     .accessibilityLabel("Settings")
@@ -74,6 +75,21 @@ struct HomeView: View {
     /// Two intrinsic-height layouts let Home fit its safe area without scrolling.
     private func dashboard(compact: Bool, minimal: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: compact ? 12 : 20) {
+            if machine.waterTankWarning.needsCheck {
+                Label {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(machine.isConnected ? "Check the water tank" : "Last report: low water")
+                            .font(.subheadline.weight(.semibold))
+                        Text("The tank may be empty. Refill and reseat it before brewing.")
+                            .font(.caption)
+                    }
+                } icon: { Image(systemName: "drop.triangle.fill").accessibilityHidden(true) }
+                .foregroundStyle(StudioTheme.warning)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(StudioTheme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+                .accessibilityIdentifier("home.waterTankWarning")
+            }
             machineTools(compact: compact, minimal: minimal)
             brewingSection(compact: compact, minimal: minimal)
             if !favoriteRecipes.isEmpty {
@@ -113,7 +129,7 @@ struct HomeView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: compact && dynamicTypeSize.isAccessibilitySize ? 1 : 3), spacing: 10) {
                 machineToolCard(title: "Scale", detail: machine.isConnected
                                 ? String(format: "%.1f g", machine.telemetry.weight ?? 0) : "Weigh & tare",
-                                icon: "scalemass", tint: StudioTheme.mint, compact: compact) { ScaleView() }
+                                icon: StudioSymbol.weight, tint: StudioTheme.mint, compact: compact) { ScaleView() }
                 machineToolCard(title: "Brewer", detail: "Single pour", icon: "drop", tint: StudioTheme.accent, compact: compact) { ManualPourView() }
                 machineToolCard(title: "Grinder", detail: "Size & speed", icon: "circle.grid.cross", tint: StudioTheme.crema, compact: compact) { GrinderView() }
             }

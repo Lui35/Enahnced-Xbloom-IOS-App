@@ -51,7 +51,7 @@ struct OnboardingArtwork: View {
                     }
                 }.offset(x: -34)
                 VStack(spacing: 8) {
-                    Image(systemName: "leaf").font(.system(size: 28, weight: .light))
+                    Image(systemName: StudioSymbol.bean).font(.system(size: 28, weight: .light))
                     Text("YOUR COFFEE").font(.system(size: 8, weight: .bold)).tracking(1)
                 }
                 .foregroundStyle(StudioTheme.background).frame(width: 92, height: 116)

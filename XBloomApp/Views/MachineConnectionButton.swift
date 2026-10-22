@@ -42,7 +42,7 @@ struct MachineConnectionButton: View {
 
 }
 
-private struct MachineConnectionPanel: View {
+struct MachineConnectionPanel: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(XBloomBLEClient.self) private var machine

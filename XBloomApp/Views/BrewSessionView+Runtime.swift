@@ -6,8 +6,12 @@ import XBloomCore
 
 extension BrewSessionView {
     @MainActor
-    func launchSession() async {
+    func launchSession(tankChecked: Bool = false) async {
         guard !hasStarted else { return }
+        if mode == .live, resumedAt == nil, machine.waterTankWarning.needsCheck, !tankChecked {
+            confirmingWaterTank = true
+            return
+        }
         hasStarted = true
 
         if mode == .live, let resumedAt {

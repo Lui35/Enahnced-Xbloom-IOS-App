@@ -55,7 +55,7 @@ extension RecipeFlavorGoal {
         case .chocolate: "cube.fill"
         case .brightAcidity: "sun.max.fill"
         case .lowAcidity: "minus.circle.fill"
-        case .teaLike: "leaf.fill"
+        case .teaLike: StudioSymbol.bean
         case .cleanFinish: "wind"
         }
     }

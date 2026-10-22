@@ -5,7 +5,7 @@ import XBloomCore
 final class OnboardingUITests: XCTestCase {
     func testRecipeLinkWaitsForGuestChoiceAndImportsIntoRecipes() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetOnboarding"]
+        app.launchArguments = ["-resetOnboarding", "-recipes.libraryLayout", "0"]
         app.launch()
         XCTAssertTrue(app.buttons["Skip tour"].waitForExistence(timeout: 10))
         var recipe = RecipeLibrary.defaults[0]

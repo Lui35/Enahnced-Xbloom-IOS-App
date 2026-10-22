@@ -155,8 +155,8 @@ struct OnboardingView: View {
         case 0:
             VStack(spacing: 20) {
                 feature("slider.horizontal.3", "Dial in every detail", "Dose, grind, temperature, flow, and every pour.")
-                feature("leaf", "Keep your coffee together", "Beans, favorite recipes, and the story of each cup.")
-                feature("scalemass", "Go beyond the brew", "A live scale, grinder controls, and manual pouring.")
+                feature(StudioSymbol.bean, "Keep your coffee together", "Beans, favorite recipes, and the story of each cup.")
+                feature(StudioSymbol.weight, "Go beyond the brew", "A live scale, grinder controls, and manual pouring.")
             }
             Text("Built for xBloom Studio · Independent companion app")
                 .font(.caption).foregroundStyle(StudioTheme.muted)
