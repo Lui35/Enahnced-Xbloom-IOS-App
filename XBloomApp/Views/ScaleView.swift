@@ -88,7 +88,7 @@ struct ScaleView: View {
     private var controls: some View {
         StudioCard {
             VStack(spacing: 12) {
-                StudioSectionTitle(title: "Scale", detail: "Live from the machine", icon: "scalemass.fill")
+                StudioSectionTitle(title: "Scale", detail: "Live from the machine", icon: StudioSymbol.weight)
 
                 Button {
                     Task { await tare() }

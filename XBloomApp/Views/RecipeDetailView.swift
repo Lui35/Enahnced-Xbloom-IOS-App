@@ -12,6 +12,7 @@ struct RecipeDetailView: View {
     @State private var editing: Recipe?
     @State private var errorMessage: String?
     @State private var weighingDose = false
+    @State private var shareURL: URL?
 
     var body: some View {
         ZStack {
@@ -36,12 +37,17 @@ struct RecipeDetailView: View {
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
                 Menu {
-                    Button("Edit recipe", systemImage: "pencil") { editing = recipe }
+                    Button("Edit recipe", systemImage: "square.and.pencil") { editing = recipe }
+                    Button("Share recipe link", systemImage: "square.and.arrow.up") {
+                        do { shareURL = try RecipeShareLink.make(for: recipe) }
+                        catch { errorMessage = error.localizedDescription }
+                    }
                     Button("Preview without the machine", systemImage: "play.rectangle.on.rectangle") {
                         brewSession.present(recipe: recipe, mode: .simulation)
                     }
                 } label: {
                     Image(systemName: "ellipsis")
+                        .foregroundStyle(StudioTheme.accent)
                         .font(.title3.weight(.bold))
                         .frame(width: 54, height: 54)
                         .background(StudioTheme.raised, in: Circle())
@@ -55,7 +61,7 @@ struct RecipeDetailView: View {
                     if recipe.useGrinder {
                         brewAction(
                             "Weigh dose",
-                            icon: "scalemass.fill",
+                            icon: StudioSymbol.weight,
                             tint: StudioTheme.mint
                         ) {
                             weighingDose = true
@@ -77,16 +83,15 @@ struct RecipeDetailView: View {
             .padding(.top, 10)
             .background(.ultraThinMaterial)
         }
-        .alert("Brew error", isPresented: .constant(errorMessage != nil)) {
+        .alert("Recipe", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
         }
         .sheet(item: $editing) { value in
             RecipeEditorView(recipe: value) { updated in
+                try LocalLibrary.saveRecipe(updated, replacing: stored, in: modelContext)
                 recipe = updated
-                stored.update(with: updated)
-                try? modelContext.save()
             }
         }
         .sheet(isPresented: $weighingDose) {
@@ -98,6 +103,11 @@ struct RecipeDetailView: View {
                 var brewed = recipe
                 brewed.dose = measuredDose
                 brewSession.present(recipe: brewed, mode: .live)
+            }
+        }
+        .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
+            if let shareURL {
+                RecipeLinkShareSheet(recipeName: recipe.name, url: shareURL)
             }
         }
         .onChange(of: stored.payload) { _, _ in

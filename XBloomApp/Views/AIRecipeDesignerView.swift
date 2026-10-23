@@ -368,7 +368,7 @@ struct AIRecipeDesignerView: View {
                     StudioSectionTitle(
                         title: "Which coffee?",
                         detail: activeBean == nil ? "Optional" : nil,
-                        icon: "leaf.fill"
+                        icon: StudioSymbol.bean
                     )
 
                     Menu {

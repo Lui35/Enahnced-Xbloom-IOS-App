@@ -135,7 +135,7 @@ struct BeanRefillView: View {
                 .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(.black.opacity(0.72))
                 .frame(width: 70, height: 70)
-                .background(StudioTheme.mint, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(StudioTheme.inventory, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             VStack(alignment: .leading, spacing: 5) {
                 Text(bean.name)
                     .font(.title3.weight(.bold))
@@ -150,7 +150,7 @@ struct BeanRefillView: View {
     }
 
     private var sizeCard: some View {
-        StudioCard(accent: StudioTheme.mint) {
+        StudioCard(accent: StudioTheme.inventory) {
             VStack(alignment: .leading, spacing: 14) {
                 StudioSectionTitle(title: "New bag size", detail: "Up to 1 kg", icon: "bag.fill")
                 HStack(spacing: 9) {
@@ -164,7 +164,7 @@ struct BeanRefillView: View {
                                 .padding(.vertical, 12)
                                 .foregroundStyle(size == option ? .black : .white)
                                 .background(
-                                    size == option ? StudioTheme.mint : StudioTheme.raised,
+                                    size == option ? StudioTheme.inventory : StudioTheme.raised,
                                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 )
                         }
@@ -180,7 +180,7 @@ struct BeanRefillView: View {
                         range: 50...1_000,
                         step: 10,
                         unit: "g",
-                        tint: StudioTheme.mint,
+                        tint: StudioTheme.inventory,
                         height: 82
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))

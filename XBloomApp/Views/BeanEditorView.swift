@@ -35,6 +35,16 @@ struct BeanEditorView: View {
                                 StudioSectionTitle(title: "Bag", detail: "Required", icon: "bag.fill")
                                 StudioTextField(title: "Coffee name", text: $profile.name, icon: "cup.and.saucer.fill")
                                 StudioTextField(title: "Roaster", text: $profile.roaster, icon: "building.2.fill")
+                                Toggle("Roast date known", isOn: Binding(
+                                    get: { profile.roastDate != nil },
+                                    set: { profile.roastDate = $0 ? Date() : nil }
+                                )).tint(StudioTheme.mint)
+                                if profile.roastDate != nil {
+                                    DatePicker("Roast date", selection: Binding(
+                                        get: { profile.roastDate ?? Date() },
+                                        set: { profile.roastDate = $0 }
+                                    ), in: ...Date(), displayedComponents: .date)
+                                }
                                 StudioDialBox(
                                     title: "Bag weight",
                                     value: $profile.initialWeightGrams,
@@ -55,7 +65,7 @@ struct BeanEditorView: View {
                                 )
                                 StudioTextField(title: "Producer", text: $profile.producer, icon: "person.2.fill")
                                 fieldPair(
-                                    StudioTextField(title: "Variety", text: $profile.variety, icon: "leaf.fill"),
+                                    StudioTextField(title: "Variety", text: $profile.variety, icon: StudioSymbol.bean),
                                     StudioTextField(title: "Altitude (masl)", text: altitudeText, icon: "mountain.2.fill")
                                 )
                             }
@@ -111,7 +121,7 @@ struct BeanEditorView: View {
 
     private var beanIdentity: some View {
         HStack(spacing: 16) {
-            Image(systemName: "leaf.fill")
+            Image(systemName: StudioSymbol.bean)
                 .font(.largeTitle)
                 .foregroundStyle(.black.opacity(0.72))
                 .frame(width: 74, height: 74)

@@ -289,7 +289,7 @@ struct DoseWeighingView: View {
                 StudioSectionTitle(
                     title: "Dose used",
                     detail: weighing.adjustment == nil ? "From the scale" : "Set by hand",
-                    icon: "scalemass.fill"
+                    icon: StudioSymbol.weight
                 )
                 StudioDialBox(
                     title: "Adjust if needed",

@@ -44,7 +44,7 @@ targets:
         NSSupportsLiveActivities: true
         UIBackgroundModes:
           - bluetooth-central
-        UILaunchScreen: {}
+        UILaunchStoryboardName: LaunchScreen
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # Filled in from Secrets.xcconfig, which is not in the repository.
@@ -55,7 +55,13 @@ targets:
       Debug: Secrets.xcconfig
       Release: Secrets.xcconfig
     settings:
+      configs:
+        Debug:
+          # Personal Team device testing; Release retains Sign in with Apple.
+          "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": ""
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG XBLOOM_PERSONAL_TEAM"
       base:
+        CODE_SIGN_ENTITLEMENTS: XBloomApp/Resources/XBloom.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: coffee.xbloom.native
         PRODUCT_NAME: xBloom
         CODE_SIGN_STYLE: Automatic
@@ -84,6 +90,21 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/xBloom.app/xBloom"
         BUNDLE_LOADER: "$(TEST_HOST)"
+
+  XBloomUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/XBloomUITests
+    dependencies:
+      - target: XBloom
+      - package: XBloomCore
+        product: XBloomCore
+    settings:
+      base:
+        SWIFT_VERSION: 6.0
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: XBloom
 
   XBloomLiveActivity:
     type: app-extension
@@ -125,6 +146,7 @@ schemes:
     test:
       targets:
         - XBloomAppTests
+        - XBloomUITests
     run:
       config: Debug
     archive:

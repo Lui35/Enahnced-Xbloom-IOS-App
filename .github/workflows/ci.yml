@@ -51,11 +51,13 @@ jobs:
 
       # XBloom.xcodeproj is generated and gitignored in spirit: regenerating it
       # here also proves project.yml still describes a project that builds.
-      # No Supabase project in CI, on purpose: a public build must not carry
-      # anybody's backend. The app is fully usable without one — only sync and
-      # the AI features need it.
-      - name: Create an empty backend configuration
-        run: cp Secrets.example.xcconfig Secrets.xcconfig
+      # Show the account form without connecting tests to a real backend.
+      # .invalid is reserved; form tests stop before submitting credentials.
+      - name: Create a dummy backend configuration for UI tests
+        run: |
+          cp Secrets.example.xcconfig Secrets.xcconfig
+          echo 'SUPABASE_HOST = ui-tests.invalid' >> Secrets.xcconfig
+          echo 'SUPABASE_PUBLISHABLE_KEY = ui-test-placeholder' >> Secrets.xcconfig
 
       - name: Generate the Xcode project
         run: xcodegen generate
@@ -71,5 +73,15 @@ jobs:
             -destination "platform=iOS Simulator,id=$XBLOOM_TEST_SIMULATOR" \
             -parallel-testing-enabled NO \
             -skipPackagePluginValidation \
+            -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
-            | tail -60
+            | tee xcodebuild.log
+
+      - name: Upload app test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-test-results
+          path: |
+            xcodebuild.log
+            TestResults.xcresult

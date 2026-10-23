@@ -5,102 +5,184 @@ import UniformTypeIdentifiers
 import XBloomCore
 
 struct SettingsView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var modelContext
     @Environment(SupabaseService.self) private var cloud
     @Environment(XBloomBLEClient.self) private var machine
     @Environment(BrewSessionCoordinator.self) private var brewSession
     @State private var confirmingMachineStop = false
     @State private var machineStopMessage: String?
+    @State private var showingGuide = false
+    @State private var showingMachine = false
 
     var body: some View {
         ZStack {
             StudioBackground()
-            ScrollView {
-                LazyVStack(spacing: 22) {
-                    HStack(spacing: 15) {
-                        IconBadge(systemImage: "cup.and.saucer.fill", tint: StudioTheme.crema, size: 58)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("xBloom companion")
-                                .font(.title2.weight(.bold))
-                            Text("Private, local, and made for your coffee")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
+            Form {
+                Section {
+                    accountSummary
+                    DisclosureGroup {
+                        automaticSyncSettings.padding(.vertical, 8)
+                    } label: {
+                        settingsRow(icon: "arrow.triangle.2.circlepath", title: "Automatic sync",
+                                    subtitle: syncSummary, tint: syncTint)
                     }
-                    .studioCard()
-
-                    settingsSection("Account & sync") {
-                        settingsLink("Account & AI", icon: "person.crop.circle.fill",
-                            subtitle: cloud.email ?? "Sign in for your cloud library and AI",
-                            tint: StudioTheme.accent) { AccountAIView() }
-                        Divider()
-                        automaticSyncSettings
+                    .tint(StudioTheme.accent)
+                    .accessibilityIdentifier("settings.sync")
+                } header: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("YOUR STUDIO")
+                            .font(.caption2.weight(.semibold)).tracking(2)
+                            .foregroundStyle(StudioTheme.accent)
+                        Text("Make it yours.")
+                            .font(.system(.largeTitle, design: .serif).weight(.regular))
+                            .foregroundStyle(.white)
+                        Text("Your coffee, your preferences.")
+                            .font(.subheadline).foregroundStyle(StudioTheme.muted)
                     }
-
-                    settingsSection("Coffee library") {
-                        settingsLink("Brew history", icon: "clock.arrow.circlepath",
-                            subtitle: "Your cups, ratings, and feedback", tint: StudioTheme.accent) { HistoryView() }
-                        Divider()
-                        settingsLink("Recipe transfer", icon: "square.and.arrow.up.on.square.fill",
-                            subtitle: "Import and export recipe files", tint: StudioTheme.crema) { RecipeTransferView() }
-                    }
-
-                    settingsSection("Machine") {
-                        Toggle(isOn: Binding(
-                            get: { MachineFeedback.isSoundEnabled },
-                            set: { enabled in
-                                MachineFeedback.isSoundEnabled = enabled
-                                if enabled { MachineFeedback.previewConnectionSound() }
-                            }
-                        )) {
-                            HStack(spacing: 14) {
-                                IconBadge(systemImage: "speaker.wave.2.fill", tint: StudioTheme.accent, size: 44)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text("Connection sound").font(.headline)
-                                    Text("Chime when the machine connects or disconnects")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .tint(StudioTheme.mint)
-                        Divider()
-                        settingsLink("Maintenance", icon: "wrench.and.screwdriver.fill",
-                            subtitle: "Cleaning, calibration, and descaling", tint: StudioTheme.crema) { MaintenanceView() }
-                        Divider()
-                        settingsLink("Diagnostics", icon: "waveform.path.ecg",
-                            subtitle: "Record and share Bluetooth traffic", tint: StudioTheme.warning) { MachineDiagnosticsView() }
-                        Divider()
-                        machineStopRow
-                    }
-
-                    settingsSection("Storage & privacy") {
-                        settingsLink("On-device storage", icon: "internaldrive.fill",
-                            subtitle: "Offline library and storage usage", tint: StudioTheme.mint) { OnDeviceStorageView() }
-                        Text("Your library stays available offline. Signing in loads your account’s cloud recipes; changes then sync automatically.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-
-                    Text("xBloom Native · Version 0.1")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.bottom)
+                    .textCase(nil)
+                    .padding(.top, 10)
+                    .padding(.bottom, 12)
+                    .accessibilityAddTraits(.isHeader)
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 30)
+                .listRowBackground(StudioTheme.panel)
+
+                Section("Your machine") {
+                    Button { showingMachine = true } label: {
+                        actionRow(icon: "antenna.radiowaves.left.and.right", title: "Bluetooth connection",
+                                  subtitle: machine.isConnected ? "Connected to \(machine.machineName)" : "Connect and view live readings",
+                                  tint: machine.isConnected ? StudioTheme.mint : StudioTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.machine")
+
+                    Toggle(isOn: Binding(
+                        get: { MachineFeedback.isSoundEnabled },
+                        set: { enabled in
+                            MachineFeedback.isSoundEnabled = enabled
+                            if enabled { MachineFeedback.previewConnectionSound() }
+                        }
+                    )) {
+                        settingsRow(icon: "speaker.wave.2", title: "Connection sound",
+                                    subtitle: "A chime when your machine connects or disconnects", tint: StudioTheme.accent)
+                    }
+                    .tint(StudioTheme.mint)
+                    .accessibilityIdentifier("settings.connectionSound")
+
+                    settingsLink("Maintenance", icon: "wrench.and.screwdriver",
+                                 subtitle: "Cleaning, calibration, and descaling", tint: StudioTheme.crema) { MaintenanceView() }
+                    settingsLink("Diagnostics", icon: "waveform.path.ecg",
+                                 subtitle: "Record and share Bluetooth traffic", tint: StudioTheme.warning) { MachineDiagnosticsView() }
+                }
+                .listRowBackground(StudioTheme.panel)
+
+                Section("Coffee library") {
+                    settingsLink("Brew history", icon: "clock.arrow.circlepath",
+                                 subtitle: "Your cups, ratings, and feedback", tint: StudioTheme.accent) { HistoryView() }
+                    settingsLink("Recipe transfer", icon: "square.and.arrow.up.on.square",
+                                 subtitle: "Import and export recipe files", tint: StudioTheme.crema) { RecipeTransferView() }
+                    settingsLink("Import recipe link", icon: "link",
+                                 subtitle: "Preview a recipe before saving it", tint: StudioTheme.mint) { RecipeLinkImportView() }
+                }
+                .listRowBackground(StudioTheme.panel)
+
+                Section {
+                    Button { showingGuide = true } label: {
+                        actionRow(icon: "book.closed", title: "App guide",
+                                  subtitle: "Connect, brew, and explore your studio", tint: StudioTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.guide")
+                    settingsLink("On-device storage", icon: "internaldrive",
+                                 subtitle: "Offline library and storage usage", tint: StudioTheme.mint) { OnDeviceStorageView() }
+                } header: {
+                    Text("App & privacy")
+                } footer: {
+                    Label("Your library stays available offline. Signing in loads your account’s cloud recipes; changes then sync automatically.",
+                          systemImage: "lock.shield")
+                        .font(.caption).foregroundStyle(StudioTheme.muted)
+                        .padding(.top, 6)
+                }
+                .listRowBackground(StudioTheme.panel)
+
+                Section {
+                    machineStopRow
+                } header: {
+                    Text("Machine safety")
+                } footer: {
+                    Text("Stops a pour even if it was started on the machine or in another app.")
+                        .font(.caption).foregroundStyle(StudioTheme.muted)
+                }
+                .listRowBackground(StudioTheme.panel)
+
+                Section {
+                    VStack(spacing: 6) {
+                        Text("xBloom").font(.system(.title3, design: .serif))
+                        Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(StudioTheme.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
             }
+            .scrollContentBackground(.hidden)
+            .listSectionSpacing(24)
+            .listRowSeparatorTint(StudioTheme.line)
+            .scrollIndicators(.hidden)
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(StudioTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .preferredColorScheme(.dark)
+        .sheet(isPresented: $showingGuide) {
+            OnboardingView(isGuide: true) { showingGuide = false }
+        }
+        .sheet(isPresented: $showingMachine) { MachineConnectionPanel() }
     }
 
-    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            StudioSectionTitle(title: title)
-            content()
+    private var accountSummary: some View {
+        NavigationLink {
+            AccountAIView()
+        } label: {
+            HStack(spacing: 14) {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: cloud.isAuthenticated ? "person.crop.circle.fill" : "person.crop.circle")
+                        .font(.system(size: 38, weight: .light))
+                        .foregroundStyle(cloud.isAuthenticated ? StudioTheme.mint : StudioTheme.accent)
+                        .frame(width: 52, height: 60)
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Your account")
+                        .font(.system(.title3, design: .serif).weight(.medium))
+                        .foregroundStyle(.white)
+                    Text(cloud.email ?? (cloud.isAuthenticated ? "Signed in" : "Guest mode · saved on this iPhone"))
+                        .font(.caption).foregroundStyle(StudioTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(cloud.isAuthenticated ? "Manage account & AI" : "Sign in for sync & AI")
+                        .font(.caption.weight(.semibold)).foregroundStyle(StudioTheme.accent)
+                }
+            }
+            .padding(.vertical, 6)
         }
-        .studioCard()
+        .accessibilityIdentifier("settings.account")
+    }
+
+    private var syncSummary: String {
+        if !cloud.isAuthenticated { return "Local library · sign in to sync" }
+        if cloud.isSyncing { return "Syncing your library…" }
+        if cloud.lastSyncError != nil { return "Saved on this iPhone · retry pending" }
+        if cloud.syncState.hasPendingChanges { return "Changes waiting to sync" }
+        return cloud.lastSyncAt == nil ? "Automatic sync is on" : "Your library is up to date"
+    }
+
+    private var syncTint: Color {
+        cloud.lastSyncError != nil ? StudioTheme.warning : cloud.isAuthenticated ? StudioTheme.mint : StudioTheme.muted
     }
 
     private func settingsLink<Destination: View>(
@@ -110,34 +192,52 @@ struct SettingsView: View {
         NavigationLink(destination: destination) {
             settingsRow(icon: icon, title: title, subtitle: subtitle, tint: tint)
         }
-        .buttonStyle(.plain)
+    }
+
+    private func settingsRow(icon: String, title: String, subtitle: String, tint: Color) -> some View {
+        HStack(spacing: 12) {
+            IconBadge(systemImage: icon, tint: tint, size: 36).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.weight(.medium)).foregroundStyle(.white)
+                Text(subtitle).font(.caption).foregroundStyle(StudioTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private func actionRow(icon: String, title: String, subtitle: String, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            settingsRow(icon: icon, title: title, subtitle: subtitle, tint: tint)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold)).foregroundStyle(StudioTheme.muted)
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
     }
 
     private var automaticSyncSettings: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Automatic sync", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                if cloud.isSyncing { ProgressView() }
-                else { Text(cloud.isAuthenticated ? "On" : "Sign-in needed").font(.caption).foregroundStyle(.secondary) }
-            }
+        VStack(alignment: .leading, spacing: 12) {
             Text(cloud.isAuthenticated
                 ? "Syncs when you open the app and after you make changes. Offline changes upload when you reconnect."
                 : "Sign in to load your cloud recipes and keep new changes in sync.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(StudioTheme.muted)
             if cloud.isAuthenticated {
                 if cloud.lastSyncError != nil {
                     Text("Sync paused. Your changes are saved on this iPhone. We’ll retry automatically.")
                         .font(.caption).foregroundStyle(StudioTheme.warning)
                 } else if let date = cloud.lastSyncAt {
                     Text("Last synced \(date.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(StudioTheme.muted)
                 }
                 Button {
                     Task { _ = try? await cloud.sync(in: modelContext) }
                 } label: {
-                    Label("Sync now", systemImage: "arrow.clockwise")
+                    HStack {
+                        Label(cloud.isSyncing ? "Syncing…" : "Sync now", systemImage: "arrow.clockwise")
+                        if cloud.isSyncing { ProgressView() }
+                    }.frame(minHeight: 44)
                 }
                 .buttonStyle(.bordered)
                 .disabled(cloud.isSyncing)
@@ -145,30 +245,25 @@ struct SettingsView: View {
         }
     }
 
-    /// The last resort for a machine that is pouring when nothing in the app is
-    /// showing a brew — one started from the xBloom's own panel or another app,
-    /// or a session this app lost track of while the link was down.
-    ///
-    /// Deliberately not conditional on the app believing a brew is running: the
-    /// case it exists for is precisely the one where the app does not know.
     private var machineStopRow: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
                 confirmingMachineStop = true
             } label: {
                 HStack(spacing: 14) {
-                    IconBadge(systemImage: "stop.circle.fill", tint: StudioTheme.danger, size: 44)
+                    IconBadge(systemImage: "stop.circle", tint: StudioTheme.danger, size: 36)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Stop the machine now")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(StudioTheme.danger)
                         Text(
                             machine.isConnected
                                 ? "Sends a stop to the xBloom, whatever started the brew"
                                 : "Connect to the machine to send a stop"
                         )
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(StudioTheme.muted)
                     }
                     Spacer()
                 }
@@ -182,7 +277,7 @@ struct SettingsView: View {
             if let machineStopMessage {
                 Text(machineStopMessage)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(StudioTheme.muted)
             }
         }
         .confirmationDialog(
@@ -210,38 +305,6 @@ struct SettingsView: View {
             machineStopMessage = error.localizedDescription
         }
     }
-
-    /// `isComplete` puts a tick on the row, so a screen that has already been
-    /// dealt with says so without being opened.
-    private func settingsRow(
-        icon: String,
-        title: String,
-        subtitle: String,
-        tint: Color,
-        isComplete: Bool = false
-    ) -> some View {
-        HStack(spacing: 14) {
-            IconBadge(systemImage: icon, tint: tint, size: 44)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline).foregroundStyle(.primary)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if isComplete {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(StudioTheme.mint)
-            }
-            Image(systemName: "chevron.right")
-                .font(.caption.bold())
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-        .contentShape(Rectangle())
-    }
-
-
-
 
 }
 
@@ -511,7 +574,7 @@ private struct OnDeviceStorageView: View {
                         )
 
                         storageMetric(
-                            icon: "leaf.fill",
+                            icon: StudioSymbol.bean,
                             title: "Beans",
                             value: "\(beans.count)",
                             detail: archivedBeans == 0

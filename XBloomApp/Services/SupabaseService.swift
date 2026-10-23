@@ -98,6 +98,16 @@ final class SupabaseService {
         statusMessage = "Loading your cloud recipes…"
     }
 
+    func signInWithApple(idToken: String, nonce: String) async throws {
+        guard Self.isConfigured else { throw CloudError.notConfigured }
+        let session = try await client.auth.signInWithIdToken(
+            credentials: .init(provider: .apple, idToken: idToken, nonce: nonce)
+        )
+        apply(session: session)
+        recipeRestoreRequestedFor = session.user.id
+        statusMessage = "Loading your cloud recipes…"
+    }
+
     func signOut() async throws {
         automaticSyncTask?.cancel()
         try await client.auth.signOut()
@@ -131,6 +141,7 @@ final class SupabaseService {
     }
 
     func handleOpenURL(_ url: URL) async {
+        guard url.scheme?.lowercased() == "xbloom", url.host == "login-callback" else { return }
         do {
             let session = try await client.auth.session(from: url)
             apply(session: session)
@@ -323,6 +334,18 @@ final class SupabaseService {
         )
         guard self.userID == userID else { throw CancellationError() }
         if restoreRecipes {
+            // Only a never-synced, empty account adopts the guest library. An
+            // established account that deleted all its recipes must stay empty.
+            struct ProfileState: Decodable { let initial_sync_completed_at: Date? }
+            let profiles: [ProfileState] = try await database.from("profiles")
+                .select("initial_sync_completed_at")
+                .eq("user_id", value: userID)
+                .execute().value
+            guard self.userID == userID else { throw CancellationError() }
+            let adoptsGuestLibrary = remoteRecipes.isEmpty
+                && metadata.recipeLibraryAccountID == nil
+                && metadata.knownIDs(for: .recipe).isEmpty
+                && profiles.first?.initial_sync_completed_at == nil
             // Validate the complete response before removing any local recipes.
             let snapshot = try remoteRecipes.filter { $0.deletedAt == nil }.map { row in
                 guard var recipe = row.decodedRecipe else {
@@ -333,7 +356,8 @@ final class SupabaseService {
             }
             try applyCloudChanges {
                 try LocalLibrary.restoreCloudRecipes(snapshot, replacingIDs: replacingRecipeIDs,
-                    userID: userID, metadata: metadata, in: context)
+                    userID: userID, metadata: metadata, in: context,
+                    preserveLocalRecipes: adoptsGuestLibrary)
             }
             recipeRestoreRequestedFor = nil
         }

@@ -45,11 +45,12 @@ struct RecipesView: View {
     @State private var isDesigningWithAI = false
     @State private var searchText = ""
     @State private var selectedFilter: RecipeLibraryFilter = .all
+    @AppStorage("recipes.libraryLayout") private var libraryLayout = 0
 
     /// Generations worth showing on the filter that is on screen.
     private var visiblePending: [RecipeGenerationCoordinator.Pending] {
         generation.pending.filter { item in
-            switch selectedFilter {
+            switch libraryLayout == 1 ? .all : selectedFilter {
             case .all: true
             case .favorites: false
             case .hot: item.style == .hot
@@ -96,8 +97,10 @@ struct RecipesView: View {
 
                         recipeSearchField
 
-                        RecipeLibraryFilterPicker(selection: $selectedFilter)
-                            .padding(.bottom, 4)
+                        if libraryLayout == 0 {
+                            RecipeLibraryFilterPicker(selection: $selectedFilter)
+                                .padding(.bottom, 4)
+                        }
 
                         // A request that failed after the designer was closed
                         // would otherwise just remove its card, which reads as
@@ -149,7 +152,7 @@ struct RecipesView: View {
                             .transition(.popIn)
                         }
 
-                        if filteredRecipes.isEmpty, visiblePending.isEmpty {
+                        if libraryLayout == 0, filteredRecipes.isEmpty, visiblePending.isEmpty {
                             ContentUnavailableView(
                                 searchText.isEmpty ? (selectedFilter == .favorites ? "No favorites yet" : "No recipes in this collection") : "No recipes found",
                                 systemImage: searchText.isEmpty ? "cup.and.saucer" : "magnifyingglass",
@@ -162,31 +165,12 @@ struct RecipesView: View {
                             .frame(minHeight: 320)
                         }
 
-                        ForEach(filteredRecipes) { stored in
-                            if let recipe = stored.recipe {
-                                VStack(spacing: 0) {
-                                    NavigationLink {
-                                        RecipeDetailView(stored: stored, recipe: recipe)
-                                    } label: {
-                                        RecipeRow(recipe: recipe)
-                                            .padding(16)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .clipShape(RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
-                                .background(StudioTheme.panel, in: RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: StudioTheme.Radius.card, style: .continuous)
-                                        .stroke(.white.opacity(0.08), lineWidth: 1)
-                                }
-                                .transition(.popIn)
-                                .contextMenu {
-                                    FavoriteRecipeButton(stored: stored)
-                                    // Historical brews retain their own snapshots and usage.
-                                    Button("Delete", systemImage: "trash", role: .destructive) {
-                                        try? LocalLibrary.delete(recipe: stored, in: modelContext)
-                                    }
-                                }
+                        if libraryLayout == 1 {
+                            RecipeFoldersView(recipes: recipes, filter: .all, searchText: searchText)
+                        } else {
+                            ForEach(filteredRecipes) { stored in
+                                RecipeLibraryCard(stored: stored)
+                                    .transition(.popIn)
                             }
                         }
                     }
@@ -201,7 +185,22 @@ struct RecipesView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 MachineToolbar()
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("View as", selection: $libraryLayout) {
+                            Label("List", systemImage: "list.bullet").tag(0)
+                            Label("Folders", systemImage: StudioSymbol.bean).tag(1)
+                        }
+                    } label: {
+                        Image(systemName: libraryLayout == 1 ? "square.grid.2x2" : "list.bullet")
+                            .foregroundStyle(StudioTheme.accent)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Recipe view: \(libraryLayout == 1 ? "Folders" : "List")")
+                    .accessibilityHint("Choose list or bean folders")
+                    .accessibilityIdentifier("recipes.layout")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Create with AI", systemImage: "wand.and.sparkles") {
                             isDesigningWithAI = true
@@ -218,6 +217,7 @@ struct RecipesView: View {
                         }
                     } label: {
                         Image(systemName: "plus")
+                            .foregroundStyle(StudioTheme.accent)
                     }
                 }
             }
@@ -228,8 +228,7 @@ struct RecipesView: View {
             }
             .sheet(item: $draft) { recipe in
                 RecipeEditorView(recipe: recipe) { saved in
-                    modelContext.insert(StoredRecipe(recipe: saved))
-                    try? modelContext.save()
+                    try LocalLibrary.saveRecipe(saved, in: modelContext)
                 }
             }
         }

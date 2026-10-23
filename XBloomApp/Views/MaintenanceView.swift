@@ -158,7 +158,7 @@ struct MaintenanceView: View {
                     usageMetric("Recorded brews", value: lifetime.brews.formatted(), icon: "cup.and.saucer.fill")
                     usageMetric("Beans ground", value: lifetime.groundGrams >= 1_000
                                 ? String(format: "%.2f kg", lifetime.groundGrams / 1_000)
-                                : String(format: "%.0f g", lifetime.groundGrams), icon: "leaf.fill")
+                                : String(format: "%.0f g", lifetime.groundGrams), icon: StudioSymbol.bean)
                 }
                 Label("Deleting bags or recipes keeps your brew history and these counts.",
                       systemImage: "lock.shield")

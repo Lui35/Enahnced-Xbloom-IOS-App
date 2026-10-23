@@ -6,7 +6,8 @@ struct RecipeEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State var recipe: Recipe
     @State private var expandedPourID: UUID?
-    let onSave: (Recipe) -> Void
+    @State private var saveError: String?
+    let onSave: (Recipe) throws -> Void
 
     private let parameterColumns = [
         GridItem(.flexible()),
@@ -61,12 +62,21 @@ struct RecipeEditorView: View {
                     subtitle: saveMessage,
                     enabled: canSave
                 ) {
-                    onSave(recipe)
-                    dismiss()
+                    do {
+                        try onSave(recipe)
+                        dismiss()
+                    } catch {
+                        saveError = error.localizedDescription
+                    }
                 }
             }
         }
         .preferredColorScheme(.dark)
+        .alert("Couldn’t save recipe", isPresented: Binding(
+            get: { saveError != nil }, set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK") { saveError = nil }
+        } message: { Text(saveError ?? "") }
         .onAppear {
             if recipe.brewStyle == .cold {
                 recipe.brewStyle = .iced
@@ -414,7 +424,7 @@ struct RecipeEditorView: View {
                     step: 0.1,
                     unit: "ml/s",
                     decimals: 1,
-                    tint: .blue,
+                    tint: StudioTheme.water,
                     height: 84
                 )
                 StudioDialBox(

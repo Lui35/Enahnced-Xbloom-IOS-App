@@ -6,8 +6,12 @@ import XBloomCore
 
 extension BrewSessionView {
     @MainActor
-    func launchSession() async {
+    func launchSession(tankChecked: Bool = false) async {
         guard !hasStarted else { return }
+        if mode == .live, resumedAt == nil, machine.waterTankWarning.needsCheck, !tankChecked {
+            confirmingWaterTank = true
+            return
+        }
         hasStarted = true
 
         if mode == .live, let resumedAt {
@@ -580,17 +584,6 @@ extension BrewSessionView {
         }
     }
 
-    var phaseTint: Color {
-        return switch currentPhase {
-        case .grinding: StudioTheme.crema
-        case .blooming, .pouring: StudioTheme.accent
-        case .resting: StudioTheme.muted
-        case .complete: StudioTheme.mint
-        case .error: StudioTheme.danger
-        case .preparing: StudioTheme.muted
-        }
-    }
-
     /// True once the beans are ground and the machine is working towards the
     /// first pour.
     var hasGroundBeans: Bool {
@@ -620,21 +613,6 @@ extension BrewSessionView {
     func machineElapsed(since start: Date, at now: Date = Date()) -> TimeInterval {
         let paused = pausedTotal + (pausedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0)
         return max(0, now.timeIntervalSince(start) - paused)
-    }
-
-    /// What the machine's own display reads. Kept separate from
-    /// `extractionElapsed`, which is the chart's zero and has to stay on the
-    /// first pour so the recipe markers line up with the data.
-
-    var preparationDetail: String {
-        return switch currentPhase {
-        case .grinding: "Grinding \(Int(recipe.dose.rounded())) g at \(recipe.rpm.rawValue) RPM"
-        case .resting: "Letting the coffee bed drain before the next pour"
-        case .error: "Check the machine display before restarting"
-        default: mode == .live
-            ? "Waiting for the machine to start · pours have not begun"
-            : "Preparing the simulated machine workflow"
-        }
     }
 
     func activityState(phase: BrewProgramPhase) -> BrewActivityAttributes.ContentState {

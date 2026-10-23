@@ -5,7 +5,16 @@ private struct SelectedTabKey: EnvironmentKey {
     static let defaultValue: Binding<Int>? = nil
 }
 
+private struct BeanEditRequestKey: EnvironmentKey {
+    static let defaultValue: Binding<UUID?>? = nil
+}
+
 extension EnvironmentValues {
+    var beanEditRequest: Binding<UUID?>? {
+        get { self[BeanEditRequestKey.self] }
+        set { self[BeanEditRequestKey.self] = newValue }
+    }
+
     /// The tab a screen can send the user to.
     ///
     /// A sheet presented from deep inside one tab cannot reach `RootView`'s
@@ -19,9 +28,11 @@ extension EnvironmentValues {
 }
 
 struct RootView: View {
+    var recipeImportCount = 0
     @Environment(\.modelContext) private var modelContext
     @Environment(BrewSessionCoordinator.self) private var brewSession
     @State private var selectedTab = 0
+    @State private var beanEditRequest: UUID?
     @State private var seedError: String?
     @State private var isLaunching = true
 
@@ -35,7 +46,7 @@ struct RootView: View {
                     .tabItem { Label("Recipes", systemImage: "list.bullet.rectangle") }
                     .tag(1)
                 BeansView()
-                    .tabItem { Label("Beans", systemImage: "leaf") }
+                    .tabItem { Label("Beans", systemImage: StudioSymbol.bean) }
                     .tag(2)
                 NavigationStack {
                     HistoryView()
@@ -51,6 +62,8 @@ struct RootView: View {
             }
         }
         .environment(\.selectedTab, $selectedTab)
+        .environment(\.beanEditRequest, $beanEditRequest)
+        .onChange(of: recipeImportCount) { _, _ in selectedTab = 1 }
         .tint(StudioTheme.accent)
         .preferredColorScheme(.dark)
         .task {
@@ -125,7 +138,7 @@ private struct StartupLoadingView: View {
                             RoundedRectangle(cornerRadius: 30, style: .continuous)
                                 .stroke(StudioTheme.accent.opacity(0.26), lineWidth: 1)
                         }
-                    Image(systemName: "leaf.fill")
+                    Image(systemName: StudioSymbol.bean)
                         .font(.system(size: 48, weight: .medium))
                         .foregroundStyle(
                             StudioTheme.accent
@@ -151,26 +164,11 @@ private struct StartupLoadingView: View {
     }
 }
 
+/// Consistent machine access on the leading side of every main page.
 struct MachineToolbar: ToolbarContent {
-    @Environment(XBloomBLEClient.self) private var machine
-
     var body: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                machine.isConnected ? machine.disconnect() : machine.connect()
-            } label: {
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(machine.isConnected ? StudioTheme.mint : .secondary)
-                        .frame(width: 7, height: 7)
-                    Text(machine.isConnected ? "Connected" : "Connect")
-                        .font(.caption.weight(.bold))
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 7)
-                .background(.thinMaterial, in: Capsule())
-            }
-            .accessibilityLabel(machine.isConnected ? "Disconnect \(machine.machineName)" : "Connect xBloom")
+        ToolbarItem(placement: .topBarLeading) {
+            MachineConnectionButton()
         }
     }
 }

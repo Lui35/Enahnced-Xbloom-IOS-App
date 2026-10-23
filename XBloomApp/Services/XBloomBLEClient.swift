@@ -29,6 +29,15 @@ final class XBloomBLEClient: NSObject {
     /// Machine-reported brew lifecycle. This, not the telemetry values, is what
     /// tells the app when grinding ends and extraction actually begins.
     private(set) var brewProgress = BrewProgressTracker()
+    private(set) var waterTankWarning: WaterTankWarning = {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-previewLowWaterWarning") {
+            return WaterTankWarning(lastLowReportAt: Date())
+        }
+        #endif
+        guard let id = UserDefaults.standard.string(forKey: "xbloomPeripheralID") else { return WaterTankWarning() }
+        return WaterTankWarning(lastLowReportAt: UserDefaults.standard.object(forKey: "xbloom.waterWarning." + id) as? Date)
+    }()
     private(set) var machineName = "xBloom Studio"
     private(set) var lastError: String?
     private(set) var isSendingRecipe = false
@@ -56,7 +65,8 @@ final class XBloomBLEClient: NSObject {
         trafficLog.clear()
     }
 
-    @ObservationIgnored private var central: CBCentralManager!
+    // First-run guidance appears before the Bluetooth permission prompt.
+    @ObservationIgnored private lazy var central = CBCentralManager(delegate: self, queue: .main)
     @ObservationIgnored private var peripheral: CBPeripheral?
     @ObservationIgnored private var writeCharacteristic: CBCharacteristic?
     @ObservationIgnored private var notifyCharacteristic: CBCharacteristic?
@@ -68,6 +78,8 @@ final class XBloomBLEClient: NSObject {
     @ObservationIgnored private var connectionWatchdogTask: Task<Void, Never>?
     @ObservationIgnored private var lastBrewActivityAt: Date?
     @ObservationIgnored private var resumeConnectionRequested = false
+    @ObservationIgnored private var hasRequestedLaunchConnection = false
+    @ObservationIgnored private var connectionPendingUntilBluetoothReady = false
     @ObservationIgnored private var acknowledgements: [UInt16: Date] = [:]
     /// Armed only after `8002` goes out. It is a core state machine so the BLE
     /// delegate merely transports its decision instead of inventing brew rules.
@@ -75,11 +87,6 @@ final class XBloomBLEClient: NSObject {
     /// Machine screens this app has opened and not yet given back. A brew
     /// cannot start on top of one, so `startBrew` leaves them first.
     @ObservationIgnored private var openPages = MachinePages()
-
-    override init() {
-        super.init()
-        central = CBCentralManager(delegate: self, queue: .main)
-    }
 
     var isConnected: Bool {
         connectionState == .connected
@@ -93,13 +100,39 @@ final class XBloomBLEClient: NSObject {
         return Date().timeIntervalSince(lastPacketAt) < 15
     }
 
+    /// Request once per app launch. Core Bluetooth may still be initializing or
+    /// waiting for permission; its state callback starts the attempt when ready.
+    func connectOnLaunch() {
+        guard !hasRequestedLaunchConnection else { return }
+        hasRequestedLaunchConnection = true
+        guard connectionState == .disconnected || connectionState == .unavailable else { return }
+        connectionPendingUntilBluetoothReady = true
+        connectIfBluetoothReady()
+    }
+
+    private func connectIfBluetoothReady() {
+        guard connectionPendingUntilBluetoothReady, central.state == .poweredOn else { return }
+        connectionPendingUntilBluetoothReady = false
+        connect(resumingBrew: resumeConnectionRequested)
+    }
+
     func connect(resumingBrew: Bool = false) {
+        // An explicit connection takes precedence over the deferred launch attempt.
+        hasRequestedLaunchConnection = true
+        connectionPendingUntilBluetoothReady = false
         connectionAttemptID = UUID()
         let attemptID = connectionAttemptID
         resumeConnectionRequested = resumingBrew
         lastError = nil
         diagnosticState = .idle
         guard central.state == .poweredOn else {
+            if central.state == .unknown || central.state == .resetting {
+                // A manual first connection also has to wait for the lazily
+                // created Bluetooth manager to report its initial state.
+                connectionPendingUntilBluetoothReady = true
+                connectionState = .connecting
+                return
+            }
             connectionState = .unavailable
             lastError = "Turn on Bluetooth to connect to your xBloom."
             return
@@ -128,6 +161,8 @@ final class XBloomBLEClient: NSObject {
     }
 
     func disconnect() {
+        hasRequestedLaunchConnection = true
+        connectionPendingUntilBluetoothReady = false
         connectionAttemptID = UUID()
         connectionSetupTask?.cancel()
         connectionWatchdogTask?.cancel()
@@ -429,6 +464,9 @@ final class XBloomBLEClient: NSObject {
         connectionWatchdogTask?.cancel()
         central.stopScan()
         self.peripheral = peripheral
+        waterTankWarning = WaterTankWarning(lastLowReportAt: UserDefaults.standard.object(
+            forKey: "xbloom.waterWarning." + peripheral.identifier.uuidString
+        ) as? Date)
         machineName = peripheral.name ?? "xBloom Studio"
         peripheral.delegate = self
         connectionState = .connecting
@@ -601,6 +639,13 @@ final class XBloomBLEClient: NSObject {
     }
 
     private func merge(_ update: XBloomTelemetry) {
+        let previousWarning = waterTankWarning
+        waterTankWarning.ingest(command: update.lastCommand, value: update.eventValue, waterLevelOK: update.waterLevelOK)
+        if previousWarning != waterTankWarning, let id = peripheral?.identifier.uuidString {
+            let key = "xbloom.waterWarning." + id
+            if let date = waterTankWarning.lastLowReportAt { UserDefaults.standard.set(date, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
         if update.lastCommand == XBloomNotification.weightCleared.rawValue {
             scaleTareRevision += 1
         }
@@ -712,6 +757,7 @@ extension XBloomBLEClient: CBCentralManagerDelegate {
             } else if connectionState == .unavailable {
                 connectionState = .disconnected
             }
+            connectIfBluetoothReady()
         }
     }
 

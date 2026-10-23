@@ -5,18 +5,25 @@ import UIKit
 import UniformTypeIdentifiers
 import XBloomCore
 
+private struct BeanEditRoute: Hashable {
+    let beanID: UUID
+    private let requestID = UUID()
+}
+
 struct BeansView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(GeminiService.self) private var gemini
     @Environment(BeanImportCoordinator.self) private var beanImport
     @Query(sort: \StoredBean.updatedAt, order: .reverse) private var beans: [StoredBean]
+    @Environment(\.beanEditRequest) private var beanEditRequest
+    @State private var beanPath: [BeanEditRoute] = []
     @State private var showingManualEditor = false
     @State private var showingPhotoImporter = false
     @State private var aiBean: BeanProfile?
     @State private var deleting: StoredBean?
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $beanPath) {
             ZStack {
                 StudioBackground()
                 ScrollView {
@@ -67,9 +74,14 @@ struct BeansView: View {
                 if beans.filter({ !$0.archived }).isEmpty && beanImport.pending.isEmpty && beanImport.lastError == nil {
                     ContentUnavailableView(
                         "No beans",
-                        systemImage: "leaf",
+                        systemImage: StudioSymbol.bean,
                         description: Text("Add a bag manually or scan its label.")
                     )
+                }
+            }
+            .navigationDestination(for: BeanEditRoute.self) { route in
+                if let bean = beans.first(where: { $0.id == route.beanID }) {
+                    BeanDetailView(bean: bean, showingEditor: true)
                 }
             }
             .navigationTitle("Beans")
@@ -77,7 +89,7 @@ struct BeansView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 MachineToolbar()
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Add manually", systemImage: "square.and.pencil") {
                             showingManualEditor = true
@@ -87,6 +99,7 @@ struct BeansView: View {
                         }
                     } label: {
                         Image(systemName: "plus")
+                            .foregroundStyle(StudioTheme.accent)
                     }
                 }
             }
@@ -99,6 +112,11 @@ struct BeansView: View {
             .sheet(item: $aiBean) { profile in
                 AIRecipeDesignerView(bean: profile)
             }
+        }
+        .onChange(of: beanEditRequest?.wrappedValue, initial: true) { _, id in
+            guard let id else { return }
+            beanPath = [BeanEditRoute(beanID: id)]
+            beanEditRequest?.wrappedValue = nil
         }
         .confirmationDialog(
             "Delete this bag?",
@@ -195,8 +213,6 @@ struct BeansView: View {
     private func beanShelfCard(_ bean: StoredBean) -> some View {
         let profile = bean.profile
         let initialWeight = max(1, profile?.initialWeightGrams ?? 250)
-        let remaining = max(0, min(bean.remainingWeightGrams, initialWeight))
-        let remainingPercent = Int((remaining / initialWeight * 100).rounded())
         let originLine = [
             profile?.country ?? "",
             profile?.region ?? "",
@@ -216,7 +232,7 @@ struct BeansView: View {
                                 .fill(
                                     StudioTheme.accent.opacity(0.14)
                                 )
-                            Image(systemName: "leaf.fill")
+                            Image(systemName: StudioSymbol.bean)
                                 .font(.title2.weight(.semibold))
                                 .foregroundStyle(StudioTheme.crema)
                         }
@@ -267,21 +283,7 @@ struct BeansView: View {
                         }
                     }
 
-                    VStack(spacing: 9) {
-                        HStack {
-                            Label("Bag remaining", systemImage: "scalemass.fill")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(StudioTheme.muted)
-                            Spacer()
-                            Text("\(String(format: "%.0f", remaining)) g")
-                                .font(.headline.monospacedDigit())
-                            Text("· \(remainingPercent)%")
-                                .font(.caption.weight(.bold).monospacedDigit())
-                                .foregroundStyle(StudioTheme.crema)
-                        }
-                        ProgressView(value: remaining, total: initialWeight)
-                            .tint(StudioTheme.crema)
-                        }
+                    BagInventorySummary(remainingGrams: bean.remainingWeightGrams, totalGrams: initialWeight)
                     .padding(.top, 4)
                 }
                 .padding(17)
@@ -289,42 +291,7 @@ struct BeansView: View {
             .buttonStyle(.plain)
 
             if let profile {
-                Button {
-                    aiBean = profile
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "sparkles")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.black)
-                            .frame(width: 32, height: 32)
-                            .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Design with AI")
-                                .font(.subheadline.weight(.bold))
-                            Text("You choose style and cups")
-                                .font(.caption2)
-                                .foregroundStyle(StudioTheme.muted)
-                        }
-                        Spacer(minLength: 8)
-                        Image(systemName: "arrow.right")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(StudioTheme.accent)
-                            .frame(width: 26, height: 26)
-                            .background(StudioTheme.accent.opacity(0.12), in: Circle())
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 9)
-                    .background(
-                        StudioTheme.raised,
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(StudioTheme.accent.opacity(0.22), lineWidth: 1)
-                    }
-                }
-                .buttonStyle(.plain)
+                BeanRecipeDesignButton { aiBean = profile }
                 .padding(.horizontal, 17)
                 .padding(.bottom, 17)
             }
@@ -355,5 +322,46 @@ struct BeansView: View {
             bean.update(with: profile)
         }
         try? modelContext.save()
+    }
+}
+
+/// Shared AI entry point for the bean shelf and its recipe collection.
+struct BeanRecipeDesignButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 32, height: 32)
+                    .background(StudioTheme.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Design with AI")
+                        .font(.subheadline.weight(.bold))
+                    Text("You choose style and cups")
+                        .font(.caption2)
+                        .foregroundStyle(StudioTheme.muted)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(StudioTheme.accent)
+                    .frame(width: 26, height: 26)
+                    .background(StudioTheme.accent.opacity(0.12), in: Circle())
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .background(
+                StudioTheme.raised,
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(StudioTheme.accent.opacity(0.22), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }

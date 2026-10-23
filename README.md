@@ -11,7 +11,7 @@ authenticated Edge Function, so no provider key is ever shipped in the app.
 
 <p align="center">
   <img src="docs/screenshots/home.png" width="30%" alt="Home screen with machine tools" />
-  <img src="docs/screenshots/brew.png" width="30%" alt="A brew running, pour by pour" />
+  <img src="docs/screenshots/brew.png" width="30%" alt="Compact extraction ring and pour timeline in a simulated brew" />
   <img src="docs/screenshots/ai-designer.png" width="30%" alt="The AI recipe designer" />
 </p>
 
@@ -25,6 +25,10 @@ authenticated Edge Function, so no provider key is ever shipped in the app.
 > mechanisms, run the grinder, and dispense near-boiling water. Test attended.
 
 **[Installation guide →](INSTALLATION.md)**
+
+First launch includes a guided tour, Apple/email account options, and guest access.
+Share a single recipe from its menu and import a copy directly in xBloom—even
+offline. See [onboarding, account setup, and recipe links](docs/onboarding-and-sharing.md).
 
 ---
 
@@ -58,7 +62,7 @@ that shipped waits for the machine's own watering event.
 
 ### It reads the machine honestly, or says nothing
 
-Everything on the live brew screen came out of Bluetooth recordings of the real
+Live measurements are interpreted from Bluetooth recordings of the real
 machine:
 
 - **Poured volume** is a float in microlitres. An earlier guess at the scale
@@ -73,6 +77,15 @@ machine:
 - **The clock** starts when the machine reaches its brewing screen and stops
   while the recipe is paused, so it agrees with the display on the machine
   rather than drifting away from it by the length of the grind.
+
+The compact extraction header keeps its layout through preparation, pouring,
+and rests. The ring shows the current pour pattern while pouring and a pause
+icon while resting. Subtle ticks mark cumulative pour endpoints; longer ticks
+mark programmed pauses. Ring progress follows delivered water, so it holds
+through rests instead of counting down an estimated duration. Live elapsed time
+comes from observed machine events; simulation time is labelled separately.
+Cup yield shows measured grams without an expected-yield denominator, and a
+missing scale signal is reported as **no reading**.
 
 ### It shows the burrs travelling
 
@@ -161,11 +174,55 @@ hand-written one does: dose 5–30 g, grind 1–80, 1–8 pours, ≤ 500 ml, 80�
 
 ---
 
+Screenshots show simulator sample data; the brew screenshot is a preview with
+no machine commands.
+
+## Two ways to browse recipes
+
+Use the view menu beside **+** in Recipes to switch between **List** and
+**Folders**. The app remembers the choice on this device. List keeps search and
+All / Favorites / Hot / Iced filters. Folders groups recipes by their linked
+bean bag, with separate **General hot** and **General iced** collections for
+recipes without a bean. Bags with the same name remain separate, and recipes
+whose original bag is unavailable stay accessible.
+
+<p align="center">
+  <img src="docs/screenshots/recipes.png" width="30%" alt="Recipe list with search and filters" />
+  <img src="docs/screenshots/recipe-folders.png" width="30%" alt="Bean collections with shared inventory bars" />
+  <img src="docs/screenshots/recipe-collection.png" width="30%" alt="A bean's recipe collection with AI design and editing shortcuts" />
+</p>
+
+Each bean collection shows remaining grams, bag percentage, and a roast-date
+marker against a personal 30-day brewing target. This is a preference marker,
+not an expiry or food-safety assessment; a missing roast date stays unknown.
+Set the roast date in the bean editor. Opening a collection uses the same bean
+header and **Design with AI** action as the bean shelf. Its Edit shortcut opens
+that bag's editor in the Beans tab. The **+** menu can create a recipe or move an
+existing recipe into the bag's collection without changing its brewing settings.
+
+## Water-tank reminders
+
+A nonzero `40522` report is remembered for that machine and shown on Home,
+including as a **last report** after a disconnect. Starting a new live recipe,
+repeating a brew, or starting a manual pour asks you to check and reseat the
+tank before continuing. You can cancel or confirm the physical check for that
+attempt; confirmation does not claim the machine has verified a refill.
+
+A zero `40522` status or an explicit water-OK machine-info report clears the
+warning. The recorded zero event happened during a normal brew, so the app does
+not treat the command name alone, missing data, or a guessed tank-volume
+threshold as proof of an empty tank. See [the recorded behavior](docs/VERIFIED_MACHINE_BEHAVIOUR.md)
+and [the implementation notes](docs/APP_BLE_IMPLEMENTATION.md).
+
+<p align="center">
+  <img src="docs/screenshots/water-warning.png" width="30%" alt="Home with a remembered low-water warning, shown using debug sample state" />
+</p>
+
 ## The rest of it
 
 <p align="center">
   <img src="docs/screenshots/beans.png" width="30%" alt="The bean shelf, with what is left in each bag" />
-  <img src="docs/screenshots/recipes.png" width="30%" alt="The recipe library" />
+  <img src="docs/screenshots/settings.png" width="30%" alt="Grouped account, machine, and library settings" />
   <img src="docs/screenshots/history.png" width="30%" alt="Brew history with telemetry" />
 </p>
 
@@ -173,14 +230,24 @@ hand-written one does: dose 5–30 g, grind 1–80, 1–8 pours, ≤ 500 ml, 80�
   drawn down by every brew, and refills that keep a bag's recipes and history
   connected.
 - **Recipes** — a full editor over the machine's real parameter space, with
-  validation that explains itself, plus import/export of a whole library.
+  validation that explains itself, favorites, bean collections, single-recipe
+  links, and import/export of a whole library.
 - **History** — every brew with its telemetry curve, rated and tagged, feeding
   both the AI and the maintenance counters. Brew summaries and feedback are retained;
   detailed telemetry is kept for the newest twenty brews.
 - **Daily shortcuts** — repeat the exact recipe saved with a past brew, rate a
-  completed cup quickly, and keep favorite recipes close on Home. Connection and
-  sync status show whether the machine is connected and whether local changes
-  have reached your account.
+  completed cup quickly, and open Scale, Brewer, and Grinder from a compact Home
+  screen. A shared Bluetooth button opens machine status and connection controls
+  from every main tab.
+- **Settings** — grouped account and sync controls, machine connection, sound,
+  maintenance, diagnostics, library transfer, app guidance, and on-device storage.
+- **Consistent styling** — filled bean and weight symbols, warm-brown inventory
+  bars and percentages, amber actions, blue water metrics, and green live yield
+  and success states use shared theme definitions.
+- **Water-tank reminder** — a nonzero low-water report stays visible on Home
+  for that machine, including after reconnecting. A new live brew or manual pour
+  asks you to check the tank before proceeding. A zero status or explicit water-OK
+  report clears it; missing data is never treated as an empty tank.
 - **Live Activity** — the brew on the Lock Screen and Dynamic Island.
 - **A preview mode** — watch a recipe run end to end at realistic speed with no
   machine connected, no commands sent, and no changes to inventory or brew history.
@@ -219,6 +286,10 @@ Xcode:
 ```sh
 swift test
 ```
+
+Core tests also cover bag-identity grouping, unlinked and unavailable-bean
+collections, calendar-based roast targets, and
+low-water report/clear handling.
 
 Those tests are written against the recordings: the verified recipe encoding,
 the microlitre volume counter, the yield curve with its dropouts and its hand
@@ -266,6 +337,9 @@ The branch must also be up to date with `main`, review conversations must be
 resolved, and force-pushing or deleting `main` is refused outright.
 
 ## Documentation
+
+- `docs/UI_DESIGN.md` — shared styling, recipe layouts, and extraction display.
+- `docs/onboarding-and-sharing.md` — first launch, accounts, guest access, and recipe links.
 
 - `docs/APP_BLE_IMPLEMENTATION.md` — what this app sends: the brew sequence with
   and without the grinder, the pre-brew scale, weighing and grinder screens, the
