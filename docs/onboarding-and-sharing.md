@@ -89,6 +89,12 @@ skipping to account choices, guest access, and completion across app relaunches.
 They also open a real recipe URL during onboarding, save it after the guest
 choice, check that it appears in Recipes, and reject a malformed URL.
 
+Account-form UI tests need a configured form, but never submit credentials.
+CI uses `SUPABASE_HOST=ui-tests.invalid` and
+`SUPABASE_PUBLISHABLE_KEY=ui-test-placeholder`; pass the same build settings to
+`xcodebuild test` locally to run without a real backend. CI keeps the full build
+log and `.xcresult` bundle in its `app-test-results` artifact.
+
 For a fresh onboarding preview in a Debug build, use `-resetOnboarding` as a
 launch argument. Remove it to check normal returning-user behavior.
 

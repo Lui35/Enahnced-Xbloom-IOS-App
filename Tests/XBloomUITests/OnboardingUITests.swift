@@ -7,13 +7,14 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetOnboarding", "-recipes.libraryLayout", "0"]
         app.launch()
-        XCTAssertTrue(app.buttons["Skip tour"].waitForExistence(timeout: 10))
+        waitForTour(in: app)
         var recipe = RecipeLibrary.defaults[0]
         recipe.name = "Shared cup \(UUID().uuidString.prefix(6))"
         app.open(try RecipeShareLink.make(for: recipe))
-        XCTAssertTrue(app.staticTexts["Your coffee, your way."].exists)
+        waitForTour(in: app)
         XCTAssertFalse(app.buttons["recipeLink.save"].exists)
         app.buttons["Skip tour"].tap()
+        XCTAssertTrue(app.buttons["onboarding.finish"].waitForExistence(timeout: 10))
         app.buttons["onboarding.finish"].tap()
         XCTAssertTrue(app.buttons["recipeLink.save"].waitForExistence(timeout: 10))
         screenshot("07 Shared recipe preview", app: app)
@@ -29,7 +30,7 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetOnboarding"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["Your coffee, your way."].waitForExistence(timeout: 10))
+        waitForTour(in: app)
         screenshot("01 Welcome", app: app)
         app.buttons["onboarding.continue"].tap()
         XCTAssertTrue(app.staticTexts["Meet your machine."].exists)
@@ -56,7 +57,7 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetOnboarding"]
         app.launch()
-        XCTAssertTrue(app.buttons["Skip tour"].waitForExistence(timeout: 10))
+        waitForTour(in: app)
         app.buttons["Skip tour"].tap()
         XCTAssertTrue(app.staticTexts["Your studio awaits."].exists)
         app.buttons["Back"].tap()
@@ -79,7 +80,7 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetOnboarding"]
         app.launch()
-        XCTAssertTrue(app.buttons["Skip tour"].waitForExistence(timeout: 10))
+        waitForTour(in: app)
         app.buttons["Skip tour"].tap()
         XCTAssertTrue(app.staticTexts["Your studio awaits."].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["account.submit"].waitForExistence(timeout: 10))
@@ -103,7 +104,7 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetOnboarding", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
-        XCTAssertTrue(app.buttons["Skip tour"].waitForExistence(timeout: 10))
+        waitForTour(in: app)
         XCTAssertTrue(app.buttons["onboarding.continue"].isHittable)
         screenshot("09 Large text tour", app: app)
         app.buttons["Skip tour"].tap()
@@ -111,6 +112,19 @@ final class OnboardingUITests: XCTestCase {
         screenshot("10 Large text account", app: app)
         app.buttons["onboarding.finish"].tap()
         XCTAssertTrue(app.tabBars.buttons["Recipes"].waitForExistence(timeout: 10))
+    }
+
+    private func waitForTour(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        // URL opening can relaunch the app. Controls may exist beneath the fading brand overlay.
+        let revealFinished = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: app.otherElements["launch.brand"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [revealFinished], timeout: 10), .completed, file: file, line: line)
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: app.buttons["Skip tour"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed, file: file, line: line)
+        XCTAssertTrue(app.staticTexts["Your coffee, your way."].waitForExistence(timeout: 10), file: file, line: line)
     }
 
     private func screenshot(_ name: String, app: XCUIApplication) {
