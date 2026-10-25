@@ -37,6 +37,20 @@ public struct BrewProgramEstimate: Equatable, Sendable {
     public var complete: Bool
     public var totalTime: TimeInterval
     public var extractionElapsed: TimeInterval
+    public var rest: BrewRest? = nil
+}
+
+public struct BrewRest: Equatable, Sendable {
+    public var completedPourIndex: Int?
+    public var nextPourIndex: Int?
+    public var remainingSeconds: Int
+
+    public init(recipe: Recipe, completedPourIndex: Int?, remaining: TimeInterval) {
+        self.completedPourIndex = completedPourIndex
+        let next = (completedPourIndex ?? -1) + 1
+        nextPourIndex = recipe.pours.indices.contains(next) ? next : nil
+        remainingSeconds = Int(ceil(max(0, remaining)))
+    }
 }
 
 public enum BrewTimelineEventKind: String, Equatable, Sendable {
@@ -240,7 +254,9 @@ public enum Brewing {
                     phase: .resting,
                     complete: false,
                     totalTime: totalTime,
-                    extractionElapsed: extractionElapsed
+                    extractionElapsed: extractionElapsed,
+                    rest: BrewRest(recipe: recipe, completedPourIndex: index > 0 ? index - 1 : nil,
+                                   remaining: Double(pour.pauseBefore) - cursor)
                 )
             }
             cursor -= Double(pour.pauseBefore)
@@ -260,13 +276,16 @@ public enum Brewing {
             cursor -= pourTime
 
             if cursor < Double(pour.pauseAfter) {
+                let nextPause = recipe.pours.indices.contains(index + 1) ? recipe.pours[index + 1].pauseBefore : 0
                 return BrewProgramEstimate(
                     water: water,
                     stepIndex: index,
                     phase: .resting,
                     complete: false,
                     totalTime: totalTime,
-                    extractionElapsed: extractionElapsed
+                    extractionElapsed: extractionElapsed,
+                    rest: BrewRest(recipe: recipe, completedPourIndex: index,
+                                   remaining: Double(pour.pauseAfter + nextPause) - cursor)
                 )
             }
             cursor -= Double(pour.pauseAfter)

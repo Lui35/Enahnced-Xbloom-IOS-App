@@ -121,6 +121,7 @@ extension BrewSessionView {
                 hasLeftGrinding = true
             }
             currentPhase = estimate.phase
+            simulatedRest = estimate.rest
             stage = stageTitle(for: estimate.phase)
             extractionElapsed = max(0, elapsed - firstPourProgramStart)
             // The preview charts the same window a live brew does: nothing is
@@ -318,7 +319,15 @@ extension BrewSessionView {
             progress = 0
         }
 
-        currentPhase = resolvedLivePhase
+        let phase = resolvedLivePhase
+        if phase == .resting {
+            if currentPhase != .resting, let lastWaterIncreaseAt {
+                liveRestStartedAt = extractionElapsed - max(0, Date().timeIntervalSince(lastWaterIncreaseAt))
+            }
+        } else {
+            liveRestStartedAt = nil
+        }
+        currentPhase = phase
         // Keep the "sending the program" message until the machine answers,
         // rather than replacing it with a phase nothing has confirmed yet.
         if machine.brewProgress.lastEventAt != nil || !machine.isSendingRecipe {
@@ -380,7 +389,12 @@ extension BrewSessionView {
     func resumeLiveBrew() {
         do {
             try machine.resumeBrew()
-            if let pausedAt { pausedTotal += max(0, Date().timeIntervalSince(pausedAt)) }
+            if let pausedAt {
+                let held = max(0, Date().timeIntervalSince(pausedAt))
+                pausedTotal += held
+                // A manual hold must not look like a programmed rest when flow resumes.
+                lastWaterIncreaseAt = lastWaterIncreaseAt?.addingTimeInterval(held)
+            }
             pausedAt = nil
             withAnimation(.snappy(duration: 0.22)) { isPaused = false }
         } catch {
@@ -490,6 +504,7 @@ extension BrewSessionView {
     var resolvedLivePhase: BrewProgramPhase {
         if finished { return .complete }
         if machine.telemetry.state == .error { return .error }
+        if isPaused { return currentPhase }
         let machinePhase = machine.brewProgress.phase
         guard extractionStartedAt != nil else { return machinePhase }
 
@@ -561,14 +576,32 @@ extension BrewSessionView {
 
     func stageTitle(for phase: BrewProgramPhase) -> String {
         switch phase {
-        case .preparing: hasGroundBeans ? "Getting ready to pour" : "Preparing brewer"
-        case .grinding: "Grinding beans"
-        case .blooming: "Blooming"
-        case .pouring: "Pour \(activePourIndex + 1)"
-        case .resting: activePourIndex == 0 ? "Bloom rest" : "Rest after pour \(activePourIndex + 1)"
-        case .complete: "Brew complete"
-        case .error: "Machine needs attention"
+        case .preparing: return hasGroundBeans ? "Getting ready to pour" : "Preparing brewer"
+        case .grinding: return "Grinding beans"
+        case .blooming: return "Blooming"
+        case .pouring: return "Pour \(activePourIndex + 1)"
+        case .resting:
+            if let next = nextPourAfterRest { return next == 0 ? "Before bloom" : "Before pour \(next + 1)" }
+            return "Final rest"
+        case .complete: return "Brew complete"
+        case .error: return "Machine needs attention"
         }
+    }
+
+    var currentRest: BrewRest? {
+        guard currentPhase == .resting, !finished else { return nil }
+        if mode == .simulation { return simulatedRest }
+        guard let liveRestStartedAt, let activePour else { return nil }
+        let nextPause = recipe.pours.indices.contains(activePourIndex + 1) ? recipe.pours[activePourIndex + 1].pauseBefore : 0
+        return BrewRest(recipe: recipe, completedPourIndex: activePourIndex,
+                        remaining: Double(activePour.pauseAfter + nextPause) - (extractionElapsed - liveRestStartedAt))
+    }
+
+    var nextPourAfterRest: Int? {
+        guard currentPhase == .resting, !finished else { return nil }
+        if mode == .simulation { return simulatedRest?.nextPourIndex }
+        let next = activePourIndex + 1
+        return recipe.pours.indices.contains(next) ? next : nil
     }
 
     var phaseIcon: String {

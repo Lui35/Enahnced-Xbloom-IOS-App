@@ -426,23 +426,21 @@ struct BrewHistoryDetailView: View {
                 tint: StudioTheme.accent
             )
             MetricTile(
-                title: waterTileCaption,
-                value: "\(Int((entry?.water ?? 0).rounded())) ml",
+                title: "Water poured",
+                value: "\(Int((entry?.water ?? 0).rounded()))",
+                unit: "ml",
                 icon: "drop.fill",
                 tint: StudioTheme.water
             )
             MetricTile(
-                title: "Coffee collected",
-                value: "\(String(format: "%.1f", entry?.coffeeWeight ?? 0)) g",
+                title: "Cup yield",
+                value: "\(String(format: "%.1f", entry?.coffeeWeight ?? 0))",
+                unit: "g",
                 icon: StudioSymbol.weight,
                 tint: StudioTheme.mint
             )
         }
-    }
-
-    private var waterTileCaption: String {
-        guard let target = originalRecipe?.totalWater, target > 0 else { return "Water poured" }
-        return "Water poured of \(target)"
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func recipeContext(_ recipe: Recipe) -> some View {

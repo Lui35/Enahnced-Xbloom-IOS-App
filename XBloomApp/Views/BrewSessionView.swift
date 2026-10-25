@@ -77,6 +77,8 @@ struct BrewSessionView: View {
     /// start of each pour but never its end, so a stalled counter is what marks
     /// the change from pouring to the bed draining.
     @State var lastWaterIncreaseAt: Date?
+    @State var simulatedRest: BrewRest?
+    @State var liveRestStartedAt: TimeInterval?
 
     init(
         recipe: Recipe,
