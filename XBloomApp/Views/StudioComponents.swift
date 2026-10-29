@@ -137,3 +137,85 @@ struct BagInventoryProgress: View {
             .accessibilityValue("\(Int((fraction * 100).rounded())) percent")
     }
 }
+
+/// The same machine report explained from Home and before any live water command.
+struct WaterTankCheckSheet: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var continueTitle: String? = nil
+    var onContinue: (() -> Void)? = nil
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    Image(systemName: "drop.triangle.fill")
+                        .font(.system(size: 32, weight: .medium))
+                        .foregroundStyle(StudioTheme.warning)
+                        .frame(width: 64, height: 64)
+                        .background(StudioTheme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 20))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Check the water tank")
+                            .font(.title2.weight(.bold))
+                            .accessibilityAddTraits(.isHeader)
+                        Text("Your xBloom last reported low water. The tank may be empty or not fully seated.")
+                            .font(.subheadline).foregroundStyle(StudioTheme.muted)
+                    }
+                    VStack(alignment: .leading, spacing: 18) {
+                        instruction("Refill the tank", detail: "Add clean water before starting your brew.", icon: "drop.fill")
+                        instruction("Fit it firmly in place", detail: "Remove and reseat the tank so it sits securely.", icon: "checkmark.circle")
+                    }
+                    Text("This is the last machine report, not a live water-level reading. The warning stays until the machine reports that it has cleared.")
+                        .font(.footnote).foregroundStyle(StudioTheme.muted)
+                }
+                .frame(maxWidth: 520, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(24)
+            }
+            .scrollIndicators(.hidden)
+            VStack(spacing: 10) {
+                if let continueTitle, let onContinue {
+                    Button(continueTitle, action: onContinue)
+                        .buttonStyle(PrimaryActionButtonStyle(tint: StudioTheme.mint))
+                        .accessibilityIdentifier("waterTank.continue")
+                    Button("Cancel", action: onCancel)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(StudioTheme.danger)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .accessibilityIdentifier("waterTank.cancel")
+                } else {
+                    Button("Got it", action: onCancel)
+                        .buttonStyle(PrimaryActionButtonStyle())
+                        .accessibilityIdentifier("waterTank.close")
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+            .padding(.bottom, 20)
+            .background(StudioTheme.background)
+        }
+        .foregroundStyle(.white)
+        .background(StudioTheme.background)
+        .preferredColorScheme(.dark)
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(590), .large])
+        .interactiveDismissDisabled(onContinue != nil)
+        .presentationDragIndicator(onContinue == nil ? .visible : .hidden)
+        .presentationCornerRadius(28)
+    }
+
+    private func instruction(_ title: String, detail: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(StudioTheme.warning)
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(detail).font(.subheadline).foregroundStyle(StudioTheme.muted)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}

@@ -16,6 +16,22 @@ func testContainer() throws -> ModelContainer {
 @Suite(.serialized)
 @MainActor
 struct LibraryPersistenceTests {
+    @Test func waterTankApprovalOnlyAppliesToTheRequestedBrew() throws {
+        let suite = "water-tank-approval-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let session = BrewSessionCoordinator(defaults: defaults)
+        let recipe = RecipeLibrary.defaults[0]
+
+        session.present(recipe: recipe, mode: .live, waterTankChecked: true)
+        #expect(session.waterTankChecked)
+        #expect(session.presentation?.recipe == recipe)
+        #expect(session.presentation?.startedAt == nil)
+        session.dismiss()
+        session.present(recipe: recipe, mode: .live)
+        #expect(!session.waterTankChecked)
+    }
+
     @Test func failedRecipeInsertCanBeRetriedWithoutLeavingAPhantomRecord() throws {
         struct SaveFailure: Error {}
         let container = try testContainer()

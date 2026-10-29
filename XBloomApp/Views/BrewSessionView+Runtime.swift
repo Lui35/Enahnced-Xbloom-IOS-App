@@ -8,7 +8,8 @@ extension BrewSessionView {
     @MainActor
     func launchSession(tankChecked: Bool = false) async {
         guard !hasStarted else { return }
-        if mode == .live, resumedAt == nil, machine.waterTankWarning.needsCheck, !tankChecked {
+        if mode == .live, resumedAt == nil, machine.waterTankWarning.needsCheck,
+           !tankChecked, !brewSession.waterTankChecked {
             confirmingWaterTank = true
             return
         }

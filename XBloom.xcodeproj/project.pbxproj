@@ -714,7 +714,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = coffee.xbloom.native;
 				PRODUCT_NAME = xBloom;
 				SDKROOT = iphoneos;
@@ -820,7 +820,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = coffee.xbloom.native.LiveActivity;
 				PRODUCT_NAME = XBloomLiveActivity;
 				SDKROOT = iphoneos;
@@ -862,7 +862,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = coffee.xbloom.native.LiveActivity;
 				PRODUCT_NAME = XBloomLiveActivity;
 				SDKROOT = iphoneos;
@@ -945,7 +945,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = coffee.xbloom.native;
 				PRODUCT_NAME = xBloom;
 				SDKROOT = iphoneos;
