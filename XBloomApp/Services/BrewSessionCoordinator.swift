@@ -45,6 +45,7 @@ final class BrewSessionCoordinator {
     }
 
     private(set) var presentation: Presentation?
+    private(set) var waterTankChecked = false
 
     private let defaults: UserDefaults
     private let persistenceStore: BrewSessionPersistenceStore
@@ -72,7 +73,8 @@ final class BrewSessionCoordinator {
         presentation = saved
     }
 
-    func present(recipe: Recipe, mode: BrewSessionMode) {
+    func present(recipe: Recipe, mode: BrewSessionMode, waterTankChecked: Bool = false) {
+        self.waterTankChecked = waterTankChecked
         presentation = Presentation(
             id: UUID(),
             recipe: recipe,

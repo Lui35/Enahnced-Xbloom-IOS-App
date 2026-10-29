@@ -17,6 +17,7 @@ struct ManualPourView: View {
     @State private var status: MachineToolStatus = .idle
     @State private var isStarting = false
     @State private var confirmingWaterTank = false
+    @State private var startAfterTankCheck = false
     @State private var isRunning = false
 
     private var pour: ManualPour {
@@ -54,11 +55,23 @@ struct ManualPourView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .confirmationDialog("Check the water tank", isPresented: $confirmingWaterTank, titleVisibility: .visible) {
-            Button("Tank checked — start pour") { Task { await start(tankChecked: true) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The machine last reported low water. Refill and firmly reseat the tank before continuing. This does not clear the machine’s warning.")
+        .sheet(isPresented: $confirmingWaterTank, onDismiss: {
+            if startAfterTankCheck {
+                startAfterTankCheck = false
+                Task { await start(tankChecked: true) }
+            }
+        }) {
+            WaterTankCheckSheet(
+                continueTitle: "Tank checked — start pour",
+                onContinue: {
+                    startAfterTankCheck = true
+                    confirmingWaterTank = false
+                },
+                onCancel: {
+                    startAfterTankCheck = false
+                    confirmingWaterTank = false
+                }
+            )
         }
         .preferredColorScheme(.dark)
         .onChange(of: machine.brewProgress) {

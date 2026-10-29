@@ -56,6 +56,7 @@ struct BrewSessionView: View {
     @State var reconnectAttempted = false
     @State var confirmingStop = false
     @State var confirmingWaterTank = false
+    @State private var startAfterTankCheck = false
     /// Held mid-recipe. The machine keeps the program loaded, so this is a
     /// hold rather than the stop that ends a session.
     @State var isPaused = false
@@ -77,6 +78,8 @@ struct BrewSessionView: View {
     /// start of each pour but never its end, so a stalled counter is what marks
     /// the change from pouring to the bed draining.
     @State var lastWaterIncreaseAt: Date?
+    @State var simulatedRest: BrewRest?
+    @State var liveRestStartedAt: TimeInterval?
 
     init(
         recipe: Recipe,
@@ -293,11 +296,26 @@ struct BrewSessionView: View {
                     + "Stop the machine now."
             )
         }
-        .confirmationDialog("Check the water tank", isPresented: $confirmingWaterTank, titleVisibility: .visible) {
-            Button("Tank checked — start brew") { Task { await launchSession(tankChecked: true) } }
-            Button("Cancel", role: .cancel) { brewSession.dismiss() }
-        } message: {
-            Text("The machine last reported low water. The tank may be empty. Refill and firmly reseat it before continuing. This does not clear the machine’s warning.")
+        .sheet(isPresented: $confirmingWaterTank, onDismiss: {
+            guard !hasStarted else { return }
+            if startAfterTankCheck {
+                startAfterTankCheck = false
+                Task { await launchSession(tankChecked: true) }
+            } else {
+                brewSession.dismiss()
+            }
+        }) {
+            WaterTankCheckSheet(
+                continueTitle: "Tank checked — start brew",
+                onContinue: {
+                    startAfterTankCheck = true
+                    confirmingWaterTank = false
+                },
+                onCancel: {
+                    startAfterTankCheck = false
+                    confirmingWaterTank = false
+                }
+            )
         }
         .task { await launchSession() }
         .onDisappear {

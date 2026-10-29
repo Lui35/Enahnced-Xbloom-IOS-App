@@ -64,6 +64,13 @@ jobs:
       - name: Generate the Xcode project
         run: xcodegen generate
 
+      - name: Set the release version
+        run: |
+          VERSION=$(xcodebuild -project XBloom.xcodeproj -scheme XBloom -configuration Release -showBuildSettings 2>/dev/null | awk '/ MARKETING_VERSION = / && !found { print $3; found=1 }')
+          test -n "$VERSION"
+          echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "RELEASE_BUILD=${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+
       # Built for a real device, in Release, with signing switched off. A
       # signed build would need this repository to hold a distribution
       # certificate and a provisioning profile, which is a poor trade for an
@@ -78,6 +85,7 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath build \
             -skipPackagePluginValidation \
+            CURRENT_PROJECT_VERSION="$RELEASE_BUILD" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -91,9 +99,16 @@ jobs:
         run: |
           APP="$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)"
           test -n "$APP" || { echo "No .app was produced"; exit 1; }
+          for BUNDLE in "$APP" "$APP"/PlugIns/*.appex; do
+            test -d "$BUNDLE" || continue
+            VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$BUNDLE/Info.plist")
+            BUILD=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$BUNDLE/Info.plist")
+            test "$VERSION" = "$RELEASE_VERSION"
+            test "$BUILD" = "$RELEASE_BUILD"
+          done
           mkdir -p Payload
           cp -R "$APP" Payload/
-          NAME="xBloom-build-${{ github.run_number }}-unsigned.ipa"
+          NAME="xBloom-${RELEASE_VERSION}-build-${RELEASE_BUILD}-unsigned.ipa"
           zip -qry "$NAME" Payload
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "size=$(du -h "$NAME" | cut -f1)" >> "$GITHUB_OUTPUT"
@@ -102,13 +117,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="build-${{ github.run_number }}"
+          TAG="v${RELEASE_VERSION}-build.${RELEASE_BUILD}"
           SHA="$(git rev-parse --short HEAD)"
           SUBJECT="$(git log -1 --pretty=%s)"
           cat > notes.md <<NOTES
           **$SUBJECT**
 
-          Built from \`$SHA\` on \`main\`.
+          Version **$RELEASE_VERSION**, build **$RELEASE_BUILD**. Built from \`$SHA\` on \`main\`.
 
           ### What is in this build
 
@@ -135,6 +150,8 @@ jobs:
           NOTES
           gh release create "$TAG" \
             "${{ steps.package.outputs.name }}" \
-            --title "Build ${{ github.run_number }} · $SHA" \
+            --target "$GITHUB_SHA" \
+            --title "xBloom $RELEASE_VERSION (Build $RELEASE_BUILD) — $SUBJECT" \
             --notes-file notes.md \
+            --generate-notes \
             --prerelease

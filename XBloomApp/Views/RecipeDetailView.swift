@@ -13,6 +13,9 @@ struct RecipeDetailView: View {
     @State private var errorMessage: String?
     @State private var weighingDose = false
     @State private var shareURL: URL?
+    @State private var pendingBrew: Recipe?
+    @State private var confirmingWaterTank = false
+    @State private var tankChecked = false
 
     var body: some View {
         ZStack {
@@ -68,7 +71,7 @@ struct RecipeDetailView: View {
                         }
                     }
                     brewAction("Start brew", icon: "play.fill", tint: StudioTheme.accent) {
-                        brewSession.present(recipe: recipe, mode: .live)
+                        requestBrew(recipe)
                     }
                 } else {
                     // One action while offline: two buttons that both just
@@ -94,7 +97,12 @@ struct RecipeDetailView: View {
                 recipe = updated
             }
         }
-        .sheet(isPresented: $weighingDose) {
+        .sheet(isPresented: $weighingDose, onDismiss: {
+            if let pendingBrew {
+                self.pendingBrew = nil
+                requestBrew(pendingBrew)
+            }
+        }) {
             DoseWeighingView(recipe: recipe) { measuredDose in
                 // The weighed amount replaces the recipe's target for this brew
                 // only. It is what the machine is told, what history records,
@@ -102,8 +110,28 @@ struct RecipeDetailView: View {
                 // own dose.
                 var brewed = recipe
                 brewed.dose = measuredDose
-                brewSession.present(recipe: brewed, mode: .live)
+                pendingBrew = brewed
             }
+        }
+        .sheet(isPresented: $confirmingWaterTank, onDismiss: {
+            defer {
+                pendingBrew = nil
+                tankChecked = false
+            }
+            guard tankChecked, let pendingBrew else { return }
+            brewSession.present(recipe: pendingBrew, mode: .live, waterTankChecked: true)
+        }) {
+            WaterTankCheckSheet(
+                continueTitle: "Tank checked — start brew",
+                onContinue: {
+                    tankChecked = true
+                    confirmingWaterTank = false
+                },
+                onCancel: {
+                    tankChecked = false
+                    confirmingWaterTank = false
+                }
+            )
         }
         .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
             if let shareURL {
@@ -134,6 +162,16 @@ struct RecipeDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(machine.isSendingRecipe)
+    }
+
+    private func requestBrew(_ recipe: Recipe) {
+        if machine.waterTankWarning.needsCheck {
+            pendingBrew = recipe
+            tankChecked = false
+            confirmingWaterTank = true
+        } else {
+            brewSession.present(recipe: recipe, mode: .live)
+        }
     }
 
     private var detailIdentity: some View {

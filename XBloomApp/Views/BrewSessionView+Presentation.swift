@@ -176,16 +176,25 @@ extension BrewSessionView {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(patternTitle(activePour.pattern))
                 } else {
-                    Image(systemName: phaseIcon)
-                        .font(.title3.weight(.semibold))
-                        .accessibilityHidden(true)
+                    HStack(spacing: 6) {
+                        Image(systemName: phaseIcon)
+                            .font(.title3.weight(.semibold))
+                            .accessibilityHidden(true)
+                        if let rest = currentRest {
+                            Text("\(mode == .live ? "≈" : "")\(rest.remainingSeconds)s")
+                                .font(.subheadline.weight(.semibold).monospacedDigit())
+                                .accessibilityLabel("\(mode == .live ? "About " : "")\(rest.remainingSeconds) seconds until \(rest.nextPourIndex == nil ? "rest ends" : "next pour")")
+                        }
+                    }
                 }
                 Text(stage)
                     .font(.subheadline.weight(.bold))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(Int(progress * 100))%")
-                    .font(.caption.monospacedDigit())
+                if extractionStartedAt != nil, ![.preparing, .grinding].contains(currentPhase) {
+                    Text("\(Int(progress * 100))%")
+                        .font(.caption.monospacedDigit())
+                }
             }
             .foregroundStyle(finished ? StudioTheme.mint : StudioTheme.accent)
             .padding(25)
@@ -205,7 +214,8 @@ extension BrewSessionView {
             // represent the first pour's pre-pause without overlapping markers.
             let firstPause = index == recipe.pours.count - 1 ? recipe.pours.first?.pauseBefore ?? 0 : 0
             let hasPause = pour.pauseAfter > 0 || nextPause > 0 || firstPause > 0
-            let isRestingHere = !finished && currentPhase == .resting && index == activePourIndex
+            let isRestingHere = !finished && currentPhase == .resting
+                && index == (currentRest?.completedPourIndex ?? recipe.pours.count - 1)
             Capsule()
                 .fill(isRestingHere ? StudioTheme.accent.opacity(0.85) : StudioTheme.muted.opacity(0.45))
                 .frame(width: 1.5, height: hasPause ? 12 : 7)
@@ -469,6 +479,7 @@ extension BrewSessionView {
     enum LivePourState {
         case done
         case active
+        case waiting
         case upcoming
     }
 
@@ -476,6 +487,7 @@ extension BrewSessionView {
         switch state {
         case .done: "checkmark.circle.fill"
         case .active: "drop.circle.fill"
+        case .waiting: "pause.circle"
         case .upcoming: "circle"
         }
     }
@@ -488,6 +500,11 @@ extension BrewSessionView {
     }
 
     func state(ofPour index: Int) -> LivePourState {
+        if currentPhase == .resting, !finished {
+            let next = nextPourAfterRest ?? recipe.pours.count
+            if index < next { return .done }
+            return index == next ? .waiting : .upcoming
+        }
         if (finished && currentPhase == .complete) || index < activePourIndex { return .done }
         guard hasStartedPouring else { return .upcoming }
         return index == activePourIndex ? .active : .upcoming
@@ -528,6 +545,7 @@ extension BrewSessionView {
         let tint: Color = switch state {
         case .done: StudioTheme.mint
         case .active: StudioTheme.accent
+        case .waiting: StudioTheme.muted
         case .upcoming: StudioTheme.muted.opacity(0.9)
         }
 
@@ -543,6 +561,9 @@ extension BrewSessionView {
                     HStack(spacing: 7) {
                         Text(index == 0 ? "Bloom" : "Pour \(index + 1)")
                             .font(.subheadline.weight(.bold))
+                        if state == .waiting {
+                            Text("Next").font(.caption.weight(.medium)).foregroundStyle(tint)
+                        }
                         Text("\(pour.volume) ml · \(pour.temperature)°C")
                             .font(.subheadline.weight(.semibold).monospacedDigit())
                             .foregroundStyle(.white.opacity(0.78))
@@ -612,14 +633,14 @@ extension BrewSessionView {
         }
         .padding(14)
         .background(
-            state == .active ? StudioTheme.raised : StudioTheme.panel,
+            state == .active || state == .waiting ? StudioTheme.raised : StudioTheme.panel,
             in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
                 .stroke(
-                    state == .active ? tint : .white.opacity(0.08),
-                    lineWidth: state == .active ? 2 : 1
+                    state == .active || state == .waiting ? tint : .white.opacity(0.08),
+                    lineWidth: state == .active || state == .waiting ? 2 : 1
                 )
         }
         .opacity(state == .upcoming ? 0.62 : 1)

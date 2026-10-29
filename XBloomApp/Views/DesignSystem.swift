@@ -133,30 +133,46 @@ struct StatusPill: View {
 struct MetricTile: View {
     let title: String
     let value: String
+    var unit: String? = nil
     let icon: String
     var tint: Color = StudioTheme.accent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Image(systemName: icon)
-                .font(.subheadline.weight(.semibold))
+                .font(.body.weight(.medium))
                 .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(tint.opacity(0.12), in: Circle())
-            Text(value)
-                .font(.title3.weight(.bold).monospacedDigit())
+                .frame(height: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(value)
+                        .font(.title2.weight(.semibold).monospacedDigit())
+                    if let unit {
+                        Text(unit).font(.caption.weight(.medium)).foregroundStyle(StudioTheme.muted)
+                    }
+                }
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(StudioTheme.muted)
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(StudioTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
         .background(
-            StudioTheme.raised,
+            StudioTheme.panel,
             in: RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: StudioTheme.Radius.tile, style: .continuous)
+                .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue([value, unit].compactMap { $0 }.joined(separator: " "))
     }
 }
 

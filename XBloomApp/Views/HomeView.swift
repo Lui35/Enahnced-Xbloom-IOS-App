@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var latestBrew: BrewHistoryEntry?
     @State private var repeatingBrew: BrewHistoryEntry?
     @State private var showsFavorites = false
+    @State private var showsWaterTankDetails = false
 
     var body: some View {
         NavigationStack {
@@ -24,7 +25,15 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .padding(.horizontal, StudioTheme.Space.margin)
                 .padding(.top, 12)
-                .padding(.bottom, 18)
+                // Keep the same dashboard space whether the warning is present or not.
+                .padding(.bottom, 74)
+                .overlay(alignment: .bottom) {
+                    if machine.waterTankWarning.needsCheck {
+                        waterTankStatus
+                            .padding(.horizontal, StudioTheme.Space.margin)
+                            .padding(.bottom, 18)
+                    }
+                }
 
             }
             .navigationTitle("xBloom")
@@ -50,6 +59,9 @@ struct HomeView: View {
                 guard let context = notification.object as? ModelContext, context === modelContext else { return }
                 refreshDashboard()
             }
+            .sheet(isPresented: $showsWaterTankDetails) {
+                WaterTankCheckSheet(onCancel: { showsWaterTankDetails = false })
+            }
             .sheet(item: $repeatingBrew) { RepeatBrewSheet(entry: $0) }
             .sheet(isPresented: $showsFavorites) {
                 NavigationStack {
@@ -72,24 +84,29 @@ struct HomeView: View {
         }
     }
 
+    private var waterTankStatus: some View {
+        Button { showsWaterTankDetails = true } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "drop.triangle.fill").accessibilityHidden(true)
+                Text(machine.isConnected ? "Check water tank" : "Low water reported")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 8)
+                Image(systemName: "info.circle").accessibilityHidden(true)
+            }
+            .foregroundStyle(StudioTheme.warning)
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .background(StudioTheme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityHint("Read the low-water report and how to check the tank")
+        .accessibilityIdentifier("home.waterTankWarning")
+    }
+
     /// Two intrinsic-height layouts let Home fit its safe area without scrolling.
     private func dashboard(compact: Bool, minimal: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: compact ? 12 : 20) {
-            if machine.waterTankWarning.needsCheck {
-                Label {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(machine.isConnected ? "Check the water tank" : "Last report: low water")
-                            .font(.subheadline.weight(.semibold))
-                        Text("The tank may be empty. Refill and reseat it before brewing.")
-                            .font(.caption)
-                    }
-                } icon: { Image(systemName: "drop.triangle.fill").accessibilityHidden(true) }
-                .foregroundStyle(StudioTheme.warning)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(StudioTheme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
-                .accessibilityIdentifier("home.waterTankWarning")
-            }
             machineTools(compact: compact, minimal: minimal)
             brewingSection(compact: compact, minimal: minimal)
             if !favoriteRecipes.isEmpty {
@@ -177,6 +194,7 @@ struct HomeView: View {
             .opacity(machine.isConnected ? 1 : 0.55)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("home.tool.\(title.lowercased())")
         .disabled(!machine.isConnected)
     }
 
