@@ -29,7 +29,11 @@ extension BrewSessionView {
         VStack(spacing: 10) {
             if finished {
                 Button {
-                    brewSession.dismiss()
+                    if mode == .live {
+                        onBrewDone()
+                    } else {
+                        brewSession.dismiss()
+                    }
                 } label: {
                     Label("Done", systemImage: "checkmark")
                         .font(.headline)
