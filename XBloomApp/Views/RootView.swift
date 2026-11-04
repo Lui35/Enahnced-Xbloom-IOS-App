@@ -32,6 +32,7 @@ struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(BrewSessionCoordinator.self) private var brewSession
     @State private var selectedTab = 0
+    @State private var homeNavigationID = UUID()
     @State private var beanEditRequest: UUID?
     @State private var seedError: String?
     @State private var isLaunching = true
@@ -40,6 +41,7 @@ struct RootView: View {
         ZStack {
             TabView(selection: $selectedTab) {
                 HomeView(selectedTab: $selectedTab)
+                    .id(homeNavigationID)
                     .tabItem { Label("Home", systemImage: "house.fill") }
                     .tag(0)
                 RecipesView()
@@ -118,7 +120,13 @@ struct RootView: View {
                     restoredPhase: presentation.currentPhase,
                     restoredSamples: presentation.samples,
                     restoredExtractionStartedAt: presentation.extractionStartedAt,
-                    restoredExtractionElapsed: presentation.extractionElapsed
+                    restoredExtractionElapsed: presentation.extractionElapsed,
+                    onBrewDone: {
+                        // Clear Home's recipe details and sheets before returning to its dashboard.
+                        homeNavigationID = UUID()
+                        selectedTab = 0
+                        brewSession.dismiss()
+                    }
                 )
             }
         }

@@ -2,6 +2,7 @@ import Charts
 import Observation
 import SwiftData
 import SwiftUI
+import UIKit
 import XBloomCore
 
 struct BrewSessionView: View {
@@ -13,6 +14,7 @@ struct BrewSessionView: View {
     @Query(sort: \StoredBean.updatedAt, order: .reverse) var storedBeans: [StoredBean]
 
     let recipe: Recipe
+    let onBrewDone: () -> Void
     let mode: BrewSessionMode
     let sessionID: UUID
     let resumedAt: Date?
@@ -95,9 +97,11 @@ struct BrewSessionView: View {
         restoredPhase: BrewProgramPhase? = nil,
         restoredSamples: [BrewSample]? = nil,
         restoredExtractionStartedAt: Date? = nil,
-        restoredExtractionElapsed: TimeInterval? = nil
+        restoredExtractionElapsed: TimeInterval? = nil,
+        onBrewDone: @escaping () -> Void
     ) {
         self.recipe = recipe
+        self.onBrewDone = onBrewDone
         self.mode = mode
         self.sessionID = sessionID
         self.resumedAt = resumedAt
@@ -318,7 +322,11 @@ struct BrewSessionView: View {
             )
         }
         .task { await launchSession() }
+        .onChange(of: mode == .live && hasStarted && !finished, initial: true) { _, isBrewing in
+            UIApplication.shared.isIdleTimerDisabled = isBrewing
+        }
         .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
             liveTicker?.cancel()
             liveTicker = nil
         }
