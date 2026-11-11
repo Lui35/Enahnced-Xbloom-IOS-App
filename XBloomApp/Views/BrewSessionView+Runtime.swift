@@ -32,6 +32,9 @@ extension BrewSessionView {
             refreshChartIfNeeded(force: true)
             extractionStartedAt = restoredExtractionStartedAt
             extractionElapsed = restoredExtractionElapsed ?? 0
+            didUseGrinder = brewSession.presentation?.didUseGrinder ?? false
+            waitingToRestart = brewSession.presentation?.waitingToRestart ?? false
+            isPaused = waitingToRestart
             progress = recipe.totalWater > 0 ? min(1, water / Double(recipe.totalWater)) : 0
             stage = machine.isConnected ? "Restoring live extraction" : "Reconnecting to active brew"
             await BrewLiveActivityManager.shared.resumeExisting()
@@ -73,6 +76,7 @@ extension BrewSessionView {
 
     @MainActor
     func runLiveBrew() async {
+        guard !finished, !isPaused else { return }
         guard machine.isConnected else {
             errorMessage = "The xBloom disconnected before the recipe could start."
             stage = "Connection lost"
@@ -83,12 +87,16 @@ extension BrewSessionView {
         do {
             try await machine.startBrew(recipe)
             adoptMachineProgress()
+        } catch is CancellationError {
+            return
         } catch XBloomBLEClient.MachineError.noMachineResponse {
+            guard !finished, !isPaused else { return }
             // The execute command may have succeeded even when the expected
             // acknowledgement was missed. Keep observing instead of abandoning
             // a machine that is visibly brewing.
             stage = "Recipe sent · waiting for live telemetry"
         } catch {
+            guard !finished, !isPaused else { return }
             errorMessage = error.localizedDescription
             stage = "Could not start"
             brewSession.markCompleted()
@@ -210,7 +218,9 @@ extension BrewSessionView {
             currentPhase: currentPhase,
             samples: samples,
             extractionStartedAt: extractionStartedAt,
-            extractionElapsed: extractionElapsed
+            extractionElapsed: extractionElapsed,
+            didUseGrinder: didUseGrinder,
+            waitingToRestart: waitingToRestart
         )
     }
 
@@ -269,15 +279,18 @@ extension BrewSessionView {
     /// missed notification cannot rewind the pour count or the clock.
     @MainActor
     func adoptMachineProgress() {
-        guard mode == .live, !finished else { return }
+        guard mode == .live, !finished, let startedAt else { return }
         let machineProgress = machine.brewProgress
+        if recipe.useGrinder, let grindStart = machineProgress.grindingStartedAt, grindStart >= startedAt {
+            didUseGrinder = machineProgress.errorCommand != XBloomNotification.grinderEmptyAbnormal.rawValue
+        }
 
         // Extraction begins when the machine reports its first watering phase.
         // Water starting to move is kept as a fallback for firmware that does
         // not send that event, which otherwise left the session in preparation
         // right through a pour.
         if extractionStartedAt == nil {
-            if let machineStart = machineProgress.extractionStartedAt {
+            if let machineStart = machineProgress.extractionStartedAt, machineStart >= startedAt {
                 extractionStartedAt = machineStart
             } else if water > 0.5 {
                 extractionStartedAt = Date()
@@ -356,7 +369,7 @@ extension BrewSessionView {
 
     @MainActor
     func finishIfMachineReportsCompletion() {
-        guard !finished, !recordedCompletion else { return }
+        guard !finished, !recordedCompletion, !waitingToRestart else { return }
         // A completion signal before any pour has happened belongs to the
         // machine's previous cycle, not to this brew. Honouring it ended the
         // session seconds after it started, with every pour marked done.
@@ -376,11 +389,22 @@ extension BrewSessionView {
 
     @MainActor
     func pauseLiveBrew() {
+        guard startedAt != nil else { return }
+        adoptMachineProgress()
         do {
-            try machine.pauseBrew()
+            // The firmware's flow-resume command can leave a program stuck
+            // before its first grind or pour. Hold here by stopping the unused
+            // program, then send the same recipe again when the user resumes.
+            if !beansWereUsed {
+                try machine.stopBrew()
+                waitingToRestart = true
+            } else {
+                try machine.pauseBrew()
+            }
             pausedAt = Date()
             withAnimation(.snappy(duration: 0.22)) { isPaused = true }
             stage = "Paused"
+            persistSessionSnapshot()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -388,9 +412,20 @@ extension BrewSessionView {
 
     @MainActor
     func resumeLiveBrew() {
+        adoptMachineProgress()
         do {
-            try machine.resumeBrew()
-            if let pausedAt {
+            let restart = waitingToRestart
+            if restart {
+                guard !beansWereUsed else {
+                    errorMessage = "The machine started before the pause took effect. Check the beans and cup, then stop this session before brewing again."
+                    return
+                }
+                waitingToRestart = false
+                pausedTotal = 0
+            } else {
+                try machine.resumeBrew()
+            }
+            if !restart, let pausedAt {
                 let held = max(0, Date().timeIntervalSince(pausedAt))
                 pausedTotal += held
                 // A manual hold must not look like a programmed rest when flow resumes.
@@ -398,6 +433,8 @@ extension BrewSessionView {
             }
             pausedAt = nil
             withAnimation(.snappy(duration: 0.22)) { isPaused = false }
+            persistSessionSnapshot()
+            if restart { Task { await runLiveBrew() } }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -459,6 +496,7 @@ extension BrewSessionView {
                 wasSimulated: wasSimulated,
                 outcome: outcome,
                 completedSteps: outcome == .completed ? recipe.pours.count : nil,
+                beansWereUsed: beansWereUsed,
                 in: modelContext
             )
             recordedCompletion = true
@@ -468,6 +506,8 @@ extension BrewSessionView {
             errorMessage = error.localizedDescription
         }
     }
+
+    var beansWereUsed: Bool { didUseGrinder || extractionStartedAt != nil }
 
     /// Samples are timestamped from the first pour, never from the moment the
     /// recipe was sent, so the curve and the recipe markers describe the same
@@ -667,6 +707,7 @@ extension BrewSessionView {
     }
 
     func stopLiveBrew() {
+        adoptMachineProgress()
         do {
             try machine.stopBrew()
             liveTicker?.cancel()

@@ -87,7 +87,7 @@ extension BrewSessionView {
                 }
                 .overlay {
                     if isPaused {
-                        Text("Holding — the machine is waiting")
+                        Text(waitingToRestart ? "Paused before brewing" : "Holding — the machine is waiting")
                             .font(.caption)
                             .foregroundStyle(StudioTheme.muted)
                             .multilineTextAlignment(.center)

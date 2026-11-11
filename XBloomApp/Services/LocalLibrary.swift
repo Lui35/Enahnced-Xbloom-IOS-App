@@ -1,3 +1,4 @@
+import CoreData
 import Foundation
 import SwiftData
 import XBloomCore
@@ -261,6 +262,7 @@ enum LocalLibrary {
         wasSimulated: Bool = false,
         outcome: BrewOutcome = .completed,
         completedSteps: Int? = nil,
+        beansWereUsed: Bool,
         in context: ModelContext
     ) throws {
         // Preview runs never change the real library or bean inventory.
@@ -271,6 +273,11 @@ enum LocalLibrary {
         existingDescriptor.fetchLimit = 1
         guard try context.fetch(existingDescriptor).isEmpty else { return }
 
+        let originalBean = bean?.profile
+        let updatedBean = beansWereUsed
+            ? originalBean.map { Brewing.deductDose(recipe.dose, from: $0) }
+            : originalBean
+        let debit = (originalBean?.remainingWeightGrams ?? 0) - (updatedBean?.remainingWeightGrams ?? 0)
         let entry = BrewHistoryEntry(
             id: id,
             recipeID: recipe.id,
@@ -283,19 +290,50 @@ enum LocalLibrary {
             steps: recipe.pours.count,
             samples: samples,
             recipeSnapshot: recipe,
-            beanSnapshot: bean?.profile,
+            beanSnapshot: originalBean,
             wasSimulated: wasSimulated,
             outcome: outcome,
-            completedSteps: outcome == .completed ? recipe.pours.count : completedSteps
+            completedSteps: outcome == .completed ? recipe.pours.count : completedSteps,
+            beanDebitGrams: debit
         )
-        context.insert(StoredBrew(entry: entry))
+        let stored = StoredBrew(entry: entry)
+        let originalBeanDate = bean?.updatedAt
+        context.insert(stored)
 
-        if let bean, var profile = bean.profile {
-            profile = Brewing.deductDose(recipe.dose, from: profile)
-            bean.update(with: profile)
+        if debit > 0, let updatedBean { bean?.update(with: updatedBean) }
+        do { try context.save() }
+        catch {
+            context.delete(stored)
+            if debit > 0, let originalBean, let originalBeanDate {
+                bean?.update(with: originalBean)
+                bean?.updatedAt = originalBeanDate
+            }
+            throw error
         }
-        try context.save()
         try compactHistory(in: context)
+    }
+
+    static func delete(brew: StoredBrew, in context: ModelContext) throws {
+        let id = brew.id
+        guard let stored = try context.fetch(FetchDescriptor<StoredBrew>(
+            predicate: #Predicate { $0.id == id }
+        )).first else { return }
+        // Save pending edits first so a failed deletion can roll back both the
+        // refund and the history removal without discarding unrelated edits.
+        try context.save()
+        if let entry = stored.entry, let beanID = entry.beanID, entry.refundableBeanGrams > 0 {
+            let query = FetchDescriptor<StoredBean>(predicate: #Predicate { $0.id == beanID })
+            if let bean = try context.fetch(query).first, var profile = bean.profile {
+                profile.remainingWeightGrams += entry.refundableBeanGrams
+                bean.update(with: profile)
+            }
+        }
+        context.delete(stored)
+        do { try context.save() }
+        catch {
+            context.rollback()
+            throw error
+        }
     }
 
 }

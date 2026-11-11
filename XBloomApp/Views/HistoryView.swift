@@ -60,7 +60,7 @@ struct HistoryView: View {
                 ContentUnavailableView(
                     "No brew history",
                     systemImage: "clock.arrow.circlepath",
-                    description: Text("A completed machine brew or simulation will be recorded locally.")
+                    description: Text("Your machine brews will appear here.")
                 )
             }
         }
@@ -211,6 +211,8 @@ struct BrewHistoryDetailView: View {
     @State private var notes: String
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    @State private var confirmingDelete = false
+    @State private var deleteError: String?
     @State private var enhancedRecipeID: UUID?
     @State private var fallbackRecipe: Recipe?
     @State private var fallbackBean: BeanProfile?
@@ -371,10 +373,39 @@ struct BrewHistoryDetailView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(StudioTheme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Delete brew", systemImage: "trash", role: .destructive) {
+                    confirmingDelete = true
+                }
+            }
+        }
         .preferredColorScheme(.dark)
         .task(id: entry?.enhancedRecipeID) {
             enhancedRecipeID = entry?.enhancedRecipeID
             loadRelatedRecords()
+        }
+        .alert("Delete this brew?", isPresented: $confirmingDelete) {
+            Button("Delete brew", role: .destructive) {
+                do {
+                    try LocalLibrary.delete(brew: brew, in: modelContext)
+                    dismiss()
+                } catch {
+                    deleteError = error.localizedDescription
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let grams = entry?.refundableBeanGrams, grams > 0 {
+                Text("This removes the history entry and returns \(grams.formatted(.number.precision(.fractionLength(0...2)))) g to the original bag if it’s still in your library.")
+            } else {
+                Text("This removes the history entry. The bean balance will stay the same.")
+            }
+        }
+        .alert("Could not delete brew", isPresented: .constant(deleteError != nil)) {
+            Button("OK") { deleteError = nil }
+        } message: {
+            Text(deleteError ?? "")
         }
         .alert("Could not enhance recipe", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }

@@ -210,7 +210,7 @@ struct LibraryPersistenceTests {
         try context.save()
         try LocalLibrary.recordCompletedBrew(
             recipe: RecipeLibrary.defaults[0], bean: bean, startedAt: Date(),
-            telemetry: XBloomTelemetry(), samples: [], wasSimulated: true, in: context
+            telemetry: XBloomTelemetry(), samples: [], wasSimulated: true, beansWereUsed: true, in: context
         )
         #expect(bean.remainingWeightGrams == 250)
         #expect(try context.fetchCount(FetchDescriptor<StoredBrew>()) == 0)
@@ -255,10 +255,32 @@ struct LibraryPersistenceTests {
         let id = UUID()
         for _ in 0..<2 {
             try LocalLibrary.recordCompletedBrew(id: id, recipe: recipe, bean: bean,
-                startedAt: Date(), telemetry: XBloomTelemetry(), samples: [], in: context)
+                startedAt: Date(), telemetry: XBloomTelemetry(), samples: [], beansWereUsed: true, in: context)
         }
         #expect(bean.remainingWeightGrams == 250 - recipe.dose)
         #expect(try context.fetchCount(FetchDescriptor<StoredBrew>()) == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func deletingStoppedBrewRestoresOnlyWhatWasDeducted(beansWereUsed: Bool) throws {
+        let container = try testContainer()
+        let context = container.mainContext
+        let bean = StoredBean(profile: BeanProfile(name: "Test", initialWeightGrams: 250, remainingWeightGrams: 7))
+        context.insert(bean)
+        try context.save()
+        var recipe = RecipeLibrary.defaults[0]
+        recipe.dose = 18
+        recipe.beanID = bean.id
+
+        try LocalLibrary.recordCompletedBrew(recipe: recipe, bean: bean, startedAt: Date(),
+            telemetry: XBloomTelemetry(), samples: [], outcome: .stopped,
+            beansWereUsed: beansWereUsed, in: context)
+        let brew = try #require(context.fetch(FetchDescriptor<StoredBrew>()).first)
+        #expect(brew.entry?.refundableBeanGrams == (beansWereUsed ? 7 : 0))
+        #expect(bean.remainingWeightGrams == (beansWereUsed ? 0 : 7))
+        try LocalLibrary.delete(brew: brew, in: context)
+        #expect(try context.fetchCount(FetchDescriptor<StoredBrew>()) == 0)
+        #expect(bean.remainingWeightGrams == 7)
     }
 }
 

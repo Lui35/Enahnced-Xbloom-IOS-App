@@ -359,6 +359,11 @@ signal; the pour index only ever clamps forward.
 | Resume | `40524 brew_flow_resume` | |
 | Stop | `40519 brew_flow_stop` | Also what the interlock sends. |
 
+Before any grind or pour, Pause stops the unused program and cancels any
+remaining recipe upload. Resume sends the same recipe and weighed dose again
+in the same session. Once the grinder or a pour starts, Pause and Resume use
+the flow commands above.
+
 Completion, in order of trust:
 
 1. `40512 take_cup` / `40513 brewer_finish` — the machine says so;
@@ -387,10 +392,9 @@ Two different things get called "wasting beans". Both are covered here.
 ### The bag ledger
 
 `BeanProfile.remainingWeightGrams` is the app's inventory. It is debited in
-exactly one place: `LocalLibrary.recordCompletedBrew` calls
-`Brewing.deductDose(recipe.dose, from:)` when a session is recorded
-([PersistenceModels.swift:361](XBloomApp/Models/PersistenceModels.swift:361)),
-clamped at zero, and only for the bean the recipe is linked to (`recipe.beanID`).
+exactly one place: `LocalLibrary.recordCompletedBrew` deducts the dose when a
+session is recorded, clamped at zero, and only for the bean the recipe is
+linked to (`recipe.beanID`).
 
 What that means in practice:
 
@@ -399,12 +403,12 @@ What that means in practice:
   hand-off replaces `dose` on a copy of the recipe before the brew is presented.
 - Nothing is deducted when a brew is *started*. It happens once, at the point
   the session is recorded.
-- A **stopped** brew still records and still debits the full dose. Beans that
-  were ground are gone whether or not the water finished, which is right when
-  the stop came after grinding and an over-count when it came before.
-- A **simulated preview** also records — and therefore also debits the bag,
-  even though no machine was involved. That is a defect, not a design: the
-  `wasSimulated` flag reaches history but is not consulted before the deduction.
+- A **stopped** brew still records. It debits the bag only if the grinder
+  started or the first pour began. Moving the grinder to its target setting
+  does not count as grinding.
+- A **simulated preview** does not record or debit the bag.
+- Manually deleting a history entry restores the amount actually debited, if
+  the original bag is still in the library.
 
 Elsewhere the ledger is only read: Home and Recipes hide or flag a recipe whose
 bean has less left than the dose and show how many doses remain.

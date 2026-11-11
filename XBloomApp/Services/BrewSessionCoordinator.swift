@@ -38,6 +38,8 @@ final class BrewSessionCoordinator {
         var samples: [BrewSample]?
         var extractionStartedAt: Date?
         var extractionElapsed: TimeInterval?
+        var didUseGrinder: Bool?
+        var waitingToRestart: Bool?
 
         var isResume: Bool {
             mode == .live && startedAt != nil
@@ -111,10 +113,14 @@ final class BrewSessionCoordinator {
         currentPhase: BrewProgramPhase,
         samples: [BrewSample],
         extractionStartedAt: Date?,
-        extractionElapsed: TimeInterval
+        extractionElapsed: TimeInterval,
+        didUseGrinder: Bool,
+        waitingToRestart: Bool
     ) {
         guard var current = presentation, current.mode == .live, current.startedAt != nil else { return }
-        guard Date().timeIntervalSince(lastSnapshotWriteAt) >= 4 else { return }
+        let stateChanged = (current.didUseGrinder ?? false) != didUseGrinder
+            || (current.waitingToRestart ?? false) != waitingToRestart
+        guard stateChanged || Date().timeIntervalSince(lastSnapshotWriteAt) >= 4 else { return }
         lastSnapshotWriteAt = Date()
         current.waterBaseline = waterBaseline
         current.water = water
@@ -127,6 +133,9 @@ final class BrewSessionCoordinator {
         current.samples = Array(samples.suffix(240))
         current.extractionStartedAt = extractionStartedAt
         current.extractionElapsed = extractionElapsed
+        current.didUseGrinder = didUseGrinder
+        current.waitingToRestart = waitingToRestart
+        if stateChanged { presentation = current }
         persist(current)
     }
 

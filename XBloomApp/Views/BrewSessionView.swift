@@ -59,9 +59,9 @@ struct BrewSessionView: View {
     @State var confirmingStop = false
     @State var confirmingWaterTank = false
     @State private var startAfterTankCheck = false
-    /// Held mid-recipe. The machine keeps the program loaded, so this is a
-    /// hold rather than the stop that ends a session.
     @State var isPaused = false
+    @State var waitingToRestart = false
+    @State var didUseGrinder = false
     /// When the current pause began, and how long every earlier pause lasted.
     /// The machine's program is stopped while it is paused and its own display
     /// stops with it; a plain wall-clock delta does not, so the two readings
@@ -338,6 +338,7 @@ struct BrewSessionView: View {
             guard mode == .live, hasStarted, !finished else { return }
             adoptMachineProgress()
             appendLiveSampleIfNeeded()
+            persistSessionSnapshot()
             finishIfMachineReportsCompletion()
         }
         .onChange(of: machine.connectionState) { _, state in
