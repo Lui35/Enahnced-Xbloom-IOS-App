@@ -73,6 +73,7 @@ final class XBloomBLEClient: NSObject {
     @ObservationIgnored private var auxiliaryNotifyCharacteristic: CBCharacteristic?
     @ObservationIgnored private var statusNotificationFramer = XBloomNotificationFramer()
     @ObservationIgnored private var auxiliaryNotificationFramer = XBloomNotificationFramer()
+    @ObservationIgnored private var recipeStartTask: Task<Void, Error>?
     @ObservationIgnored private var connectionAttemptID = UUID()
     @ObservationIgnored private var connectionSetupTask: Task<Void, Never>?
     @ObservationIgnored private var connectionWatchdogTask: Task<Void, Never>?
@@ -175,8 +176,26 @@ final class XBloomBLEClient: NSObject {
 
     func startBrew(_ recipe: Recipe) async throws {
         guard isConnected else { throw MachineError.notConnected }
+        let previous = recipeStartTask
+        previous?.cancel()
+        let task = Task {
+            // Let an interrupted upload release the channel before sending again.
+            _ = await previous?.result
+            try await transmitBrew(recipe)
+        }
+        recipeStartTask = task
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func transmitBrew(_ recipe: Recipe) async throws {
+        try Task.checkCancellation()
         // Nothing may be mid-flight when the recipe goes out.
         await pendingScreenWork?.value
+        try Task.checkCancellation()
         pendingScreenWork = nil
         try RecipeValidator.requireSafe(recipe)
         let plan = try BrewCommandPlan(recipe: recipe)
@@ -196,6 +215,7 @@ final class XBloomBLEClient: NSObject {
         // This layer only transports the core plan. Packet order, timing, and
         // grinder-first policy live in XBloomCore where recordings can test them.
         for step in plan.steps {
+            try Task.checkCancellation()
             if step.kind == .execute {
                 executeSentAt = Date()
                 grinderInterlock = recipe.useGrinder
@@ -255,13 +275,9 @@ final class XBloomBLEClient: NSObject {
     }
 
     func stopBrew() throws {
+        try writeSimple(.recipeStop, note: "Stop requested from the app")
+        recipeStartTask?.cancel()
         grinderInterlock = nil
-        guard isConnected, let peripheral, let writeCharacteristic else { throw MachineError.notConnected }
-        let packet = XBloomProtocol.command(.recipeStop)
-        peripheral.writeValue(packet, for: writeCharacteristic, type: .withoutResponse)
-        sentPacketCount += 1
-        trafficLog.note("Stop requested from the app")
-        trafficLog.record(direction: .sent, command: XBloomCommand.recipeStop.rawValue, detail: "", payload: packet)
     }
 
     // MARK: - Direct machine tools
@@ -332,6 +348,7 @@ final class XBloomBLEClient: NSObject {
         openPages = MachinePages()
         trafficLog.note("Releasing machine screens before the recipe")
         for exit in exits {
+            guard !Task.isCancelled else { return }
             try? await write(XBloomProtocol.command(exit))
             // Screen transitions need the same full settling interval as recipe
             // setup. Missing an exit echo must never cancel a requested brew.
@@ -488,6 +505,7 @@ final class XBloomBLEClient: NSObject {
     }
 
     private func resetConnection() {
+        recipeStartTask?.cancel()
         connectionSetupTask?.cancel()
         connectionSetupTask = nil
         connectionWatchdogTask?.cancel()
@@ -579,6 +597,7 @@ final class XBloomBLEClient: NSObject {
             try Task.checkCancellation()
             try await Task.sleep(for: .milliseconds(20))
         }
+        try Task.checkCancellation()
         peripheral.writeValue(packet, for: writeCharacteristic, type: .withoutResponse)
         sentPacketCount += 1
         trafficLog.record(

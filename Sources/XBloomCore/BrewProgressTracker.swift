@@ -34,6 +34,9 @@ public struct BrewProgressTracker: Equatable, Sendable {
     /// reaches its first pour without this is a recipe that poured over dry
     /// beans — the failure this machine gives no error for.
     public private(set) var observedGrinding = false
+    /// Unlike gear movement or entering a grinder screen, these events report
+    /// the grinder itself starting or running.
+    public private(set) var grindingStartedAt: Date?
     /// The pour the machine says it is on, taken from `wateringPhase`.
     public private(set) var pourIndex = 0
     /// True once a `wateringPhase` has arrived, meaning the pour index comes
@@ -97,6 +100,7 @@ public struct BrewProgressTracker: Equatable, Sendable {
 
         case .deviceBeginGrinder, .grinderDoing, .grindBegin, .deviceGears:
             observedGrinding = true
+            if notification != .deviceGears, grindingStartedAt == nil { grindingStartedAt = date }
             if !isExtracting { phase = .grinding }
 
         case .deviceGrinderFinish:

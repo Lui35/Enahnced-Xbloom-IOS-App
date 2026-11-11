@@ -327,6 +327,17 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
     /// Unknown for old records; a stopped program is not a completed extraction.
     public var outcome: BrewOutcome?
     public var completedSteps: Int?
+    /// Actual bag debit, after clamping at zero. Nil identifies older entries.
+    public var beanDebitGrams: Double?
+
+    public var refundableBeanGrams: Double {
+        guard wasSimulated != true, let beanID else { return 0 }
+        if let beanDebitGrams { return beanDebitGrams }
+        // The old recorder always deducted the dose and captured the bag's
+        // pre-brew balance. Require both snapshots to reconstruct that debit.
+        guard let beanSnapshot, beanSnapshot.id == beanID, let recipeSnapshot else { return 0 }
+        return max(0, min(beanSnapshot.remainingWeightGrams, recipeSnapshot.dose))
+    }
 
     public init(
         id: UUID = UUID(),
@@ -349,7 +360,8 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
         enhancedRecipeID: UUID? = nil,
         wasSimulated: Bool = false,
         outcome: BrewOutcome? = .completed,
-        completedSteps: Int? = nil
+        completedSteps: Int? = nil,
+        beanDebitGrams: Double? = nil
     ) {
         self.id = id
         self.recipeID = recipeID
@@ -372,5 +384,6 @@ public struct BrewHistoryEntry: Codable, Equatable, Identifiable, Sendable {
         self.wasSimulated = wasSimulated
         self.outcome = outcome
         self.completedSteps = completedSteps
+        self.beanDebitGrams = beanDebitGrams
     }
 }

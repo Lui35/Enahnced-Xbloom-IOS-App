@@ -400,6 +400,22 @@ import Testing
     #expect(tracker.pourIndex == 2)
 }
 
+@Test func adjustingTheGrinderDoesNotCountAsGrindingBeans() {
+    var tracker = BrewProgressTracker()
+    let start = Date(timeIntervalSince1970: 2_000)
+    tracker.ingest(command: XBloomNotification.recipeMarking.rawValue, value: nil, at: start)
+    tracker.ingest(command: XBloomNotification.deviceGears.rawValue, value: 60, at: start)
+    #expect(tracker.observedGrinding)
+    #expect(tracker.grindingStartedAt == nil)
+    #expect(!tracker.isExtracting)
+
+    let grindStart = start.addingTimeInterval(2)
+    tracker.ingest(command: XBloomNotification.grinderDoing.rawValue, value: 1, at: grindStart)
+    tracker.ingest(command: XBloomNotification.deviceGrinderFinish.rawValue, value: nil, at: start.addingTimeInterval(5))
+    #expect(tracker.grindingStartedAt == grindStart)
+    #expect(!tracker.isExtracting)
+}
+
 @Test func leavingTheBrewingScreenCompletesARecipeThatSendsNoFinishEvent() {
     var tracker = BrewProgressTracker()
     let start = Date(timeIntervalSince1970: 3_000)
